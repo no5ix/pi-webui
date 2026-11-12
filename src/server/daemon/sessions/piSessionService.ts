@@ -139,6 +139,7 @@ import { screenTheme, type ScreenView } from "./screenView.js";
 import { drawCustomRow, drawToolCall, drawToolResult, showsCustomEntry, transformedMarkdown, type ExtensionRenderers, type MarkdownKind } from "./extensionDrawings.js";
 import { ExtensionShortcuts, type ExtensionShortcutRunner } from "./extensionShortcuts.js";
 import { extensionFooterData } from "./extensionFooterData.js";
+import { cachedGitBranch } from "./gitBranch.js";
 import { ExtensionCompletionStack } from "./extensionCompletions.js";
 import { DECLARABLE_SCREENS, refusedDeclarationSummary } from "./declaredScreen.js";
 import { readInteractiveCard } from "../../../shared/interactiveCardReader.js";
@@ -7194,6 +7195,7 @@ export class PiSessionService implements SessionRouteService {
     const lastActivityAt = leafEntryAt(session.sessionManager);
     const surfaces = pluginSurfacePresence(session.resourceLoader);
     const extensionUi = this.extensionStanding.get(session)?.snapshot();
+    const gitBranch = cachedGitBranch(session.sessionManager.getCwd());
     const extensionShortcuts = this.extensionShortcuts.list(session.extensionRunner, (path) => this.extensionOrigins.titleOf(path, loadedExtensionFiles(session)));
     return {
       sessionId: session.sessionId,
@@ -7212,6 +7214,9 @@ export class PiSessionService implements SessionRouteService {
       // instead of re-clocking from the moment it happened to look.
       ...(turnStartedAt === undefined ? {} : { turnStartedAt }),
       ...(lastActivityAt === undefined ? {} : { lastActivityAt }),
+      // The branch the session stands on, so a status bar can name it. Omitted outside a
+      // repository, where there is nothing to name.
+      ...(gitBranch === undefined ? {} : { gitBranch }),
       pendingMessageCount: visibleQueued.length,
       queuedMessages: visibleQueued,
       ...(activity === undefined ? {} : { activity }),

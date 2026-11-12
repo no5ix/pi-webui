@@ -150,6 +150,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | Web/API bind host | `host` | `PI_WEB_HOST` | Global | Not supported locally | Restart web/API |
 | Web/API port | `port` | `PI_WEB_PORT`, `PORT` | Global | Not supported locally | Restart web/API |
 | HTTPS certificate chain and private key, PEM files at absolute or `~/` paths; both or neither ([Serve HTTPS directly](install.md#serve-https-directly)) | `tls.certFile`, `tls.keyFile` | `PI_WEB_TLS_CERT`, `PI_WEB_TLS_KEY` | Global | Not supported locally | Restart web/API; a renewed certificate in the same files within 10 minutes |
+| Text translation the reading toolbar asks for: `provider` `"google"` (default) or `"off"`, `baseUrl` (an endpoint of your own), `language` (the target, `zh-CN` by default), `timeoutMs` (250-60000, 8000 by default) | `translation.provider`, `translation.baseUrl`, `translation.language`, `translation.timeoutMs` | — | Global | Not supported locally | Next translation request |
 | Access token file, one token per line, at an absolute or `~/` path; the web/API serves only its sign-in page without a token ([Require an access token](install.md#require-an-access-token)) | `access.tokenFile` | `PI_WEB_ACCESS_TOKEN_FILE` (wins over the key), or one token in `PI_WEB_ACCESS_TOKEN` | Global (web/API) | Not supported locally | Restart web/API |
 | Dev-server allowed hosts: `true` or an array of hostnames (env: `true` or a comma-separated list); used only by the Vite dev server (`pnpm run dev:client`), not by `pi-web-server` | `allowedHosts` | `PI_WEB_ALLOWED_HOSTS` | Global | Not supported locally | Restart dev web/UI |
 | External filesystem roots | `pathAccess.allowedPaths` | — | Global + project | **Merges**: global roots first, then project roots; duplicates removed | Next file request; refresh existing views if needed |
@@ -519,6 +520,33 @@ pi-web plugins safe-start clear --restart
 `--restart` performs a restart only for a recognized safe installed-service plan; otherwise it prints manual instructions. The config mutation is durable before PI WEB attempts the restart. If the service-manager command itself fails, restart sessiond manually.
 
 Ordinary import/activation/start/health failures are quarantined when possible, but server plugins are trusted in-process code, share sessiond's event loop, and are not crash-isolated. `bundled-only` bypasses external plugin failures; `none` is the emergency level that also bypasses bundled server plugins. Setting, clearing, or disabling takes effect for server code only after sessiond restarts, and that restart may interrupt active sessions/runtime ownership.
+
+### Translation
+
+The reading toolbar translates the text a reader stops on: a double-clicked word, or a sentence held
+down. The web/API of the PI WEB the browser is talking to answers the request, so that deployment's
+config is what decides where the text may go.
+
+```json
+{
+  "translation": {
+    "provider": "google",
+    "language": "zh-CN",
+    "baseUrl": "https://translate.googleapis.com/translate_a/single",
+    "timeoutMs": 8000
+  }
+}
+```
+
+- `provider`: `"google"` (the default, Google's free endpoint, no account and no key) or `"off"`.
+- `language`: the language the toolbar translates into. Simplified Chinese is the default.
+- `baseUrl`: point the same request at a mirror you run, for a machine that must not send text to Google.
+- `timeoutMs`: how long one translation may take, 250 to 60000 ms.
+
+`"off"` leaves the toolbar's Copy and Search actions working and refuses Translate, so a deployment with
+no outbound traffic says so in the page instead of showing a translation that never arrives. Text asked
+for one time is answered from memory for half an hour, so re-reading a passage costs no new request.
+Requests are capped at 1500 characters: the toolbar is for a sentence, not a document.
 
 ### Shortcut config
 

@@ -7,7 +7,7 @@ import { notFoundAnswer, type NotFoundAnswer } from "./notFoundAnswer.js";
 import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
-import { piWebDataDir } from "../../config.js";
+import { loadPiWebConfig, piWebDataDir } from "../../config.js";
 import { ProjectStore } from "../shared/storage/projectStore.js";
 import { ProjectFolderError, ProjectService } from "../shared/projects/projectService.js";
 import { routeMissingBody } from "../shared/routeMissing.js";
@@ -43,6 +43,8 @@ import { createActiveProfilePiPackageService, type PiPackageService } from "./pi
 import { registerPiPackageRoutes } from "./piPackageRoutes.js";
 import { createPiPackageUpdateCheck, type PiPackageUpdateCheck } from "./piPackageUpdateCheck.js";
 import { registerSessionPinRoutes } from "./sessionPinRoutes.js";
+import { createTranslationService, DEFAULT_TRANSLATION_LANGUAGE } from "./translation/translationService.js";
+import { registerTranslationRoutes } from "./translation/translationRoutes.js";
 import { daemonSessionListing, daemonSessionLocate, registerSessionBoardRoutes, type SessionBoardSources } from "./sessionBoardRoutes.js";
 import { nudgeChange } from "../shared/sessiondClient/changeNudge.js";
 import { forgottenPin, SessionPinStore, sessionPinStorePath } from "../shared/storage/sessionPinStore.js";
@@ -427,6 +429,12 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   const sessionPins = deps.sessionPins ?? new SessionPinStore(sessionPinStorePath(), pinsChanged);
   registerSessionPinRoutes(app, sessionPins);
   registerSessionPinRoutes(app, sessionPins, "/api/machines/local");
+  // The reading toolbar translates through this process: a reading aid must not reach outside the
+  // machine from the session daemon, and the web/API is the process that owns the browser's traffic
+  // and the config that says where text may go. Served at the plain prefix only: the browser's own
+  // PI WEB answers, so a federated browse needs no new remote route.
+  const translationService = createTranslationService(() => loadPiWebConfig().config.translation);
+  registerTranslationRoutes(app, translationService, { language: () => loadPiWebConfig().config.translation?.language ?? DEFAULT_TRANSLATION_LANGUAGE });
   const reconcilingConfigService = reconcilePluginsOnWrite(configService, async () => {
     await webServerPluginRuntime?.reconcile();
     await askDaemonToReconcilePlugins(sessionDaemon);
