@@ -610,6 +610,7 @@ export function parseSessionStatus(value: unknown): SessionStatus {
     ...optionalField("persisted", parseOptionalBoolean(record["persisted"], "persisted")),
     ...optionalField("turnStartedAt", optionalString(record, "turnStartedAt")),
     ...optionalField("lastActivityAt", optionalString(record, "lastActivityAt")),
+    ...optionalField("gitBranch", optionalString(record, "gitBranch")),
     isStreaming: requireBoolean(record, "isStreaming"),
     isCompacting: requireBoolean(record, "isCompacting"),
     isBashRunning: requireBoolean(record, "isBashRunning"),
@@ -679,6 +680,18 @@ export function parseExtensionCompletions(value: unknown): ExtensionCompletionSu
       return [{ value: itemValue, label, ...(typeof description === "string" ? { description } : {}) }];
     }),
   };
+}
+
+/** The text a translation came back as, with the language it was read from when the provider names it. */
+export function parseTranslation(value: unknown): { text: string; source?: string } {
+  const record = requireRecord(value);
+  const source = optionalString(record, "source");
+  return { text: requireString(record, "text"), ...(source === undefined ? {} : { source }) };
+}
+
+/** The language a deployment translates into. */
+export function parseTranslationLanguage(value: unknown): string {
+  return requireString(requireRecord(value), "language");
 }
 
 export function parseTerminalInputDelivered(value: unknown): { consumed: boolean } {

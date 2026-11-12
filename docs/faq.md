@@ -23,6 +23,8 @@ Most PI WEB install problems come from the environment: the service manager, `PA
 - [What do the marks on session rows mean?](#what-do-the-marks-on-session-rows-mean)
 - [Model responses fail with "terminated" after about 5 minutes](#model-responses-fail-with-terminated-after-about-5-minutes)
 - [Where are the logs?](#where-are-the-logs)
+- [No notification arrived when a task finished](#no-notification-arrived-when-a-task-finished)
+- [How do I translate a word or sentence in an answer?](#how-do-i-translate-a-word-or-sentence-in-an-answer)
 
 ## What platforms are supported?
 
@@ -225,6 +227,40 @@ Raise or disable the timeout in the agent's `settings.json` (`~/.pi/agent/settin
 ```
 
 The session daemon applies the value when it starts, so [restart the session daemon](install.md#restart-the-session-daemon) afterwards.
+
+## No notification arrived when a task finished
+
+Notifications are turned on per device in **Settings → Notifications**, and the panel there says what
+the browser allows and what the preference is. The usual reasons a notice does not arrive:
+
+- the page is served over plain `http://`, which browsers refuse to notify from;
+- the browser's permission for the site is blocked (Safari: site settings), which the panel reports as
+  blocked rather than as a switch that is off;
+- on iPhone or iPad, PI WEB is opened in Safari rather than as the [installed web app](install.md#install-on-iphone-or-ipad);
+- the browser was quit. A notice that reaches a closed browser must be sent by the server through
+  Apple's push service, which PI WEB does not do yet.
+
+See [Notifications](notifications.md).
+
+## How do I translate a word or sentence in an answer?
+
+Double-click a word for a small toolbar over it - copy, search, translate - or press and hold a sentence
+to see its translation written under the sentence. The target language and the provider are deployment
+settings; see [translation](config.md#translation).
+
+## Where are a response's copy control and its time?
+
+At the end of the response, in a small line under the text: the copy control and the date and time the
+reply was written. The role label stays pinned at the top of a long reply.
+
+## How long did that task take, and which branch is it on?
+
+Both are in the line at the bottom of the window. The git branch the session's working directory stands on
+is read from the repository. After a task finishes, the line adds `took 2m 14s`: the span between the task
+starting and finishing, measured by the page that watched it, and kept on that device across a reload. A
+session opened while its task was already running shows only the part it watched, and says so when hovered.
+The branch is left out outside a repository; the running time is left out for a task this device did not
+watch from its start.
 
 ## Where are the logs?
 

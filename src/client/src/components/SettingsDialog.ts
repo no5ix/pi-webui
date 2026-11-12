@@ -17,6 +17,8 @@ import type { PluginRuntimeContext, QualifiedSettingsSectionContribution } from 
 import { askPluginOr, pluginDrawFailureText } from "../plugins/pluginContainment";
 import "./ModalSurface";
 import "./settings/SettingsAppearancePanel";
+import "./settings/SettingsNotificationsPanel";
+import type { NotificationAvailability } from "../notifications/taskNotifications";
 import "./settings/SettingsGeneralPanel";
 import "./settings/SettingsMachinesPanel";
 import "./settings/SettingsPackagesPanel";
@@ -71,6 +73,11 @@ export class SettingsDialog extends LitElement {
   @property({ attribute: false }) sharedTheme: boolean | undefined;
   @property({ attribute: false }) sharedThemeError = "";
   @property({ attribute: false }) onToggleSharedTheme?: (share: boolean) => void;
+  /** Device notifications: what the browser allows, what the reader wants, and how to change it. */
+  @property({ attribute: false }) notificationAvailability: NotificationAvailability = "unsupported";
+  @property({ attribute: false }) notificationsWanted = false;
+  @property({ attribute: false }) onToggleNotifications?: (wanted: boolean) => Promise<NotificationAvailability>;
+  @property({ attribute: false }) onTestNotification?: () => Promise<boolean>;
   @property({ attribute: false }) fleetReport?: PiWebFleetReport;
   /** Each fleet machine's own PI WEB status read, by machine id. */
   @property({ attribute: false }) fleetStatuses: Readonly<Record<string, FleetStatusRead>> = {};
@@ -248,6 +255,7 @@ export class SettingsDialog extends LitElement {
     return [
       { id: "general", label: "General", detail: "Gateway + selected machine" },
       { id: "appearance", label: "Appearance", detail: "Theme, lists and system preference" },
+      { id: "notifications", label: "Notifications", detail: "This device, task finished" },
       { id: "machines", label: "Machines", detail: "All connected devices" },
       { id: "packages", label: "Pi Packages", detail: "Selected machine" },
       { id: "plugins", label: "PI WEB Plugins", detail: "Selected machine" },
@@ -367,6 +375,16 @@ export class SettingsDialog extends LitElement {
           .listTilesError=${this.listTilesError}
           .onSelectListTiles=${(layout: ListLayout, tiles: ListTilesPerRow) => { void this.saveListTiles(layout, tiles); }}
         ></settings-appearance-panel>
+      `;
+    }
+    if (this.activeSection === "notifications") {
+      return html`
+        <settings-notifications-panel
+          .availability=${this.notificationAvailability}
+          .wanted=${this.notificationsWanted}
+          .onToggle=${(wanted: boolean) => this.onToggleNotifications?.(wanted) ?? Promise.resolve(this.notificationAvailability)}
+          .onTest=${() => this.onTestNotification?.() ?? Promise.resolve(false)}
+        ></settings-notifications-panel>
       `;
     }
     if (this.activeSection === "shortcuts") {
@@ -900,6 +918,7 @@ export type SettingsPanelTag =
   | "settings-packages-panel"
   | "settings-plugins-panel"
   | "settings-appearance-panel"
+  | "settings-notifications-panel"
   | "settings-shortcuts-panel"
   | "settings-plugin-section";
 
@@ -916,6 +935,8 @@ export function activeSettingsPanelTag(section: SettingsSection): SettingsPanelT
   switch (section) {
     case "appearance":
       return "settings-appearance-panel";
+    case "notifications":
+      return "settings-notifications-panel";
     case "packages":
       return "settings-packages-panel";
     case "plugins":

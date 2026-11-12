@@ -1,7 +1,7 @@
 import { writeRouteUrl } from "./historyWrites";
 import type { QualifiedContributionId } from "./plugins/ids";
 
-export type CoreSettingsSection = "general" | "appearance" | "machines" | "packages" | "plugins" | "shortcuts";
+export type CoreSettingsSection = "general" | "appearance" | "notifications" | "machines" | "packages" | "plugins" | "shortcuts";
 
 /**
  * A settings section is either one the core owns or one a plugin contributed.
@@ -57,6 +57,7 @@ export function writeSettingsSection(section: SettingsSection | undefined, optio
 export function parseSettingsSection(value: string | null): SettingsSection | undefined {
   if (value === "general") return "general";
   if (value === "appearance" || value === "theme" || value === "themes") return "appearance";
+  if (value === "notifications" || value === "notification" || value === "push") return "notifications";
   if (value === "machines") return "machines";
   if (value === "packages" || value === "pi-packages") return "packages";
   if (value === "plugins") return "plugins";

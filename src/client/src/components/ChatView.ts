@@ -15,6 +15,11 @@ import { groupEventKey, groupMarkerKey, groupRowKey, positionalRowKey, rowKeys }
 import { extensionNoticeOf, NOTICE_PREFIX, noticeSegments, type ExtensionNoticePart } from "../extensionNotices";
 import { writeClipboardText } from "../clipboard";
 import { messageCopyText } from "../chatMessages";
+import { attachReadingTools, type ReadingTools } from "../reading/readingTools";
+import { runDuration } from "../runDuration";
+import "./ReadingToolbar";
+import type { ReadingAction, ReadingSurface } from "./ReadingToolbar";
+import { readingApi } from "../api/clients";
 import { followScrollVerdict } from "../followScrollAdoption.js";
 import { pushPastEnd, readerScrollDirection, viewportDecision, followsAfterRowsChange, followsAfterScroll, isRestoring, readerCanTakeOver } from "../chatViewport/viewportDecision.js";
 import type { PageWant, ViewportAction, ViewportEvent, ViewportMetrics, ViewportState } from "../chatViewport/viewportDecision.js";
@@ -392,7 +397,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .group-msg > .msg-header { position: sticky; top: var(--pi-chat-sticky-top); z-index: 4; margin: calc(-1 * var(--pi-space-5)) 0 var(--pi-space-4); padding: var(--pi-space-4) 0 var(--pi-space-3); border-bottom: 1px solid var(--pi-border-muted); background: var(--pi-bg); }
   /* The last control used to end on the card's inner edge, which reads as
      stuck to the border on a phone where the card is the screen. */
-  .msg-header-trailing { min-width: 0; flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--pi-space-4); padding-right: var(--pi-space-2); }
+  .msg-meta-trailing { min-width: 0; flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--pi-space-4); padding-right: var(--pi-space-2); }
   .msg-actions { flex: 0 0 auto; display: inline-flex; gap: var(--pi-space-3); opacity: 0; transition: opacity var(--pi-motion-fast) var(--pi-ease); }  .msg.user .msg-action, .msg.user .msg-meta { color: var(--pi-text-secondary, var(--pi-text)); }
   /* One bordered box per control, every control the same box: the ghost
      glyphs read as stray marks and sat at different heights between the
@@ -413,24 +418,29 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      streaming flicker - a hidden-until-focus cluster on a surface that
      re-renders every chunk blinked as focus was lost and restored. */
   @media (pointer: coarse) {
-    .msg-header-trailing { gap: var(--pi-space-4); }
+    .msg-meta-trailing { gap: var(--pi-space-4); }
     .msg-actions { gap: var(--pi-space-4); opacity: 1; }
     .msg-action::after { inset: calc(-1 * var(--pi-space-3)) calc(-1 * var(--pi-space-1)); }
   }
   .msg-action:focus { color: var(--pi-text); border-color: var(--pi-accent); }
   @media (pointer: coarse) { .msg-action:active, .activity-dock button:active { background: var(--pi-surface-hover); } }
   @media (hover: hover) { .msg-action:hover { color: var(--pi-text); border-color: var(--pi-accent); } }
-  .msg:focus-within > .msg-header .msg-actions, .group-msg:focus-within > .msg-header .msg-actions { opacity: 1; }
-  @media (hover: hover) { .msg:hover > .msg-header .msg-actions, .group-msg:hover > .msg-header .msg-actions { opacity: 1; } }
+  .msg:focus-within > .msg-meta-row .msg-actions, .group-msg:focus-within > .msg-meta-row .msg-actions { opacity: 1; }
+  @media (hover: hover) { .msg:hover > .msg-meta-row .msg-actions, .group-msg:hover > .msg-meta-row .msg-actions { opacity: 1; } }
   .msg-actions:has(.msg-action[data-action="retry"]), .msg-actions:has(.msg-action[data-action="discard"]) { opacity: 1; }
   .msg.user .msg-action[data-action="retry"] { color: var(--pi-accent); border-color: var(--pi-accent); }
   .label { display: block; color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono); line-height: inherit; }
   .msg-header .label { margin: 0; }
+  /* The row under a response: who is not repeated here, this row answers when and what the reader
+     can do with it. It is never sticky - the header strip above already pins the card's identity,
+     and a second pinned strip would pin the copy button over the text it describes. */
+  .msg-meta-row { display: flex; align-items: center; justify-content: flex-end; gap: var(--pi-space-5); min-height: 22px; margin-top: var(--pi-space-3); }
+  .msg-meta-row .label { margin: 0; }
   /* Quiet, but never below the non-text contrast floor: .28 measured 1.37:1
      at rest, and the round-four remedy had only reached the coarse branch. */
   .msg-meta { min-width: 0; border: 0; background: transparent; color: var(--pi-muted); padding: 0; font: var(--pi-text-2xs) var(--pi-font-ui); line-height: inherit; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pi-motion-fast) var(--pi-ease); cursor: pointer; user-select: text; -webkit-user-select: text; }
-  .msg:focus-within > .msg-header .msg-meta, .group-msg:focus-within > .msg-header .msg-meta, .msg-meta:focus, .msg-meta.expanded { opacity: 1; }
-  @media (hover: hover) { .msg:hover > .msg-header .msg-meta, .group-msg:hover > .msg-header .msg-meta { opacity: 1; } }
+  .msg:focus-within > .msg-meta-row .msg-meta, .group-msg:focus-within > .msg-meta-row .msg-meta, .msg-meta:focus, .msg-meta.expanded { opacity: 1; }
+  @media (hover: hover) { .msg:hover > .msg-meta-row .msg-meta, .group-msg:hover > .msg-meta-row .msg-meta { opacity: 1; } }
   .msg-meta.expanded { flex: 1 1 auto; max-width: 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
   .msg-meta:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); border-radius: var(--pi-radius-xs); }
   @media (hover: none) {
@@ -721,6 +731,13 @@ export class ChatView extends LitElement {
   @state() private zoomTransform: ZoomTransform = IDENTITY_ZOOM;
   @state() private expandedMetaKey: string | undefined;
   @state() private copiedMessageKey: string | undefined;
+  /** What a reading gesture answered with: a pill over a word, or a translation under a sentence. */
+  @state() private reading: ReadingSurface | undefined;
+  private readingTools: ReadingTools | undefined;
+  /** The scroller element the reading gestures are attached to, kept so a replaced element is noticed. */
+  private readingAttachedTo: HTMLElement | undefined;
+  private translationLanguage: string | undefined;
+  private translationLanguageRequest: Promise<string> | undefined;
   @property() machineId = "local";
   @property() sessionCwd?: string;
   /** When this browser first saw the current turn working, and a clock to age it. */
@@ -1069,10 +1086,54 @@ export class ChatView extends LitElement {
 
   protected override firstUpdated(): void {
     this.lastClientHeight = this.chat?.clientHeight ?? 0;
+    this.syncReadingTools();
+  }
+
+  /**
+   * The reading gestures over this transcript: a double-click asks about a word, a hold asks about a
+   * sentence. See `reading/readingTools.ts` for why the page owns these and not a userscript.
+   *
+   * The attach is re-checked against the scroller element the listeners went on: the template's
+   * scroller is replaced when the page changes and this component is not re-created, so gestures
+   * attached once die with the element they were attached to.
+   */
+  private syncReadingTools(): void {
+    const scroller = this.chat;
+    if (scroller === undefined || this.readingAttachedTo === scroller) return;
+    this.readingTools?.dispose();
+    this.readingTools = undefined;
+    const root = this.shadowRoot;
+    if (root === null) return;
+    this.readingAttachedTo = scroller;
+    this.readingTools = attachReadingTools({
+      scroller,
+      root,
+      show: (surface) => { this.reading = surface; },
+      hide: () => { this.reading = undefined; },
+      translate: (text, to) => readingApi.translate(text, to).then((answer) => answer.text),
+      language: () => this.readTranslationLanguage(),
+      search: (text) => { window.open(`https://duckduckgo.com/?q=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer"); },
+    });
+  }
+
+  /** The language this deployment translates into, asked once and kept; a deployment sets it in config. */
+  private readTranslationLanguage(): Promise<string> {
+    if (this.translationLanguage !== undefined) return Promise.resolve(this.translationLanguage);
+    this.translationLanguageRequest ??= readingApi.translationLanguage().then((language) => {
+      this.translationLanguage = language;
+      return language;
+    });
+    return this.translationLanguageRequest;
+  }
+
+  private readingAction(action: ReadingAction, surface: ReadingSurface): void {
+    this.readingTools?.perform(action, surface);
   }
 
 
   override disconnectedCallback(): void {
+    this.readingTools?.dispose();
+    this.readingTools = undefined;
     this.windowRefocusing = false;
     document.removeEventListener("selectionchange", this.onDocumentSelectionChange);
     document.removeEventListener("keydown", this.onDocumentKeydown);
@@ -1228,6 +1289,7 @@ export class ChatView extends LitElement {
   }
 
   protected override updated(changed: Map<string, unknown>): void {
+    this.syncReadingTools();
     this.syncImageRetryTimers();
     this.holdBottomEdge();
     this.watchStreamingGrowth();
@@ -1465,6 +1527,7 @@ export class ChatView extends LitElement {
         ${this.renderActivityDock()}
       </div>
       ${this.renderImageZoom()}
+      <reading-toolbar .surface=${this.reading} .onAction=${(action: ReadingAction, surface: ReadingSurface) => { this.readingAction(action, surface); }} .onClose=${() => { this.readingTools?.close(); }}></reading-toolbar>
     `;
   }
 
@@ -2195,6 +2258,7 @@ export class ChatView extends LitElement {
         ${this.renderFailureDetail(message)}
         ${this.renderDeliveryMark(message)}
         ${this.renderMessageNote(message)}
+        ${toolOnly ? null : this.renderMessageMetaRow(message, key)}
       </article>
     `;
   }
@@ -2206,6 +2270,7 @@ export class ChatView extends LitElement {
       <article class="msg tool-image-output" data-index=${index} data-scroll-anchor-id=${key}>
         ${this.renderMessageHeader(message, key, label)}
         ${message.parts.map((part) => this.renderPart(part, message))}
+        ${this.renderMessageMetaRow(message, key)}
       </article>
     `;
   }
@@ -2251,6 +2316,7 @@ export class ChatView extends LitElement {
               ${toolOnly ? null : this.renderMessageHeader(message, key)}
               ${message.parts.map((part) => this.renderPart(part, message))}
               ${this.renderFailureDetail(message)}
+              ${toolOnly ? null : this.renderMessageMetaRow(message, key)}
             </section>
           `;
         })}
@@ -2262,13 +2328,32 @@ export class ChatView extends LitElement {
     return html`<span class="scroll-marker" data-marker-id=${markerId} aria-hidden="true"></span>`;
   }
 
+  /**
+   * The card's top strip: who spoke. The actions and the clock left it (owner, 2026-11-04): a reader
+   * who has read a long reply looks at its end, and copy plus date and time sat pinned at its top,
+   * out of reach of the eyes that wanted them. They are drawn under the response by
+   * {@link renderMessageMetaRow}; the strip stays sticky so the card keeps its identity while its
+   * text scrolls under it.
+   */
   private renderMessageHeader(message: ChatLine, key: string, label: string = message.role) {
-    const meta = this.messageMetaLabel(message);
-    const expanded = this.expandedMetaKey === key;
     return html`
       <div class="msg-header">
         <b class="label">${label}</b>
-        <div class="msg-header-trailing">
+      </div>
+    `;
+  }
+
+  /**
+   * The row under a response: the copy control, how long the turn ran, and when it happened. The
+   * meta label carries the date and time (with the model, the thinking level and the sending plugin
+   * when there is one) and is tapped to show all of it when the row is too narrow to fit it.
+   */
+  private renderMessageMetaRow(message: ChatLine, key: string) {
+    const meta = this.messageMetaLabel(message);
+    const expanded = this.expandedMetaKey === key;
+    return html`
+      <div class="msg-meta-row">
+        <div class="msg-meta-trailing">
           ${this.renderMessageActions(message, key)}
           ${meta === "" ? null : html`<span class=${expanded ? "msg-meta expanded" : "msg-meta"} role="button" tabindex="0" title=${meta} aria-label=${meta} aria-expanded=${String(expanded)} @click=${() => { this.expandedMetaKey = expanded ? undefined : key; }} @keydown=${(event: KeyboardEvent) => { this.onMetaKeydown(event, key, expanded); }}>${meta}</span>`}
         </div>
@@ -3255,13 +3340,7 @@ function firstTouchY(event: TouchEvent): number | undefined {
 
 
 /** How long a run has been going, in the shortest form that stays readable. */
-export function runDuration(elapsedMs: number): string {
-  const seconds = Math.max(0, Math.round(elapsedMs / 1000));
-  if (seconds < 60) return `${String(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${String(minutes)}m ${String(seconds % 60)}s`;
-  return `${String(Math.floor(minutes / 60))}h ${String(minutes % 60)}m`;
-}
+export { runDuration };
 
 export const LONG_TURN_AFTER_MS = 10 * 60 * 1000;
 

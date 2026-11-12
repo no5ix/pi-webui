@@ -1,5 +1,7 @@
 import { css, LitElement, html, unsafeCSS } from "lit";
-import { renderDownIcon, renderUpIcon, uiIconStyle } from "./uiIcons.js";
+import type { FinishedTurn } from "../turnRunClock";
+import { runDuration } from "../runDuration";
+import { renderBranchIcon, renderDownIcon, renderUpIcon, uiIconStyle } from "./uiIcons.js";
 import { customElement, property } from "lit/decorators.js";
 import type { SessionStatus } from "../api";
 import { sessionStatusLine } from "../sessionStatusLine.js";
@@ -21,6 +23,10 @@ const statusBarStyles = css`${unsafeCSS(uiIconStyle)}
   .statuses-text { display: block; padding-inline-start: var(--pi-space-6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @container (width < calc(6ch + var(--pi-space-6))) { .statuses-text { visibility: hidden; } }
   .cost { flex: 0 0 auto; }
+  /* The branch shares the room the numbers leave, and is cut from the end like every other span:
+     a long branch name must not push the extensions' statuses out of the bar. */
+  .branch { color: var(--pi-muted); }
+  .run-time { color: var(--pi-muted); }
   .context.filling { color: var(--pi-warning); }
   .context.full { color: var(--pi-danger); }
 `;
@@ -30,6 +36,11 @@ export class StatusBar extends LitElement {
   @property({ attribute: false }) status?: SessionStatus;
   /** Why the last read produced nothing, when it failed rather than not happening. */
   @property({ attribute: false }) failure?: string;
+  /**
+   * The last task that finished on this session, as this device measured it. The bar shows it after
+   * the work is over, which is when the reader asks how long that took.
+   */
+  @property({ attribute: false }) lastRun?: FinishedTurn;
   override render() {
     const status = this.status;
     const line = sessionStatusLine({ hasStatus: status !== undefined, failure: this.failure });
@@ -51,6 +62,8 @@ export class StatusBar extends LitElement {
         <span>${renderUpIcon()} ${formatTokenCount(tokens.input)} tok</span>
         <span>${renderDownIcon()} ${formatTokenCount(tokens.output)} tok</span>
         <span class=${CONTEXT_FILL_CLASS[contextFill(context?.percent)]}>${contextText}</span>
+        ${status.gitBranch === undefined ? null : html`<span class="branch" title=${`Git branch: ${status.gitBranch}`}>${renderBranchIcon()} ${status.gitBranch}</span>`}
+        ${this.lastRun === undefined ? null : html`<span class="run-time" title=${runTimeTitle(this.lastRun)}>took ${runDuration(this.lastRun.durationMs)}</span>`}
         <span class="statuses" title=${statuses}><span class="statuses-text">${statuses}</span></span>
         <span class="cost">${formatCost(status.cost)}</span>
       </div>
@@ -74,4 +87,12 @@ function contextFill(percent: number | null | undefined): ContextFill {
   if (percent == null) return "unknown";
   if (percent > 90) return "full";
   return percent > 70 ? "filling" : "roomy";
+}
+
+/** What the measured span says about itself: a partial watch says so rather than claiming the task. */
+function runTimeTitle(turn: FinishedTurn): string {
+  const span = runDuration(turn.durationMs);
+  return turn.partial
+    ? `This device watched ${span} of the last task on this session; it joined while the task was already running.`
+    : `The last task on this session ran for ${span} on this device.`;
 }

@@ -35,6 +35,9 @@ import { renderArchivedStrip } from "./archivedStrip";
 import { sessionWorkSettled } from "../sessionWorkSettled";
 import type { SessionStateBadgeKind } from "./activityBadge";
 import { isSessionActive } from "../../../shared/activity";
+import { notifyTaskFinished, ensureNotificationRegistration, setTaskNotificationsWanted, taskNotificationsWanted, requestTaskNotificationPermission, notificationAvailability, type NotificationAvailability } from "../notifications/taskNotifications";
+import { taskCompletionVerdict, taskFinishedNoticeContent } from "../notifications/taskCompletionNotice";
+import { TurnRunClock, type FinishedTurn } from "../turnRunClock";
 import { canonicalJson } from "../../../shared/unknownValues";
 import { pageCommandOf, type PageCommandName } from "../../../shared/builtinSlashCommands";
 import { lastReplyText } from "../chatMessages";
@@ -1239,6 +1242,10 @@ export class PiWebApp extends LitElement {
     }
   }
 
+  protected override firstUpdated(): void {
+    this.restoreTaskNotifications();
+  }
+
   protected override updated(): void {
     this.syncAppRowInset();
     if (supportsPiWebCapability(this.state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)) setAccessGateOn(true);
@@ -1261,6 +1268,85 @@ export class PiWebApp extends LitElement {
     this.syncSelectedSessionReadState();
     this.syncFleetOnSettingsSection();
     this.syncDocumentTitle();
+    this.notifyFinishedTask();
+  }
+
+  /**
+   * A task that finished while the reader was elsewhere goes to the device's notification centre.
+   * The states that decide it are named once in `taskCompletionVerdict`; this is the executor, and
+   * it never decides anything of its own.
+   *
+   * Working edges are remembered per machine and session: a status frame is the fact, and the
+   * falling edge of one session's work is the moment the reader asked to be told about.
+   */
+  private notifyFinishedTask(): void {
+    const status = this.state.status;
+    const session = this.state.selectedSession;
+    if (status === undefined) return;
+    if (session?.id !== status.sessionId) return;
+    const key = `${selectedMachineId(this.state)}\u0000${session.id}`;
+    const working = isSessionActive(status);
+    const wasWorking = this.workingEdge.get(key) === true;
+    this.workingEdge.set(key, working);
+    if (working) this.turnClock.sawWorking(key, { partial: !this.workingEdge.has(key) });
+    const finishedTurn = working ? undefined : this.turnClock.sawFinish(key);
+    if (finishedTurn !== undefined) this.lastTurnRun = { key, turn: finishedTurn };
+    const stoppedByReader = status.isStopping === true || this.stoppedByThisReader.delete(key);
+    const verdict = taskCompletionVerdict({
+      wasWorking,
+      isWorking: working,
+      stoppedByReader,
+      readerWatching: typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus(),
+      enabled: taskNotificationsWanted(),
+    });
+    if (verdict !== "notify") return;
+    const notice = taskFinishedNoticeContent(session.name ?? "", finishedTurn?.durationMs);
+    void notifyTaskFinished({ title: notice.title, body: notice.body, url: window.location.href }, `task-${session.id}`).then((posted) => {
+      if (posted) this.setState(noticePatch(noticeForReader("PI WEB sent this task's finish to the device's notifications.")));
+    });
+  }
+
+  /** Which sessions were working the last time a status frame spoke about them. */
+  private readonly workingEdge = new Map<string, boolean>();
+
+  /**
+   * Turns device notifications on or off, and reports what the browser answered.
+   *
+   * The preference lives in this browser, not on the server, so the answer is written to the
+   * component's own state: the settings panel is drawn from it, and a panel that reads the stored
+   * value once shows a switch that never moved.
+   */
+  private setTaskNotifications(wanted: boolean): Promise<NotificationAvailability> {
+    if (!wanted) {
+      setTaskNotificationsWanted(false);
+      const availability = notificationAvailability();
+      this.applyNotificationsState(availability);
+      return Promise.resolve(availability);
+    }
+    return requestTaskNotificationPermission().then((availability) => {
+      const granted = availability === "granted";
+      setTaskNotificationsWanted(granted);
+      this.applyNotificationsState(availability);
+      return availability;
+    });
+  }
+
+  /** What this device can do about notifications now, as the settings panel shows it. */
+  @state() private notificationsState: { wanted: boolean; availability: NotificationAvailability } = { wanted: false, availability: notificationAvailability() };
+
+  private applyNotificationsState(availability: NotificationAvailability): void {
+    this.notificationsState = { wanted: taskNotificationsWanted(), availability };
+  }
+
+  /** A notice sent now, so the reader sees where the notification centre puts it. */
+  private sendTestNotification(): Promise<boolean> {
+    return notifyTaskFinished({ title: "PI WEB", body: "This is the notice you asked for.", url: window.location.href }, "task-test");
+  }
+
+  /** The registration a saved preference implies, restored without asking the reader again. */
+  private restoreTaskNotifications(): void {
+    this.applyNotificationsState(notificationAvailability());
+    if (taskNotificationsWanted()) void ensureNotificationRegistration();
   }
 
   /**
@@ -6186,8 +6272,32 @@ export class PiWebApp extends LitElement {
   }
 
   private readonly handleStopActiveWork = (): void => {
+    // The reader caused the next falling edge, and a notice that reports their own Stop tells them
+    // nothing. The status frame that carries the edge does not say who stopped the run - the
+    // daemon's `isStopping` is dropped once the run is over - so this device's own Stop is what is
+    // known, and it is spent on the next completion of this session.
+    const session = this.state.selectedSession;
+    if (session !== undefined) this.stoppedByThisReader.add(`${selectedMachineId(this.state)}\u0000${session.id}`);
     void this.stopAndReturnQueued();
   };
+
+  /** Sessions whose next completion this device's own Stop button caused. */
+  private readonly stoppedByThisReader = new Set<string>();
+
+  /** The span of each task this device watched, from the edge of its work to the edge of its finish. */
+  private readonly turnClock = new TurnRunClock();
+
+  /** The last turn that finished on a session this device watched, kept for the readout at the bottom. */
+  @state() private lastTurnRun: { key: string; turn: FinishedTurn } = { key: "", turn: { durationMs: 0, finishedAt: 0, partial: false } };
+
+  /** What the bottom line says about the last finished task of the session on screen. */
+  private selectedTurnRun(): FinishedTurn | undefined {
+    const session = this.state.selectedSession;
+    if (session === undefined) return undefined;
+    const key = `${selectedMachineId(this.state)}\u0000${session.id}`;
+    if (this.lastTurnRun.key === key) return this.lastTurnRun.turn;
+    return this.turnClock.lastFinished(key);
+  }
 
   private readonly handleClearServerQueue = (queued: QueuedSessionMessage[]): void => {
     const scope = this.selectedReturnScope();
@@ -6392,6 +6502,7 @@ export class PiWebApp extends LitElement {
       <status-bar
         .status=${state.status}
         .failure=${state.status === undefined ? state.transcriptFailed ?? state.statusReadFailed : undefined}
+        .lastRun=${this.selectedTurnRun()}
       ></status-bar>
     `;
   }
@@ -6799,7 +6910,7 @@ export class PiWebApp extends LitElement {
         ${this.renderSessionTreeNavigator(state)}
         ${this.sessionCleanupDialog !== undefined ? html`<session-cleanup-dialog .preview=${this.sessionCleanupDialog.preview} .previewRequest=${this.sessionCleanupDialog.previewRequest} .result=${this.sessionCleanupDialog.result} .loading=${this.sessionCleanupDialog.loading === true} .running=${this.sessionCleanupRunning()} .error=${this.sessionCleanupDialog.error ?? ""} .onPreview=${(request: SessionCleanupRequest) => { void this.previewSessionCleanup(request); }} .onRun=${(request: SessionCleanupRequest) => { this.runSessionCleanup(request); }} .onClose=${() => { this.closeSessionCleanupDialog(); }}></session-cleanup-dialog>` : null}
         ${state.themeDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} title=${state.themeDialog.title} .options=${state.themeDialog.options} .selectedValue=${state.themeDialog.selectedValue} .onPick=${(value: string) => { this.pickTheme(value); }} .onCancel=${() => { this.setState({ themeDialog: undefined }); }}></command-picker>` : null}
-        ${this.settingsOpen ? html`<settings-dialog .accessGate=${supportsPiWebCapability(state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)} .section=${this.settingsSection} .reveal=${this.settingsReveal} .onRevealed=${() => { this.settingsReveal = undefined; }} .machine=${state.selectedMachine} .machineRuntime=${this.selectedMachineRuntime()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onBackToList=${() => { this.backToSettingsList(); }} .pluginSections=${this.plugins.getSettingsSections(selectedMachineId(state))} .pluginRuntimeContext=${this.createPluginRuntimeContext()} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }} ?reloadOnClose=${this.reloadAfterSettings} .onPluginsChanged=${() => { if (!this.settingsMachineFollowsToggles()) this.reloadAfterSettings = true; }} .onRefreshMachineRuntime=${async (machineId: string) => { await this.machines.refreshMachineRuntime(machineId, { requireSelected: false }); }} .machines=${this.shownMachines()} .machineAvailability=${Object.fromEntries(state.machines.map((machine) => [machine.id, this.machineProbes.view(machine)]))} .machinesForeground=${this.foregroundMachineList() === "settings"} .onMachinesVisibilityChange=${(owner: HTMLElement, visible: boolean) => { this.machineProbes.setVisible(owner, visible); }} .onAddMachine=${() => { this.openMachineDialog(); }} .pluginLoadFailures=${this.pluginLoadFailures} .onRenameMachine=${async (machine: Machine, name: string) => { await this.renameMachine(machine, name); }} .onRemoveMachine=${(machine: Machine) => { this.removeMachine(machine); }} .fleetReport=${this.shownFleetReport()} .fleetStatuses=${this.fleetStatuses} .instantActions=${this.instantActions.list()} .onRemovePiPackage=${(target: SettingsMachineTarget, source: string, scope: PiPackageScope) => { this.removePiPackage(target, source, scope); }} .onForgetPageAccess=${(entry: ApprovedMachineOrigin) => { this.forgetPageAccess(entry); }} ?fleetLoading=${this.fleetLoading} .fleetError=${this.fleetError} .onRefreshFleet=${() => this.refreshFleet()} .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.runFleetOperation(operation, machineIds)} .themes=${selectableThemeContributions(this.plugins.getThemes())} .selectedThemeId=${this.selectedThemePreferenceId()} .activeThemeId=${this.activeThemeId} ?followSystemTheme=${this.themePreference.auto} .onSelectTheme=${(themeId: QualifiedContributionId) => { this.selectTheme(themeId); }} .onToggleFollowSystem=${(follow: boolean) => { this.setFollowSystemTheme(follow); }} .sharedTheme=${this.sharedTheme} .sharedThemeError=${this.sharedThemeError} .onToggleSharedTheme=${(share: boolean) => { this.setSharedTheme(share); }}></settings-dialog>` : null}
+        ${this.settingsOpen ? html`<settings-dialog .accessGate=${supportsPiWebCapability(state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)} .section=${this.settingsSection} .reveal=${this.settingsReveal} .onRevealed=${() => { this.settingsReveal = undefined; }} .machine=${state.selectedMachine} .machineRuntime=${this.selectedMachineRuntime()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onBackToList=${() => { this.backToSettingsList(); }} .pluginSections=${this.plugins.getSettingsSections(selectedMachineId(state))} .pluginRuntimeContext=${this.createPluginRuntimeContext()} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }} ?reloadOnClose=${this.reloadAfterSettings} .onPluginsChanged=${() => { if (!this.settingsMachineFollowsToggles()) this.reloadAfterSettings = true; }} .onRefreshMachineRuntime=${async (machineId: string) => { await this.machines.refreshMachineRuntime(machineId, { requireSelected: false }); }} .machines=${this.shownMachines()} .machineAvailability=${Object.fromEntries(state.machines.map((machine) => [machine.id, this.machineProbes.view(machine)]))} .machinesForeground=${this.foregroundMachineList() === "settings"} .onMachinesVisibilityChange=${(owner: HTMLElement, visible: boolean) => { this.machineProbes.setVisible(owner, visible); }} .onAddMachine=${() => { this.openMachineDialog(); }} .pluginLoadFailures=${this.pluginLoadFailures} .onRenameMachine=${async (machine: Machine, name: string) => { await this.renameMachine(machine, name); }} .onRemoveMachine=${(machine: Machine) => { this.removeMachine(machine); }} .fleetReport=${this.shownFleetReport()} .fleetStatuses=${this.fleetStatuses} .instantActions=${this.instantActions.list()} .onRemovePiPackage=${(target: SettingsMachineTarget, source: string, scope: PiPackageScope) => { this.removePiPackage(target, source, scope); }} .onForgetPageAccess=${(entry: ApprovedMachineOrigin) => { this.forgetPageAccess(entry); }} ?fleetLoading=${this.fleetLoading} .fleetError=${this.fleetError} .onRefreshFleet=${() => this.refreshFleet()} .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.runFleetOperation(operation, machineIds)} .themes=${selectableThemeContributions(this.plugins.getThemes())} .selectedThemeId=${this.selectedThemePreferenceId()} .activeThemeId=${this.activeThemeId} ?followSystemTheme=${this.themePreference.auto} .onSelectTheme=${(themeId: QualifiedContributionId) => { this.selectTheme(themeId); }} .onToggleFollowSystem=${(follow: boolean) => { this.setFollowSystemTheme(follow); }} .sharedTheme=${this.sharedTheme} .sharedThemeError=${this.sharedThemeError} .onToggleSharedTheme=${(share: boolean) => { this.setSharedTheme(share); }} .notificationAvailability=${this.notificationsState.availability} .notificationsWanted=${this.notificationsState.wanted} .onToggleNotifications=${(wanted: boolean) => this.setTaskNotifications(wanted)} .onTestNotification=${() => this.sendTestNotification()}></settings-dialog>` : null}
         ${this.pluginDialogs.map((entry) => html`<div class=${PLUGIN_DIALOG_CLASS[entry.dialog.presentation ?? "overlay"]}><modal-surface .label=${entry.dialog.label} .onClose=${entry.close}>${entry.dialog.content}</modal-surface></div>`)}
       </div>
       ${this.renderNewSessionSheet()}
