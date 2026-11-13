@@ -271,7 +271,7 @@ export class SettingsNotificationsPanel extends LitElement {
   /** What push can do for this device, said as the truth of it: browser, server, or both. */
   private pushSentence(): string {
     if (this.push.readFailure !== undefined) return `This PI WEB did not answer its push state: ${this.push.readFailure}`;
-    if (this.push.support === "unsupported") return "This browser has no push notifications. On iPhone and iPad Safari gives them only to a web app added to the Home Screen.";
+    if (this.push.support === "unsupported") return "This browser has no push notifications, so this device cannot be registered here. On iPhone and iPad, Safari gives them only to a web app added to the Home Screen.";
     if (this.push.support === "insecure") return "Push needs HTTPS: this page is served over a plain http address the browser will not subscribe from.";
     if (this.push.serverDisabled) return "This PI WEB has push turned off in its config (push.enabled: false).";
     if (!this.push.serverConfigured) return "This PI WEB cannot send push: " + (this.push.serverProblem ?? "no VAPID key pair is available.");

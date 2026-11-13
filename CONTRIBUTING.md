@@ -60,6 +60,37 @@ Add tests with your change where they prove something a reviewer would otherwise
 
 A green suite does not show that a person can use the change. For anything that touches the UI, try it in a real browser against a running session daemon, at desktop size and in a 393x850 viewport with a coarse (touch) pointer, and say in the pull request what you checked.
 
+### Testing device notifications on a device
+
+A push subscription belongs to the server that minted the VAPID key it was registered with, and the session daemon is the process that sends. A development server that proxies `/api` to the PI WEB already running on the machine registers a phone against *that* server and records every test against it. `scripts/push-test-stack.sh` runs the web/API and the session daemon itself, on port 8506, with its own data directory (`~/.pi-web-pushtest`), config file, socket, VAPID key pair and device list, and refuses to start when a process it did not start already answers on 8506 - a stack adopted from a stranger tests someone else's code.
+
+```bash
+scripts/push-test-stack.sh up                # build, start web/API + session daemon, prove health
+scripts/push-test-stack.sh serve-add         # publish 8506 over Tailscale: https://<mac>.<tailnet>.ts.net:8506
+scripts/push-test-stack.sh urls              # the loopback and tailnet addresses to open
+scripts/push-test-stack.sh state             # what the server can send, and every registered device
+scripts/push-test-stack.sh test [device-id]  # send a test push, and print what each push service answered
+scripts/push-test-stack.sh probe-dev apple   # register a synthetic device (apple|fcm|mozilla|wns)
+scripts/push-test-stack.sh forget <id>       # revoke one device
+scripts/push-test-stack.sh task [dir]        # create a session for a real run, and print its URL
+scripts/push-test-stack.sh watch [N]         # the daemon's delivery lines, redacted
+scripts/push-test-stack.sh status            # processes, health, the Tailscale mapping
+scripts/push-test-stack.sh serve-remove      # take the Tailscale mapping away
+scripts/push-test-stack.sh down              # stop this stack's tmux sessions
+```
+
+`probe-dev` registers a real subscription shape at a real push service with a made-up endpoint token, which is as far as a push service will take a message with no phone in the room. Every service answers, and every answer travels the path a real device's answer travels - encryption, the signed VAPID assertion, the address family, the outcome recorded on the device's row: Apple checks the VAPID contact before the token, so an acceptable contact and an invented token is a `400 BadWebPushRequest`; FCM answers `410`; Mozilla and WNS answer `404`, WNS over IPv4, which is how it is reachable. Remove the synthetic device with `forget`.
+
+The device itself is not scripted:
+
+- **iPhone**: `scripts/push-test-stack.sh urls`, open the tailnet address in Safari, share → *Add to Home Screen*, open PI WEB from the Home Screen, allow notifications, turn on *Reach this device with push notifications*, then `scripts/push-test-stack.sh test`. A browser tab on iOS cannot register, and the panel says so.
+- **Android**: open the tailnet address in Chrome, allow notifications, turn the same switch on, then `test`. Chrome's push service is bound to the browser profile, so an incognito profile registers, answers, and receives nothing.
+- **A desktop browser**: the same over the tailnet HTTPS address. A browser with no push service of its own (Edge on macOS is one) says it has no push notifications, which is not an iPhone problem.
+
+The realistic trigger is a real run: `task` prints a session's URL, send a prompt in that page, then read the delivery line with `watch`. The session daemon logs one line per event with the outcome of every send - `0 of 3 device(s) accepted by their push service`, then each device's status and the push service's own reason - which is the log to read when a notification did not appear.
+
+Two things this tooling does not claim. An HTTP `200` from the API is a page talking to PI WEB, not a device woken: only a push service's answer says a device was woken, and only a person at the screen says a notice was seen. And while the Mac that runs the server is asleep, nothing is delivered to anyone.
+
 ## Git hooks
 
 - **pre-commit** runs `pnpm run verify:staged`: the typecheck, Knip, and ESLint on the staged files.

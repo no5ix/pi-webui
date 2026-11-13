@@ -259,6 +259,15 @@ describe("the two switches", () => {
     }
   });
 
+  it("says a browser without push cannot register, and does not blame iPhone Safari for a desktop browser that has no push of its own", async () => {
+    const panel = panelWith({ support: "unsupported" });
+
+    const text = textOf(await rendered(panel));
+
+    expect(text).toContain("This browser has no push notifications, so this device cannot be registered here.");
+    expect(text).not.toContain("Push is available");
+  });
+
   it("offers to register this device again only when the server's push key changed, and says why", async () => {
     const stale = panelWith({ self: device(), keyChanged: true, devices: [device()] });
     const staleText = textOf(await rendered(stale));
