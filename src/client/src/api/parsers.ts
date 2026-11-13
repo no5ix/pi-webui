@@ -684,18 +684,6 @@ export function parseExtensionCompletions(value: unknown): ExtensionCompletionSu
   };
 }
 
-/** The text a translation came back as, with the language it was read from when the provider names it. */
-export function parseTranslation(value: unknown): { text: string; source?: string } {
-  const record = requireRecord(value);
-  const source = optionalString(record, "source");
-  return { text: requireString(record, "text"), ...(source === undefined ? {} : { source }) };
-}
-
-/** The language a deployment translates into. */
-export function parseTranslationLanguage(value: unknown): string {
-  return requireString(requireRecord(value), "language");
-}
-
 /**
  * The ntfy channel as the server describes it.
  *
