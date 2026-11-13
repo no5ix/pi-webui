@@ -114,7 +114,7 @@ export class SettingsNotificationsPanel extends LitElement {
     return html`
       <div class="ntfy">
         <h3>ntfy</h3>
-        <p class="lede">The session daemon posts a plain HTTP message to a topic, and the ntfy app on your phone shows it. This works with any ntfy server, including your own, and it does not need this browser open.</p>
+        <p class="lede">The session daemon posts a message to ntfy, and the ntfy app on your phone shows it. One topic receives notices from all sessions managed by this PI WEB installation. This works with any ntfy server, including your own, and does not need this browser open.</p>
         ${status === undefined ? html`<p class="state">Loading the ntfy channel…</p>` : null}
         <label class="field">
           <span class="field-heading">Send ntfy notices</span>
@@ -221,8 +221,8 @@ export class SettingsNotificationsPanel extends LitElement {
       // The notice went to the boxes, which is what the reader asked about; the answer says so, because
       // a channel that works and a channel that is saved are two facts and the reader needs both.
       this.ntfyAnswer = outcome.delivered
-        ? `A notice went to the server and topic in the boxes.${this.ntfyDraft === undefined ? "" : " They are not saved yet."}`
-        : `Nothing arrived: ${outcome.reason ?? "ntfy refused the notice."}`;
+        ? `ntfy accepted the test notice.${this.ntfyDraft === undefined ? "" : " The draft settings are not saved yet."} Check the subscribed topic on your phone.`
+        : `ntfy did not accept the test notice: ${outcome.reason ?? "the delivery failed."}`;
     } catch (error: unknown) {
       this.ntfyError = describeNtfyFailure(error);
     } finally {
@@ -366,7 +366,7 @@ function inputValue(event: Event): string {
  */
 function describeNtfyFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (/Failed to fetch|NetworkError|Load failed/iu.test(message)) return "PI WEB could not reach this server to save the settings. Try again.";
+  if (/Failed to fetch|NetworkError|Load failed/iu.test(message)) return "The browser could not reach PI WEB to complete this request. Check the connection and try again.";
   return message;
 }
 

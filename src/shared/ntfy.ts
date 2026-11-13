@@ -360,13 +360,35 @@ export async function sendNtfyNotice(
       reason = outcome.reason ?? reason;
       if (!outcome.retryable) break;
     } catch (error: unknown) {
-      reason = errorMessage(error);
+      reason = ntfyFetchFailureReason(error);
     }
     if (attempt < NTFY_MAX_ATTEMPTS) await sleepMs(NTFY_RETRY_BACKOFF_MS);
   }
   const safeReason = redactNtfySecret(reason, [topic, config.clickUrlBase, config.serverUrl]);
   options.log?.({ event: notice.event, reason: safeReason }, "ntfy notice failed");
   return { delivered: false, attempts: attempts, reason: safeReason };
+}
+
+/**
+ * Summarize Node fetch failures using nested system error codes. Node commonly wraps a useful
+ * DNS/socket/Undici error in a generic "fetch failed" TypeError. Do not include nested messages:
+ * they can contain request URLs or the topic bearer secret.
+ */
+export function ntfyFetchFailureReason(error: unknown): string {
+  const codes: string[] = [];
+  const visited = new Set<unknown>();
+  const visit = (value: unknown, depth: number): void => {
+    if (depth > 4 || value === null || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    const record = value as { code?: unknown; cause?: unknown; errors?: unknown };
+    if (typeof record.code === "string" && /^[A-Z0-9_]{2,64}$/u.test(record.code) && !codes.includes(record.code)) codes.push(record.code);
+    visit(record.cause, depth + 1);
+    if (Array.isArray(record.errors)) for (const nested of record.errors.slice(0, 4)) visit(nested, depth + 1);
+  };
+  visit(error, 0);
+  if (codes.length > 0) return `ntfy network request failed (${codes.slice(0, 4).join(", ")}).`;
+  const name = error instanceof Error && error.name !== "" ? error.name : "unknown error";
+  return `ntfy network request failed (${name}).`;
 }
 
 export const NTFY_RETRY_BACKOFF_MS = 1_000;

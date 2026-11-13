@@ -247,6 +247,24 @@ describe("ntfy delivery", () => {
     }
   });
 
+  it("reports safe nested Node fetch error codes without leaking nested messages", async () => {
+    const cause = Object.assign(new Error("do not expose host or URL"), { code: "ENOTFOUND" });
+    const fetchError = Object.assign(new TypeError("fetch failed"), { cause });
+    const { fetchImpl } = postedFetch(fetchError, fetchError);
+    vi.useFakeTimers();
+    try {
+      const sent = sendNtfyNotice(notice(), { enabled: true, serverUrl: "https://ntfy.sh", topic: "reader-secret-topic" }, { fetchImpl });
+      await vi.advanceTimersByTimeAsync(2_000);
+      const delivery = await sent;
+      expect(delivery.delivered).toBe(false);
+      expect(delivery.reason).toContain("ENOTFOUND");
+      expect(delivery.reason).not.toContain("do not expose");
+      expect(delivery.reason).not.toContain("reader-secret-topic");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the topic out of the reason a failure reports", async () => {
     vi.useFakeTimers();
     try {
