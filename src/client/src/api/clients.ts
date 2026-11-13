@@ -16,8 +16,6 @@ import {
   parseExtensionCompletions,
   parseExtensionCompletionApplied,
   parseTerminalInputDelivered,
-  parseTranslation,
-  parseTranslationLanguage,
   parseAccepted,
   parseArchived,
   parseAuthProvidersResponse,
@@ -400,16 +398,6 @@ export const workspacesApi = {
       { method: "POST" },
     );
   },
-};
-
-/**
- * The reading surface's calls: the language this deployment translates into, and one translation.
- * The web process answers both - a reading aid must not reach outside the machine from the session
- * daemon - and both are small, so a reader holding a sentence pays one round trip.
- */
-export const readingApi = {
-  translationLanguage: () => request("api/translate/language", parseTranslationLanguage, { cache: "no-store" }),
-  translate: (text: string, to: string) => request("api/translate", parseTranslation, { method: "POST", body: JSON.stringify({ text, to }) }),
 };
 
 export const sessionsApi = {
