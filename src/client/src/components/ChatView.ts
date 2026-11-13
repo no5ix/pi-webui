@@ -139,11 +139,8 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   @media (pointer: coarse) { .jump-to-bottom::after { content: ""; position: absolute; inset: -4px; } }
   .jump-to-bottom:focus-visible { border-color: var(--pi-accent); }
   @media (hover: hover) { .jump-to-bottom:hover { border-color: var(--pi-accent); } }
-  /* The prompt steppers sit in the same column as the jump-to-bottom control, above it, so the
-     transcript's ways to move read as one group. When the jump control is hidden - the reader is
-     already at the newest - the steppers take its place at the bottom of the column. */
-  .prompt-nav { position: absolute; right: calc(var(--pi-chat-gutter) + var(--pi-space-4)); bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4) + var(--pi-control-height-comfort) + var(--pi-space-3)); z-index: var(--pi-layer-sticky); display: flex; flex-direction: column; gap: var(--pi-space-2); }
-  .prompt-nav.low { bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4)); }
+  /* Prompt navigation has one stable position and never trades places with jump-to-bottom. */
+  .prompt-nav { position: absolute; right: calc(var(--pi-chat-gutter) + var(--pi-space-4)); bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4)); z-index: var(--pi-layer-sticky); display: flex; flex-direction: column; gap: var(--pi-space-2); }
   .prompt-nav button { box-sizing: border-box; position: relative;
     display: flex; align-items: center; justify-content: center;
     width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); padding: 0;
@@ -1601,9 +1598,8 @@ export class ChatView extends LitElement {
    * boundary is the same answer without the lie.
    */
   private renderPromptNavigation() {
-    if (!showsPromptNavigation(this.userPromptCount)) return null;
     return html`
-      <div class=${`prompt-nav ${this.jumpToBottomVisible ? "" : "low"}`}>
+      <nav class="prompt-nav" aria-label="Prompt navigation">
         <button type="button" title="Previous prompt" aria-label="Previous prompt" @click=${() => { this.stepPrompt("previous"); }}>
           <svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m6 11 6-6 6 6"></path></svg>
         </button>
@@ -1634,7 +1630,7 @@ export class ChatView extends LitElement {
       }
       return;
     }
-    const anchor = anchors.find((candidate) => candidate.top === target);
+    const anchor = anchors.find((candidate) => Math.abs(candidate.top - target) < 1);
     if (anchor === undefined) return;
     // Stepping away from the newest is the reader choosing to read: the transcript must not snap back
     // to the bottom when the next message arrives.
@@ -1643,7 +1639,9 @@ export class ChatView extends LitElement {
     // cancels: the same call on this scroller was a no-op in a real browser (2026-11-13), and a
     // navigation control that answers with nothing is worse than one that arrives at once.
     this.withSuppressedScrollSave(() => {
-      chat.scrollTop = Math.max(0, target);
+      // Resolve the target element again at click time: images, lazy renderers and streaming content
+      // can shift measured offsets between rendering the controls and pressing one.
+      anchor.element.scrollIntoView({ block: "start", behavior: "instant" });
       this.lastScrollTop = chat.scrollTop;
       this.lastClientHeight = chat.clientHeight;
     });
@@ -1656,10 +1654,12 @@ export class ChatView extends LitElement {
    * messages are, because the reader wrote them and wants to step back to them. Measured with rects, not
    * `offsetTop`, so a nested positioned ancestor cannot shift every anchor.
    */
-  private promptAnchors(chat: HTMLElement): { readonly top: number }[] {
+  private promptAnchors(chat: HTMLElement): { readonly element: HTMLElement; readonly top: number }[] {
     const bounds = chat.getBoundingClientRect();
     return Array.from(chat.querySelectorAll<HTMLElement>("article.msg.user:not(.command)"))
-      .map((element) => ({ top: element.getBoundingClientRect().top - bounds.top + chat.scrollTop }));
+      .map((element) => ({ element, top: element.getBoundingClientRect().top - bounds.top + chat.scrollTop }))
+      .filter((anchor) => Number.isFinite(anchor.top))
+      .sort((left, right) => left.top - right.top);
   }
 
   private renderJumpToBottom() {

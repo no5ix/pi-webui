@@ -120,9 +120,9 @@ describe("stepping between the reader's prompts", () => {
     expect(nav?.querySelector('button[aria-label="Next prompt"]')).not.toBeNull();
   });
 
-  it("does not offer them over a conversation with one prompt", async () => {
+  it("keeps exactly two controls present even when there is only one prompt", async () => {
     const { host } = await transcript([line("user", "only"), line("assistant", "answer")]);
-    expect(host.querySelector(".prompt-nav")).toBeNull();
+    expect(host.querySelectorAll(".prompt-nav button")).toHaveLength(2);
   });
 
   it("moves the transcript's own scroller when a stepper is pressed", async () => {
