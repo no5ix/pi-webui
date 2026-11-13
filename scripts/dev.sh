@@ -17,6 +17,9 @@ set -uo pipefail
 DEV_PORT="${PI_WEB_DEV_TAILSCALE_PORT:-8505}"
 TAILSCALE_READY_TIMEOUT_SECONDS="${PI_WEB_DEV_TAILSCALE_WAIT_SECONDS:-120}"
 STOP_GRACE_SECONDS="${PI_WEB_DEV_STOP_GRACE_SECONDS:-5}"
+# The serve watchdog's ceiling: it exists to clear the mapping when the supervisor dies, and a bounded
+# life keeps a confused process table from keeping one alive forever.
+WATCHDOG_LIFETIME_SECONDS="${PI_WEB_DEV_WATCHDOG_SECONDS:-180}"
 TAILSCALE_HOST_SUFFIX="${PI_WEB_DEV_TAILSCALE_HOST_SUFFIX:-.ts.net}"
 
 # The phases, in one place: boot -> tailscale -> running -> stopping -> stopped. A start step that
@@ -26,6 +29,8 @@ TAILSCALE_HOST_SUFFIX="${PI_WEB_DEV_TAILSCALE_HOST_SUFFIX:-.ts.net}"
 phase=boot
 children=()
 serve_mapping_mine=false
+serve_owner_file=""
+watchdog_pid=""
 stop_signals=0
 cleanup_ran=false
 
@@ -78,18 +83,51 @@ signal_tree() {
   done
 }
 
+# Is this pid a live process? `kill -0` answers yes for a zombie, and a development child whose pnpm
+# wrapper died first is often one: the supervisor then watched a corpse and never noticed the stack had
+# stopped, staying alive behind the terminal (live start/stop cycles, 2026-11-14). The process state
+# answers the real question.
+process_running() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"
+  case "$state" in
+    "") return 1 ;;
+    Z*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 children_alive() {
   local pid
   for pid in "${children[@]+"${children[@]}"}"; do
-    if kill -0 "$pid" 2>/dev/null; then return 0; fi
+    if process_running "$pid"; then return 0; fi
   done
   return 1
+}
+
+# Every process in this script's process group, self excluded where it matters. The tree walk above
+# misses a descendant whose parent died first: `pnpm run dev:web` is a chain (pnpm, sh -c, bash -c,
+# node scripts/build-plugins.mjs --watch), the top of it exits on the first signal, and the watcher is
+# reparented to launchd - alive, in this group, invisible to `pgrep -P` of a dead pid. A group signal
+# reaches it. (Live start/stop cycles, 2026-11-14: a plugin watcher survived Ctrl+C.)
+process_group() {
+  ps -o pgid= -p "$$" 2>/dev/null | tr -d ' '
+}
+
+signal_group() {
+  local signal="$1" pgid
+  pgid="$(process_group)"
+  [ -n "$pgid" ] || return 0
+  pkill -"$signal" -g "$pgid" 2>/dev/null
 }
 
 stop_children() {
   [ "${#children[@]}" -eq 0 ] && return 0
   say "stopping the ${#children[@]} development processes"
   signal_tree TERM
+  # TERM is ignored for this script while the undo runs (see `cleanup`), so the group signal cannot
+  # answer itself; KILL is not ignorable, so it is only used after the undo is finished.
+  signal_group TERM
   local waited=0
   while [ "$waited" -lt "$STOP_GRACE_SECONDS" ]; do
     children_alive || return 0
@@ -99,33 +137,102 @@ stop_children() {
   say "the processes ignored the stop; ending them"
   signal_tree CONT
   signal_tree KILL
+  signal_group KILL
+}
+
+# Whether this script's port is still in the serve config: 0 clear, 1 still served, 2 tailscale did not
+# answer. The config is read back because the removal command's exit code is not a report of the state:
+# on a config with nothing on the port, `tailscale serve --https=PORT off` answers "handler does not
+# exist" and exits 1, which is the outcome the cleanup wanted. A shell that treated that exit code as a
+# failure made a clean shutdown look like a broken one (2026-11-14).
+serve_mapping_state() {
+  local status
+  if ! status="$(tailscale serve status </dev/null 2>&1)"; then
+    [ -n "$status" ] && trouble "$status"
+    return 2
+  fi
+  if printf '%s\n' "$status" | grep -qE -- ":${DEV_PORT}([[:space:]]|\$)"; then return 1; fi
+  return 0
 }
 
 tailscale_serve_off() {
   [ "$serve_mapping_mine" = true ] || return 0
   serve_mapping_mine=false
   say "removing the tailscale serve mapping for https on ${DEV_PORT}"
-  if ! tailscale serve --https="$DEV_PORT" off </dev/null >/dev/null 2>&1; then
-    trouble "could not remove the tailscale serve mapping; clear it with: tailscale serve --https=${DEV_PORT} off"
-  fi
+  # The stack tears itself down with `kill 0` (`trap "kill 0" EXIT` inside `pnpm run dev:web`), so a
+  # removal during shutdown sits in the path of that signal storm: a `tailscale` client killed
+  # mid-request leaves the mapping configured while this script believes it is gone. INT and TERM are
+  # ignored for the undo - SIG_IGN survives exec, so the clients are shielded too - and the SIGKILL
+  # that ends the process group is only ever issued after this function returns. (2026-11-14)
+  trap '' INT TERM
+  local attempt output state
+  for attempt in 1 2 3; do
+    output="$(tailscale serve --https="$DEV_PORT" off </dev/null 2>&1)"
+    state=0
+    serve_mapping_state || state=$?
+    if [ "$state" = 2 ]; then
+      trouble "tailscale did not answer, so the serve mapping for ${DEV_PORT} is not confirmed clear; check with: tailscale serve status"
+      return 0
+    fi
+    # A `--bg` serve is settled by tailscaled in the background, so a config read a moment after the
+    # removal can be a snapshot taken mid-flight: the mapping is applied again after the removal was
+    # acknowledged. The clear answer is therefore read again after a settle, and the mapping is removed
+    # once more when it is back (live start/stop cycles, 2026-11-14).
+    if [ "$state" = 0 ]; then
+      sleep 1
+      state=0
+      serve_mapping_state || state=$?
+      if [ "$state" = 0 ]; then
+        rm -f "$serve_owner_file" 2>/dev/null
+        return 0
+      fi
+    fi
+  done
+  trouble "the tailscale serve mapping for ${DEV_PORT} is still configured${output:+: ${output}}; clear it with: tailscale serve --https=${DEV_PORT} off"
 }
 
 # The undo, run once, whatever ended the command: a child dying, Ctrl+C, a signal, a failed start.
+#
+# INT and TERM are ignored for the whole undo. The stack stops itself with `kill 0` (`trap "kill 0" EXIT`
+# inside `pnpm run dev:web`), so a Ctrl+C reaches this script as SIGINT and then as a SIGTERM from the
+# child it is supervising; while TERM was at its default disposition that signal killed the script in
+# the middle of `stop_children`, and the serve mapping was left behind - intermittently, depending on
+# which signal won. Ignoring both for the undo is what makes the removal unconditional; the SIGKILL that
+# ends the process group is issued on purpose, after the undo, by the force path. (2026-11-14)
 cleanup() {
   [ "$cleanup_ran" = true ] && return 0
   cleanup_ran=true
+  trap '' INT TERM
   phase=stopping
-  stop_children
+  # The serve mapping first: it is the only part of this command that is visible from outside the
+  # process group, it is fast, and a stop that ends in `kill -KILL` of the group takes this script with
+  # it. The processes are then stopped, and a group signal catches what the tree walk cannot.
   tailscale_serve_off
+  stop_children
   phase=stopped
 }
 
+stop_forced() {
+  [ "${#children[@]}" -eq 0 ] && return 0
+  signal_tree KILL
+  signal_group KILL
+}
+
 # Ctrl+C twice stops waiting: a child that will not die must not trap the reader at a prompt.
+#
+# The stack signals this script twice on its own. `pnpm run dev:web` ends with `trap "kill 0" EXIT`, so
+# the Ctrl+C that reaches every process in the foreground group also makes that child SIGTERM the whole
+# group - including this script, one step behind its own SIGINT. Counting that pair as two reader
+# requests killed this process before its undo ran, and the serve mapping survived the shutdown
+# (2026-11-14). The force path therefore removes the mapping before it kills, because `kill -KILL 0`
+# includes this process and nothing after it runs.
 on_stop_signal() {
   local code="$1"
   stop_signals=$((stop_signals + 1))
   if [ "$stop_signals" -gt 1 ]; then
-    trouble "second stop request: ending this process group without waiting"
+    trouble "second stop request: clearing the serve mapping, then ending the process group"
+    tailscale_serve_off
+    stop_forced
     trap - INT TERM EXIT
     kill -KILL 0 2>/dev/null
     exit "$code"
@@ -149,7 +256,7 @@ watch_children() {
   while :; do
     local pid
     for pid in "${children[@]}"; do
-      if ! kill -0 "$pid" 2>/dev/null; then
+      if ! process_running "$pid"; then
         say "a development process (${pid}) exited; stopping the rest"
         return 1
       fi
@@ -181,13 +288,55 @@ start_tailscale_application() {
   return 1
 }
 
+# The mapping's owner is this process, and its loss must not leave the mapping behind. When the
+# supervisor is killed by a signal it cannot answer - the stack tears itself down with `kill 0`, and a
+# live start/stop cycle showed that killing the supervisor mid-shutdown left an HTTPS mapping pointed
+# at a dead port (2026-11-14) - this watcher, running in a process group of its own so no `kill 0`
+# reaches it, notices the supervisor is gone and clears the mapping. It acts only while the owner file
+# says the mapping is this run's, so a serve config made by anything else is never touched.
+start_serve_watchdog() {
+  local owner_file="$1" parent="$$"
+  set -m
+  (
+    trap '' HUP INT TERM
+    # The supervisor's pid is the fact to watch, and a pid is reused sooner than a watchdog may be
+    # waiting on it, so liveness alone is not enough: the command line has to say the same thing. (A
+    # first version watched this subshell's own parent through `ps -o ppid=`, which on bash 3.2 names a
+    # command-substitution pid that is already gone - the watchdog read an empty answer, concluded the
+    # supervisor had died, and cleared the mapping about a second after startup. Live cycles, 2026-11-14.)
+    lifetime=$((SECONDS + WATCHDOG_LIFETIME_SECONDS))
+    while [ "$SECONDS" -lt "$lifetime" ]; do
+      state="$(ps -o stat= -p "$parent" 2>/dev/null | tr -d ' ')"
+      case "$state" in
+        "" | Z*) break ;;
+      esac
+      command="$(ps -o command= -p "$parent" 2>/dev/null)"
+      case "$command" in
+        *"scripts/dev.sh"*) : ;;
+        *) break ;;
+      esac
+      sleep 1
+    done
+    [ "$(cat "$owner_file" 2>/dev/null)" = "mine" ] || exit 0
+    tailscale serve --https="$DEV_PORT" off </dev/null >/dev/null 2>&1
+    rm -f "$owner_file"
+  ) &
+  watchdog_pid="$!"
+  set +m
+}
+
 apply_serve_mapping() {
+  serve_owner_file="$(mktemp "${TMPDIR:-/tmp}/pi-web-dev-serve.XXXXXX")" || serve_owner_file=""
   say "tailscale serve --bg --https=${DEV_PORT} http://127.0.0.1:${DEV_PORT}"
   if ! tailscale serve --bg --https="$DEV_PORT" "http://127.0.0.1:${DEV_PORT}" </dev/null; then
     trouble "tailscale serve refused the https mapping on ${DEV_PORT}. Check 'tailscale serve status', or run the stack without it: PI_WEB_DEV_SKIP_TAILSCALE=1 pnpm run dev"
     return 1
   fi
   serve_mapping_mine=true
+  if [ -n "$serve_owner_file" ]; then
+    printf 'mine\n' >"$serve_owner_file" 2>/dev/null
+    start_serve_watchdog "$serve_owner_file"
+  fi
 }
 
 # The dev server is asked by the tailnet's own host name, which Vite refuses by default. The suffix

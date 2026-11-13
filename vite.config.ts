@@ -10,6 +10,26 @@ import { effectivePiWebConfig, piWebTlsConfig } from "./src/config";
 const { config } = effectivePiWebConfig();
 const apiPort = config.port ?? 8504;
 const apiOrigin = `${piWebTlsConfig() === undefined ? "http" : "https"}://localhost:${String(apiPort)}`;
+// Tailscale Serve takes the served port on the tailnet interface, so the development server keeps to
+// loopback: binding every interface on 8505 is refused with EADDRINUSE once `tailscale serve` is
+// running, and the serve proxy forwards to http://127.0.0.1:8505, which is exactly where this listener
+// belongs. The rule is documented for production installs too (docs/faq.md, "With Tailscale Serve").
+const devHost = "127.0.0.1";
+const devPort = 8505;
+/**
+ * Host names the development server answers, beyond what the config lists.
+ *
+ * `pnpm run dev` adds the tailnet's own suffix through `PI_WEB_ALLOWED_HOSTS`, so a name in this list
+ * is a specific device a reader asked to reach by name. Both sets are answered: a config file that
+ * names a host and a suffix from the dev script are additive, never one replacing the other.
+ */
+const devAllowedHostNames = ["macb00kpr0m4.taila0e40f.ts.net"];
+
+function devAllowedHosts(): string[] | true {
+  if (config.allowedHosts === true) return true;
+  const configured = config.allowedHosts ?? [];
+  return [...new Set([...devAllowedHostNames, ...configured])];
+}
 const docsRoot = resolve("docs");
 const docsPrefix = "/site";
 
@@ -120,14 +140,14 @@ export default defineConfig({
     },
   },
   server: {
-    port: 8505,
+    host: devHost,
+    port: devPort,
     strictPort: true,
-    ...(config.allowedHosts === undefined ? {} : { allowedHosts: config.allowedHosts }),
+    allowedHosts: devAllowedHosts(),
     proxy: {
       "/api": { target: apiOrigin, ws: true, secure: false },
       "/pi-web-plugins": { target: apiOrigin, secure: false },
       "^/access(?:\\?|$)": { target: apiOrigin, secure: false },
     },
-    allowedHosts: ['macb00kpr0m4.taila0e40f.ts.net'],
   },
 });

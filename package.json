@@ -53,7 +53,7 @@
     "dev:sessiond": "pnpm run build:plugins && tsx watch src/server/sessiond.ts",
     "dev:web": "bash -c 'set -e; pnpm run build:plugins; trap \"kill 0\" EXIT; pnpm run dev:plugins & tsx watch src/server/index.ts & wait'",
     "dev:server": "pnpm run dev:web",
-    "dev:client": "vite --host 0.0.0.0",
+    "dev:client": "vite --host 127.0.0.1",
     "dev:plugins": "node scripts/build-plugins.mjs --watch",
     "build": "pnpm run clean && tsc -p tsconfig.build.json && pnpm run build:plugins && vite build",
     "build:plugin-api": "tsc -p tsconfig.plugin-api.json",

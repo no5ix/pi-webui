@@ -25,6 +25,22 @@ describe("production build contents", () => {
     if (typeof dev !== "string") throw new Error("package.json script is missing: dev");
     const devScript = await readFile(join(repoRoot, "scripts/dev.sh"), "utf8");
     expect(devScript).toContain("pnpm run dev:sessiond");
+    // Tailscale Serve owns the served port on the tailnet interface, so the UI has to keep to loopback:
+    // a `--host 0.0.0.0` dev server is refused the port with EADDRINUSE the moment the serve mapping
+    // exists, and `pnpm run dev` then dies at startup (2026-11-14).
+    const devClient = scripts["dev:client"];
+    if (typeof devClient !== "string") throw new Error("package.json script is missing: dev:client");
+    expect(devClient).toContain("--host 127.0.0.1");
+    expect(devClient).not.toContain("0.0.0.0");
+    // The serve mapping is the one thing this command leaves behind on the machine, so its removal runs
+    // before the processes are stopped and is confirmed against the serve config.
+    expect(devScript).toContain("tailscale serve --https=\"$DEV_PORT\" off");
+    const cleanupBody = /^cleanup\(\) \{[\s\S]*?^\}/m.exec(devScript)?.[0] ?? "";
+    const serveOffAt = cleanupBody.indexOf("tailscale_serve_off");
+    const stopChildrenAt = cleanupBody.indexOf("stop_children");
+    expect(serveOffAt).toBeGreaterThanOrEqual(0);
+    expect(stopChildrenAt).toBeGreaterThanOrEqual(0);
+    expect(serveOffAt).toBeLessThan(stopChildrenAt);
     for (const scriptName of ["dev:sessiond", "start:sessiond"] as const) {
       const command = scripts[scriptName];
       if (typeof command !== "string") throw new Error(`package.json script is missing: ${scriptName}`);
