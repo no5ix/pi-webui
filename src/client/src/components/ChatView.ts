@@ -1095,8 +1095,6 @@ export class ChatView extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.readingTools?.dispose();
-    this.readingTools = undefined;
     this.windowRefocusing = false;
     document.removeEventListener("selectionchange", this.onDocumentSelectionChange);
     document.removeEventListener("keydown", this.onDocumentKeydown);
@@ -1252,7 +1250,6 @@ export class ChatView extends LitElement {
   }
 
   protected override updated(changed: Map<string, unknown>): void {
-    this.syncReadingTools();
     this.syncImageRetryTimers();
     this.holdBottomEdge();
     this.watchStreamingGrowth();
