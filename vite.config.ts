@@ -128,5 +128,6 @@ export default defineConfig({
       "/pi-web-plugins": { target: apiOrigin, secure: false },
       "^/access(?:\\?|$)": { target: apiOrigin, secure: false },
     },
+    allowedHosts: ['macb00kpr0m4.taila0e40f.ts.net'],
   },
 });
