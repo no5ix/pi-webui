@@ -251,7 +251,7 @@ wait_for_sessiond() {
     done
   elif [ -n "${PI_WEB_SESSIOND_URL:-}" ]; then
     while [ "$waited" -lt "$timeout" ]; do
-      if curl -kfsS --max-time 1 "${PI_WEB_SESSIOND_URL%/}/" >/dev/null 2>&1; then return 0; fi
+      if curl -ksS --max-time 1 "${PI_WEB_SESSIOND_URL%/}/" >/dev/null 2>&1; then return 0; fi
       if ! children_alive; then trouble "the session daemon exited before becoming ready"; return 1; fi
       sleep 1; waited=$((waited + 1))
     done
@@ -259,7 +259,7 @@ wait_for_sessiond() {
     socket_path="${PI_WEB_SESSIOND_SOCKET:-${PI_WEB_DATA_DIR:-$HOME/.pi-web}/sessiond.sock}"
     case "$socket_path" in /*) : ;; *) socket_path="$PWD/$socket_path" ;; esac
     while [ "$waited" -lt "$timeout" ]; do
-      if [ -S "$socket_path" ]; then return 0; fi
+      if nc -U -z "$socket_path" 2>/dev/null; then return 0; fi
       if ! children_alive; then trouble "the session daemon exited before creating its socket"; return 1; fi
       sleep 1; waited=$((waited + 1))
     done
@@ -273,7 +273,7 @@ wait_for_web_api() {
   port="${PI_WEB_PORT:-${PORT:-8504}}"
   scheme="${PI_WEB_DEV_API_SCHEME:-http}"
   while [ "$waited" -lt "$timeout" ]; do
-    if curl -kfsS --max-time 1 "${scheme}://127.0.0.1:${port}/api/config" >/dev/null 2>&1; then return 0; fi
+    if curl -ksS --max-time 1 "${scheme}://127.0.0.1:${port}/api/config" >/dev/null 2>&1; then return 0; fi
     if ! children_alive; then trouble "the web/API process exited before becoming ready"; return 1; fi
     sleep 1; waited=$((waited + 1))
   done
@@ -430,7 +430,7 @@ main() {
   fi
 
   say "starting the session daemon, the web/API process, the Vite UI and the plugin watchers"
-  start_children
+  start_children || return 1
   watch_children
   return $?
 }

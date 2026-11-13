@@ -140,7 +140,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .jump-to-bottom:focus-visible { border-color: var(--pi-accent); }
   @media (hover: hover) { .jump-to-bottom:hover { border-color: var(--pi-accent); } }
   /* Prompt navigation has one stable position and never trades places with jump-to-bottom. */
-  .prompt-nav { position: absolute; right: calc(var(--pi-chat-gutter) + var(--pi-space-4)); bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4)); z-index: var(--pi-layer-sticky); display: flex; flex-direction: column; gap: var(--pi-space-2); }
+  .prompt-nav { position: absolute; right: calc(var(--pi-chat-gutter) + var(--pi-space-4)); bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4) + var(--pi-control-height-comfort) + var(--pi-space-3)); z-index: var(--pi-layer-sticky); display: flex; flex-direction: column; gap: var(--pi-space-2); }
   .prompt-nav button { box-sizing: border-box; position: relative;
     display: flex; align-items: center; justify-content: center;
     width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); padding: 0;
