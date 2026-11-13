@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import type { NtfyConfig, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig, PiWebTranslationConfig } from "./shared/apiTypes.js";
+import type { NtfyConfig, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "./shared/apiTypes.js";
 import { isPiWebPluginId, piWebPluginIdPattern } from "./shared/pluginIds.js";
 import { isRecord } from "./shared/unknownValues.js";
 import { parseNtfyConfig } from "./shared/ntfy.js";
@@ -397,7 +397,6 @@ export function parsePiWebConfig(value: Record<string, unknown>, path: string, a
     ...(value["piBuiltInExtensions"] !== undefined ? { piBuiltInExtensions: parseBooleanKey(value["piBuiltInExtensions"], "piBuiltInExtensions", path) } : {}),
     ...(value["extensionDialogsTimeoutMs"] !== undefined ? { extensionDialogsTimeoutMs: parseExtensionDialogsTimeoutMs(value["extensionDialogsTimeoutMs"], path) } : {}),
     ...(value["agent"] !== undefined ? { agent: parseAgentConfig(value["agent"], path, agentPathHost) } : {}),
-    ...(value["translation"] !== undefined ? { translation: parseTranslationConfig(value["translation"], path) } : {}),
     ...(value["ntfy"] !== undefined ? { ntfy: parseNtfyConfig(value["ntfy"], path) } : {}),
     ...(value["updateCommand"] !== undefined ? { updateCommand: parseUpdateCommand(value["updateCommand"], path) } : {}),
   };
@@ -445,35 +444,6 @@ function parseTlsPath(value: unknown, key: string, path: string): string {
   if (!isAbsolute(value) && !isHomePath(value, "current")) throw new PiWebConfigError(`PI WEB config ${key} must be an absolute or ~/ path: ${path}`);
   return value;
 }
-
-/**
- * The `translation` section: a provider switch, an endpoint, a target language and a timeout.
- * PI WEB answers without it - the defaults are the working configuration - so a section that names
- * nothing is accepted as an empty one.
- */
-function parseTranslationConfig(value: unknown, path: string): PiWebTranslationConfig {
-  if (!isRecord(value)) throw new PiWebConfigError(`PI WEB config translation must be an object: ${path}`);
-  for (const key of Object.keys(value)) {
-    if (TRANSLATION_CONFIG_KEYS.includes(key)) continue;
-    throw new PiWebConfigError(`PI WEB config translation has an unknown key "${key}": ${path}`);
-  }
-  const provider = value["provider"];
-  if (provider !== undefined && provider !== "google" && provider !== "off") {
-    throw new PiWebConfigError(`PI WEB config translation.provider must be "google" or "off": ${path}`);
-  }
-  const baseUrl = value["baseUrl"] === undefined ? undefined : parseHttpUrl(value["baseUrl"], "translation.baseUrl", path);
-  const language = value["language"] === undefined ? undefined : parseString(value["language"], "translation.language", path);
-  const timeoutMs = value["timeoutMs"] === undefined ? undefined : parseTimeoutMs(value["timeoutMs"], "translation.timeoutMs", path);
-  return {
-    ...(provider === undefined ? {} : { provider }),
-    ...(baseUrl === undefined ? {} : { baseUrl }),
-    ...(language === undefined ? {} : { language }),
-    ...(timeoutMs === undefined ? {} : { timeoutMs }),
-  };
-}
-
-/** Every key a translation block may carry, so a typo fails at startup instead of reading as a default. */
-const TRANSLATION_CONFIG_KEYS = ["provider", "baseUrl", "language", "timeoutMs"];
 
 /** An http(s) endpoint a translation request is sent to. */
 function parseHttpUrl(value: unknown, key: string, path: string): string {
