@@ -1623,11 +1623,14 @@ export class ChatView extends LitElement {
     const targets = promptStepTargets(anchors.map((anchor) => anchor.top), { top: chat.scrollTop, bottom: chat.scrollTop + chat.clientHeight });
     const target = direction === "previous" ? targets.previous : targets.next;
     if (target === undefined) {
-      // Past the newest prompt, "further" is the newest message; the oldest prompt has nothing above it.
-      if (direction === "next") {
-        this.pinnedToBottom = true;
-        this.scrollToBottom();
-      }
+      // Stay within the content currently rendered by the chat. Do not request another page or
+      // change the independent jump-to-newest behavior at this boundary.
+      this.pinnedToBottom = direction === "next";
+      this.withSuppressedScrollSave(() => {
+        chat.scrollTo({ top: direction === "previous" ? 0 : chat.scrollHeight, behavior: "auto" });
+        this.lastScrollTop = chat.scrollTop;
+        this.lastClientHeight = chat.clientHeight;
+      });
       return;
     }
     const anchor = anchors.find((candidate) => Math.abs(candidate.top - target) < 1);
