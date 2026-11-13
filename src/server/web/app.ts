@@ -28,7 +28,7 @@ import { registerTerminalProxyRoutes } from "./terminalProxyRoutes.js";
 import { registerMachineTerminalRoutes } from "./machineTerminalRoutes.js";
 import { registerWorkspaceDeletionRoutes } from "./workspaces/workspaceDeletionRoutes.js";
 import { registerProjectRenameRoutes } from "./projectRenameRoutes.js";
-import { createFilePiWebConfigService, registerConfigRoutes, registerLocalMachineConfigRoutes, registerSharedThemeRoute, type PiWebConfigService } from "./configRoutes.js";
+import { createFilePiWebConfigService, registerConfigRoutes, registerLocalMachineConfigRoutes, registerNtfyConfigRoute, registerSharedThemeRoute, type PiWebConfigService } from "./configRoutes.js";
 import { PiWebPluginService } from "./piWebPluginService.js";
 import { askDaemonToReconcilePlugins } from "../shared/plugins/pluginReconcile.js";
 import { PiWebPluginCatalog, filterCatalogEntriesByRuns, type LocalPluginRoot } from "../shared/piWebPluginCatalog.js";
@@ -45,6 +45,7 @@ import { createPiPackageUpdateCheck, type PiPackageUpdateCheck } from "./piPacka
 import { registerSessionPinRoutes } from "./sessionPinRoutes.js";
 import { createTranslationService, DEFAULT_TRANSLATION_LANGUAGE } from "./translation/translationService.js";
 import { registerTranslationRoutes } from "./translation/translationRoutes.js";
+import { registerNtfyRoutes } from "./notifications/ntfyRoutes.js";
 import { daemonSessionListing, daemonSessionLocate, registerSessionBoardRoutes, type SessionBoardSources } from "./sessionBoardRoutes.js";
 import { nudgeChange } from "../shared/sessiondClient/changeNudge.js";
 import { forgottenPin, SessionPinStore, sessionPinStorePath } from "../shared/storage/sessionPinStore.js";
@@ -435,6 +436,10 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   // PI WEB answers, so a federated browse needs no new remote route.
   const translationService = createTranslationService(() => loadPiWebConfig().config.translation);
   registerTranslationRoutes(app, translationService, { language: () => loadPiWebConfig().config.translation?.language ?? DEFAULT_TRANSLATION_LANGUAGE });
+  // ntfy's status and test notice are answered here for the same reason translation is: the config that
+  // decides them belongs to the PI WEB the browser is talking to, and the notice a test sends travels
+  // the same HTTP path the session daemon uses for the real ones. The topic never passes through here.
+  registerNtfyRoutes(app, { readConfig: () => loadPiWebConfig().config.ntfy });
   const reconcilingConfigService = reconcilePluginsOnWrite(configService, async () => {
     await webServerPluginRuntime?.reconcile();
     await askDaemonToReconcilePlugins(sessionDaemon);
@@ -442,6 +447,7 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   const invalidatingConfigService = invalidatePiWebStatusOnWrite(reconcilingConfigService, piWebStatusCache);
   registerConfigRoutes(app, invalidatingConfigService);
   if (configService.writeTheme !== undefined) registerSharedThemeRoute(app, configService.writeTheme);
+  if (configService.writeNtfy !== undefined) registerNtfyConfigRoute(app, configService.writeNtfy);
   registerLocalMachineConfigRoutes(app, invalidatingConfigService);
   registerLocalProjectRoutes(app, projects, workspaces, "/api", { config: configService });
   registerLocalProjectRoutes(app, projects, workspaces, "/api/machines/local", { config: configService });

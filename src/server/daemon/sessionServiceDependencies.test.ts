@@ -27,6 +27,7 @@ function daemonCollaborators(patch: Partial<SessionServiceDependencyInput> = {})
     catalogRefreshStatus: { isRefreshInFlight: () => false },
     hostContributions: { systemPromptSections: [], unsupportedSurfaces: [] },
     extensionDialogsTimeoutMs: 300_000,
+    ntfyNotifier: { notify: () => { /* no notice in the assembly test */ }, status: () => ({ ready: false, enabled: false, configured: false }) },
     ...patch,
   };
 }

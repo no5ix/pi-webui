@@ -19,7 +19,12 @@ describe("production build contents", () => {
     if (!isRecord(metadata) || !isRecord(metadata["scripts"])) throw new Error("package.json scripts are missing");
 
     const scripts = metadata["scripts"];
-    expect(scripts["dev"]).toContain("pnpm run dev:sessiond");
+    // `pnpm run dev` moved into a script file when the development stack grew a Tailscale lifecycle;
+    // the chain it runs is still the one that must build the plugins before the session daemon.
+    const dev = scripts["dev"];
+    if (typeof dev !== "string") throw new Error("package.json script is missing: dev");
+    const devScript = await readFile(join(repoRoot, "scripts/dev.sh"), "utf8");
+    expect(devScript).toContain("pnpm run dev:sessiond");
     for (const scriptName of ["dev:sessiond", "start:sessiond"] as const) {
       const command = scripts[scriptName];
       if (typeof command !== "string") throw new Error(`package.json script is missing: ${scriptName}`);

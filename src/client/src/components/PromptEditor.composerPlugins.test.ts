@@ -103,7 +103,7 @@ describe("composer plugin contributions", () => {
 
     const labels = buttons(element).map((button) => button.getAttribute("aria-label"));
 
-    expect(labels.indexOf("Lead")).toBeLessThan(labels.indexOf("Send message"));
+    expect(labels.indexOf("Lead")).toBeLessThan(labels.indexOf("Send"));
   });
 
   it("renders a contributed icon when one is supplied", async () => {

@@ -36,6 +36,8 @@ export interface SessionServiceDependencyInput {
   serverFacts?: NonNullable<PiSessionServiceDependencies["serverFacts"]>;
   /** The folders a project rename is moving, shared with the terminals; omitted in tests that rename nothing. */
   folderHolds?: NonNullable<PiSessionServiceDependencies["folderHolds"]>;
+  /** The ntfy channel the daemon posts a finished task, a failure, and a question to. */
+  ntfyNotifier: NonNullable<PiSessionServiceDependencies["ntfyNotifier"]>;
 }
 
 /**
@@ -69,5 +71,6 @@ export function sessionServiceDependencies(input: SessionServiceDependencyInput)
     ...(input.pluginBackgroundWork === undefined ? {} : { pluginBackgroundWork: input.pluginBackgroundWork }),
     ...(input.serverFacts === undefined ? {} : { serverFacts: input.serverFacts }),
     ...(input.folderHolds === undefined ? {} : { folderHolds: input.folderHolds }),
+    ntfyNotifier: input.ntfyNotifier,
   };
 }

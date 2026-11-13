@@ -31,7 +31,8 @@ import { historyIndexStep, type HistoryDirection, loadPromptHistory, recallPromp
 import { attachmentShortfallNote, capturedAttachmentOf, type AttachmentShortfall } from "../returnedAttachments";
 import { createMobilePromptEnterMedia, readPromptEnterPreference, shouldSendPromptOnEnterShortcut, shouldUsePromptEnterShiftShortcut } from "../promptEnterBehavior";
 import { type CompletionItem, attachmentZoomStyles } from "./shared";
-import { renderAttachIcon, renderSendIcon, renderQueueIcon, renderSteerIcon, renderStopIcon, renderThinkingGauge } from "./promptEditorIcons";
+import { renderAttachIcon, renderSendIcon, renderQueueIcon, renderStopIcon, renderThinkingGauge } from "./promptEditorIcons";
+import { sendControlOf, sendDisabled as sendControlDisabled } from "./promptEditorSendControl";
 import { askPlugin, askPluginOr, reportPluginFailure } from "../plugins/pluginContainment";
 import { thinkingGauge, thinkingLevelLabel } from "../../../shared/thinkingLevels";
 import { readBlobAsBase64, sentImageAttachments } from "../sentImages";
@@ -125,6 +126,12 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .icon-button .prompt-action-icon-filled { fill: currentColor; stroke: none; }
   .icon-button[aria-pressed="true"] { background: var(--pi-selection-bg); color: var(--pi-text); }
   .send-button:not(:disabled) { color: var(--pi-accent, var(--pi-text)); }
+  /* The button names its own press. An icon that means "send" at one moment and "steer" at the next is
+     a meaning the reader has to hover for; the word is the control. On a phone the row has no room for
+     the word, so the icon carries it and the accessible name and tooltip keep saying the same thing. */
+  .send-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); width: auto; min-width: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); }
+  .send-label { font: var(--pi-text-sm) var(--pi-font-ui); white-space: nowrap; }
+  @media (max-width: 30rem) { .send-button { width: var(--pi-control-height-comfort); padding: 0; } .send-label { display: none; } }
   .stop-button:not(:disabled) { color: var(--pi-danger); }
   .select-thinking .prompt-thinking-gauge .gauge-bar { fill: currentColor; stroke: none; opacity: .28; }
   .select-thinking .prompt-thinking-gauge .gauge-bar-active { opacity: 1; }
@@ -505,7 +512,7 @@ export class PromptEditor extends LitElement {
   override render() {
     const shellInputMode = this.currentInputMode.kind === "shell" ? this.currentInputMode : undefined;
     const shellMode = shellInputMode !== undefined;
-    const queuesInput = this.canSteer || this.isCompacting;
+    const sendControl = sendControlOf(this.canSteer, this.isCompacting);
     return html`
       <footer class=${shellMode ? "shell-mode" : ""} data-live-behind-modal @paste=${(event: ClipboardEvent) => { void this.handlePaste(event); }} @dragover=${(event: DragEvent) => { this.handleDragOver(event); }} @drop=${(event: DragEvent) => { void this.handleDrop(event); }}>
         <input class="attachment-input" type="file" multiple hidden @change=${(event: Event) => { void this.handleFileInput(event); }} />
@@ -530,7 +537,7 @@ export class PromptEditor extends LitElement {
           ${this.renderCompactStatus()}
           ${this.renderHistoryButton()}
           ${this.renderComposerContributions("trailing")}
-          <button class="icon-button send-button" title=${queuesInput ? "Steer — joins the current turn at the next safe point" : "Send message"} aria-label=${queuesInput ? "Steer current response (queued if busy)" : "Send message"} ?disabled=${this.preparingSend} @click=${() => { void this.send(this.canSteer ? "steer" : "followUp"); }}>${this.canSteer ? renderSteerIcon() : queuesInput ? renderQueueIcon() : renderSendIcon()}</button>
+          <button class="icon-button send-button" data-action=${sendControl.action} title=${sendControl.title} aria-label=${sendControl.label} ?disabled=${this.preparingSend || sendControlDisabled(this.draft, this.attachments)} @click=${() => { void this.send("followUp"); }}>${sendControl.action === "send" ? renderSendIcon() : renderQueueIcon()}<span class="send-label">${sendControl.label}</span></button>
           <button class="icon-button stop-button" ?disabled=${!this.canStop} title=${this.canStop ? "Stop current work and clear queued messages" : "Nothing running"} aria-label="Stop current work" @click=${() => this.onStop?.()}>${renderStopIcon()}</button>
         </div>
       </footer>

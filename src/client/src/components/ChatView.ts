@@ -5,6 +5,7 @@ import { deferredImagePath } from "../api/urls";
 import { resolveAppUrl } from "../appUrl";
 import type { FoldedMarkdown, SessionRef } from "../../../shared/apiTypes";
 import { showsJumpToBottom } from "../chatScrollPosition";
+import { promptStepTargets, showsPromptNavigation } from "./chatPromptNavigation";
 import { ScrollFollowGate, TOUCH_SETTLE_MS } from "../scrollFollowGate";
 import { drawnWaitingCards, shownWaitingCards, type ShownWaiting, type WaitingCards } from "../waitingSlotHold";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -138,6 +139,22 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   @media (pointer: coarse) { .jump-to-bottom::after { content: ""; position: absolute; inset: -4px; } }
   .jump-to-bottom:focus-visible { border-color: var(--pi-accent); }
   @media (hover: hover) { .jump-to-bottom:hover { border-color: var(--pi-accent); } }
+  /* The prompt steppers sit in the same column as the jump-to-bottom control, above it, so the
+     transcript's ways to move read as one group. When the jump control is hidden - the reader is
+     already at the newest - the steppers take its place at the bottom of the column. */
+  .prompt-nav { position: absolute; right: calc(var(--pi-chat-gutter) + var(--pi-space-4)); bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4) + var(--pi-control-height-comfort) + var(--pi-space-3)); z-index: var(--pi-layer-sticky); display: flex; flex-direction: column; gap: var(--pi-space-2); }
+  .prompt-nav.low { bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4)); }
+  .prompt-nav button { box-sizing: border-box; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); padding: 0;
+    border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md);
+    background: var(--pi-surface-raised); color: var(--pi-text);
+    font-size: var(--pi-text-lg); line-height: 1; cursor: pointer;
+    box-shadow: var(--pi-elevation-2);
+  }
+  @media (pointer: coarse) { .prompt-nav button::after { content: ""; position: absolute; inset: -4px; } }
+  .prompt-nav button:focus-visible { border-color: var(--pi-accent); }
+  @media (hover: hover) { .prompt-nav button:hover { border-color: var(--pi-accent); } }
   .quote-chip { position: fixed; z-index: var(--pi-layer-popover); box-sizing: border-box; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-accent-border); border-radius: var(--pi-radius-md); background: var(--pi-surface-raised); color: var(--pi-text); font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; box-shadow: var(--pi-elevation-2); }
   /* The 64px bottom padding was the reservation for the activity dock back when
      it floated over the scroller's bottom edge (both arrived in the commit that
@@ -425,8 +442,14 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .msg-action:focus { color: var(--pi-text); border-color: var(--pi-accent); }
   @media (pointer: coarse) { .msg-action:active, .activity-dock button:active { background: var(--pi-surface-hover); } }
   @media (hover: hover) { .msg-action:hover { color: var(--pi-text); border-color: var(--pi-accent); } }
-  .msg:focus-within > .msg-meta-row .msg-actions, .group-msg:focus-within > .msg-meta-row .msg-actions { opacity: 1; }
-  @media (hover: hover) { .msg:hover > .msg-meta-row .msg-actions, .group-msg:hover > .msg-meta-row .msg-actions { opacity: 1; } }
+  /* A card reveals its bottom row's controls when the card has focus, and on hover. The strip at the
+     top of the card does not play that game: its one job is to be where a reader looks first on a card
+     that can be many screens tall, and a control held at zero opacity there is a keyboard stop with no
+     ring and no visible target (2026-11-13, after a live probe found the top copy button unfocusable-
+     looking at rest). */
+  .msg-meta-row.top .msg-actions { opacity: 1; }
+  .msg:focus-within .msg-meta-row .msg-actions, .group-msg:focus-within .msg-meta-row .msg-actions { opacity: 1; }
+  @media (hover: hover) { .msg:hover .msg-meta-row .msg-actions, .group-msg:hover .msg-meta-row .msg-actions { opacity: 1; } }
   .msg-actions:has(.msg-action[data-action="retry"]), .msg-actions:has(.msg-action[data-action="discard"]) { opacity: 1; }
   .msg.user .msg-action[data-action="retry"] { color: var(--pi-accent); border-color: var(--pi-accent); }
   .label { display: block; color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono); line-height: inherit; }
@@ -439,8 +462,8 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   /* Quiet, but never below the non-text contrast floor: .28 measured 1.37:1
      at rest, and the round-four remedy had only reached the coarse branch. */
   .msg-meta { min-width: 0; border: 0; background: transparent; color: var(--pi-muted); padding: 0; font: var(--pi-text-2xs) var(--pi-font-ui); line-height: inherit; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pi-motion-fast) var(--pi-ease); cursor: pointer; user-select: text; -webkit-user-select: text; }
-  .msg:focus-within > .msg-meta-row .msg-meta, .group-msg:focus-within > .msg-meta-row .msg-meta, .msg-meta:focus, .msg-meta.expanded { opacity: 1; }
-  @media (hover: hover) { .msg:hover > .msg-meta-row .msg-meta, .group-msg:hover > .msg-meta-row .msg-meta { opacity: 1; } }
+  .msg:focus-within .msg-meta-row .msg-meta, .group-msg:focus-within .msg-meta-row .msg-meta, .msg-meta:focus, .msg-meta.expanded { opacity: 1; }
+  @media (hover: hover) { .msg:hover .msg-meta-row .msg-meta, .group-msg:hover .msg-meta-row .msg-meta { opacity: 1; } }
   .msg-meta.expanded { flex: 1 1 auto; max-width: 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
   .msg-meta:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); border-radius: var(--pi-radius-xs); }
   @media (hover: none) {
@@ -721,6 +744,17 @@ export class ChatView extends LitElement {
   @property({ attribute: false }) onQuoteSelection?: (quoted: string) => void;
   @query(".chat") private chat?: HTMLDivElement;
   @query("dialog.image-zoom") private imageZoomDialog?: HTMLDialogElement;
+  /**
+   * Whether the transcript is following the newest message.
+   *
+   * Public because the fact belongs to the transcript, not to the code that sets it: a reader's own
+   * scroll, a stepper, and a page change all stop the follow, and anything that reads the surface needs
+   * the same answer the surface is acting on.
+   */
+  get followsNewest(): boolean {
+    return this.pinnedToBottom;
+  }
+
   @state() private pinnedToBottom = true;
   /** True while a touch gesture is moving the scroller; see onTouchStart. */
   private userScrollInFlight = false;
@@ -1523,6 +1557,7 @@ export class ChatView extends LitElement {
           ${this.renderQueuedMessages()}
           ${this.renderWaitingForYou()}
         </div>
+        ${this.renderPromptNavigation()}
         ${this.renderJumpToBottom()}
         ${this.renderActivityDock()}
       </div>
@@ -1553,6 +1588,78 @@ export class ChatView extends LitElement {
       return;
     }
     if (!this.startNewestPage()) this.dispatchViewport({ kind: "pageFailed" });
+  }
+
+  /**
+   * The steppers between the reader's own prompts, and what each press does.
+   *
+   * Which anchor a step lands on is decided in `chatPromptNavigation.ts`; this is the executor. A step
+   * past the newest prompt goes to the bottom of the transcript, because that is what further is
+   * there; a step past the oldest goes nowhere, because the reader is already at the oldest prompt this
+   * transcript holds and sliding somewhere else reads as a bug. Both arrows are always live - a control
+   * that greys out at a boundary needs a measurement every frame to stay honest, and a no-op at the
+   * boundary is the same answer without the lie.
+   */
+  private renderPromptNavigation() {
+    if (!showsPromptNavigation(this.userPromptCount)) return null;
+    return html`
+      <div class=${`prompt-nav ${this.jumpToBottomVisible ? "" : "low"}`}>
+        <button type="button" title="Previous prompt" aria-label="Previous prompt" @click=${() => { this.stepPrompt("previous"); }}>
+          <svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m6 11 6-6 6 6"></path></svg>
+        </button>
+        <button type="button" title="Next prompt" aria-label="Next prompt" @click=${() => { this.stepPrompt("next"); }}>
+          <svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m6 13 6 6 6-6"></path></svg>
+        </button>
+      </div>
+    `;
+  }
+
+  /** The prompts in this transcript, in the order the reader sent them. */
+  private get userPromptCount(): number {
+    return this.messages.filter((message) => message.role === "user").length;
+  }
+
+  private stepPrompt(direction: "previous" | "next"): void {
+    const chat = this.chat;
+    if (chat === undefined) return;
+    const anchors = this.promptAnchors(chat);
+    if (anchors.length === 0) return;
+    const targets = promptStepTargets(anchors.map((anchor) => anchor.top), { top: chat.scrollTop, bottom: chat.scrollTop + chat.clientHeight });
+    const target = direction === "previous" ? targets.previous : targets.next;
+    if (target === undefined) {
+      // Past the newest prompt, "further" is the newest message; the oldest prompt has nothing above it.
+      if (direction === "next") {
+        this.pinnedToBottom = true;
+        this.scrollToBottom();
+      }
+      return;
+    }
+    const anchor = anchors.find((candidate) => candidate.top === target);
+    if (anchor === undefined) return;
+    // Stepping away from the newest is the reader choosing to read: the transcript must not snap back
+    // to the bottom when the next message arrives.
+    this.pinnedToBottom = false;
+    // The jump is written the way the transcript's other jumps are written. A smooth scroll animates and
+    // cancels: the same call on this scroller was a no-op in a real browser (2026-11-13), and a
+    // navigation control that answers with nothing is worse than one that arrives at once.
+    this.withSuppressedScrollSave(() => {
+      chat.scrollTop = Math.max(0, target);
+      this.lastScrollTop = chat.scrollTop;
+      this.lastClientHeight = chat.clientHeight;
+    });
+  }
+
+  /**
+   * The reader's prompts, with their offset in the transcript.
+   *
+   * Command rows are not prompts (they are the reader's own commands, not a question to pi), and queued
+   * messages are, because the reader wrote them and wants to step back to them. Measured with rects, not
+   * `offsetTop`, so a nested positioned ancestor cannot shift every anchor.
+   */
+  private promptAnchors(chat: HTMLElement): { readonly top: number }[] {
+    const bounds = chat.getBoundingClientRect();
+    return Array.from(chat.querySelectorAll<HTMLElement>("article.msg.user:not(.command)"))
+      .map((element) => ({ top: element.getBoundingClientRect().top - bounds.top + chat.scrollTop }));
   }
 
   private renderJumpToBottom() {
@@ -2329,33 +2436,41 @@ export class ChatView extends LitElement {
   }
 
   /**
-   * The card's top strip: who spoke. The actions and the clock left it (owner, 2026-11-04): a reader
-   * who has read a long reply looks at its end, and copy plus date and time sat pinned at its top,
-   * out of reach of the eyes that wanted them. They are drawn under the response by
-   * {@link renderMessageMetaRow}; the strip stays sticky so the card keeps its identity while its
-   * text scrolls under it.
+   * The card's top strip: who spoke, and the controls.
+   *
+   * The controls moved to the end of a response (owner, 2026-11-04): a reader who has read a long reply
+   * looks at its end, and copy plus date and time sat pinned at its top, out of reach of the eyes that
+   * wanted them. They are drawn there. They are drawn here too: the reader who has not started the reply
+   * has not read to its end, and the strip is sticky, so the copy control at the top is the one in reach
+   * while a long answer scrolls. Same row component, same key - expanding the meta label at the top
+   * expands the one at the bottom, so there is no second state to keep in step.
    */
   private renderMessageHeader(message: ChatLine, key: string, label: string = message.role) {
     return html`
       <div class="msg-header">
         <b class="label">${label}</b>
+        ${this.renderMessageMetaRow(message, key, "top")}
       </div>
     `;
   }
 
   /**
-   * The row under a response: the copy control, how long the turn ran, and when it happened. The
+   * The row of controls: the copy control, how long the turn ran, and when it happened. The
    * meta label carries the date and time (with the model, the thinking level and the sending plugin
    * when there is one) and is tapped to show all of it when the row is too narrow to fit it.
+   *
+   * It is drawn at both ends of a card - see {@link renderMessageHeader} - and the position is a style
+   * hook only: the two rows are the same component, so a control added for one end exists at the other.
    */
-  private renderMessageMetaRow(message: ChatLine, key: string) {
+  private renderMessageMetaRow(message: ChatLine, key: string, position: "top" | "bottom" = "bottom") {
     const meta = this.messageMetaLabel(message);
     const expanded = this.expandedMetaKey === key;
+    const end = messageRowEnd(position);
     return html`
-      <div class="msg-meta-row">
+      <div class=${`msg-meta-row ${position}`}>
         <div class="msg-meta-trailing">
-          ${this.renderMessageActions(message, key)}
-          ${meta === "" ? null : html`<span class=${expanded ? "msg-meta expanded" : "msg-meta"} role="button" tabindex="0" title=${meta} aria-label=${meta} aria-expanded=${String(expanded)} @click=${() => { this.expandedMetaKey = expanded ? undefined : key; }} @keydown=${(event: KeyboardEvent) => { this.onMetaKeydown(event, key, expanded); }}>${meta}</span>`}
+          ${this.renderMessageActions(message, key, position)}
+          ${meta === "" ? null : html`<span class=${expanded ? "msg-meta expanded" : "msg-meta"} role="button" tabindex="0" title=${meta} aria-label=${`${meta}${end}`} aria-expanded=${String(expanded)} @click=${() => { this.expandedMetaKey = expanded ? undefined : key; }} @keydown=${(event: KeyboardEvent) => { this.onMetaKeydown(event, key, expanded); }}>${meta}</span>`}
         </div>
       </div>
     `;
@@ -2403,23 +2518,24 @@ export class ChatView extends LitElement {
    * again": that copies a message still waiting to go, so taking it up there sent it twice (B36,
    * audit P2-5).
    */
-  private renderMessageActions(message: ChatLine, key: string) {
+  private renderMessageActions(message: ChatLine, key: string, position: "top" | "bottom" = "bottom") {
     const state = message.meta?.delivery?.state;
     const resendable = this.onResendMessage !== undefined && isResendableLine(message) && (state === undefined || deliveryTaken(state)) && !this.isQueuedLine(message);
     const takeBack = this.renderTakeBack(message);
     if (!this.isCopyableMessage(message) && !resendable && takeBack === null) return null;
     const copied = this.copiedMessageKey === key;
+    const end = messageRowEnd(position);
     return html`
-      <div class="msg-actions" aria-label="Message actions">
+      <div class="msg-actions" aria-label=${`Message actions${end}`}>
         ${takeBack}
         ${resendable
-          ? html`<button type="button" class="msg-action" title="Edit and send again" aria-label="Put this message back in the composer to send again" @click=${(event: MouseEvent) => { this.resendMessage(message, event); }}>
+          ? html`<button type="button" class="msg-action" title="Edit and send again" aria-label=${`Put this message back in the composer to send again${end}`} @click=${(event: MouseEvent) => { this.resendMessage(message, event); }}>
               ${renderResendIcon()}
             </button>`
           : null}
         ${this.renderPluginActions(message, key)}
         ${this.isCopyableMessage(message)
-          ? html`<button type="button" class="msg-action" title=${copied ? "Copied" : "Copy message"} aria-label=${`${copied ? "Copied" : "Copy"} ${message.role} message`} @click=${(event: MouseEvent) => { void this.copyMessage(message, key, event); }}>
+          ? html`<button type="button" class="msg-action" title=${copied ? "Copied" : "Copy message"} aria-label=${`${copied ? "Copied" : "Copy"} ${message.role} message${end}`} @click=${(event: MouseEvent) => { void this.copyMessage(message, key, event); }}>
               <span aria-hidden="true">${copied ? renderCheckIcon() : renderCopyIcon()}</span>
             </button>`
           : null}
@@ -3374,4 +3490,16 @@ const DOCK_MARKS: Readonly<Record<SessionActivityCategory, (frames: readonly str
 /** The dock's mark for a category: work in progress animates, an opening runtime wears the tap's spinner, the rest is a dot in its colour. */
 function dockMark(category: SessionActivityCategory, frames: readonly string[] | undefined) {
   return DOCK_MARKS[category](frames);
+}
+
+/**
+ * Which end of the card a row's control belongs to, said in its accessible name.
+ *
+ * Every control in a card is drawn twice on purpose - one for the reader who has read to the end, one
+ * for the reader who has not started - and a control list that reads "Copy user message" twice with
+ * nothing to tell the two apart is a list the reader cannot use. The visible labels stay identical: the
+ * card already shows where each row sits, and only the name has to say which end it belongs to.
+ */
+function messageRowEnd(position: "top" | "bottom"): string {
+  return position === "top" ? " (top of the message)" : "";
 }

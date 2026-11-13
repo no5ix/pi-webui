@@ -33,11 +33,6 @@ export function renderQueueIcon(): TemplateResult {
   `;
 }
 
-export function renderSteerIcon(): TemplateResult {
-  // Steer and send are both "do this now"; the queue icon carries the "later" distinction.
-  return renderSendIcon();
-}
-
 export function renderStopIcon(): TemplateResult {
   return svg`
     <svg class="prompt-action-icon prompt-action-icon-filled" viewBox="0 0 24 24" aria-hidden="true" focusable="false">

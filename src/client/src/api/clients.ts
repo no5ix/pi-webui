@@ -1,5 +1,5 @@
 import { isRecord } from "../../../shared/unknownValues";
-import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageUpdateRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
+import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageUpdateRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
 import { parseProjectFolderListing } from "./projectFolderParser";
 import { resolveAppUrl } from "../appUrl";
 import { describeError } from "../notice";
@@ -37,6 +37,8 @@ import {
   parseModelSelectionResponse,
   parseSessionModelCatalogResponse,
   parseMoveWorkspaceFileResponse,
+  parseNtfyStatus,
+  parseNtfyDelivery,
   parseOAuthFlowState,
   parsePiPackageMutationResponse,
   parsePiPackagesResponse,
@@ -172,6 +174,30 @@ export const configApi = {
   saveConfig: (config: PiWebConfigValues, machineId?: string) => request(configPath(machineId), parsePiWebConfigResponse, { method: "PUT", body: JSON.stringify({ config }) }),
   /** The gateway's shared theme alone; null stops sharing. */
   saveSharedTheme: (theme: PiWebSharedThemeConfig | null) => request("api/config/theme", parsePiWebConfigResponse, { method: "PUT", body: JSON.stringify({ theme }) }),
+  /**
+   * The ntfy block alone; null stops using ntfy and forgets its topic.
+   *
+   * A write may omit the topic, and the server keeps the stored one: the topic is what it takes to
+   * publish to the reader's channel, so the panel writes it once and never reads it back.
+   * `clearTopic` is the write that forgets the topic and keeps the channel, which is the panel's
+   * "Stop using this topic" - the only way to lose a stored topic, because an empty box is a typo.
+   */
+  saveNtfy: (ntfy: NtfyConfig | null, write: { readonly clearTopic?: boolean } = {}) =>
+    request("api/config/ntfy", parsePiWebConfigResponse, { method: "PUT", body: JSON.stringify({ ntfy, ...(write.clearTopic === true ? { clearTopic: true } : {}) }) }),
+};
+
+/**
+ * The notification providers this PI WEB answers for.
+ *
+ * Only ntfy is a server channel: the browser's own notices are posted by the page and need no route.
+ */
+export const notificationsApi = {
+  ntfyStatus: () => request("api/notifications/ntfy/status", parseNtfyStatus, { cache: "no-store" }),
+  /**
+   * Ask for a notice now. The draft the panel is showing travels with the request, so the answer is
+   * about the server and topic in the boxes - not about a stored block the reader never typed.
+   */
+  sendNtfyTest: (draft?: NtfyConfig) => request("api/notifications/ntfy/test", parseNtfyDelivery, { method: "POST", body: JSON.stringify(draft === undefined ? {} : { ntfy: draft }) }),
 };
 
 export const pluginsApi = {

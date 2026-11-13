@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { PiWebConfigError, loadPiWebConfig, parsePiWebConfig, parseSharedThemeConfig, resolveEffectivePiWebConfig, savePiWebConfig, saveSharedThemeConfig, type AgentPathHost, type LoadOptions, type PiWebConfig } from "../../config.js";
-import type { PiWebConfigEnvOverrides, PiWebConfigResponse, PiWebConfigValues, PiWebPluginConfigMap, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "../../shared/apiTypes.js";
+import { PiWebConfigError, loadPiWebConfig, parsePiWebConfig, parseSharedThemeConfig, resolveEffectivePiWebConfig, saveNtfyConfig, savePiWebConfig, saveSharedThemeConfig, type AgentPathHost, type LoadOptions, type PiWebConfig } from "../../config.js";
+import { ntfyTopicConfigured, parseNtfyConfig } from "../../shared/ntfy.js";
+import type { NtfyConfig, PiWebConfigEnvOverrides, PiWebConfigResponse, PiWebConfigValues, PiWebPluginConfigMap, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "../../shared/apiTypes.js";
 import { errorMessage, isRecord } from "../../shared/unknownValues.js";
 import { hasServerSettings, parseServerSettingsStatus, parseServerSettingsUpdates, PLUGIN_SERVER_SETTINGS_PROTOCOL, PluginServerSettingsError, publicPiWebConfig, serverSettingsConfigured } from "../../shared/pluginConfigPrivacy.js";
 
@@ -10,6 +11,11 @@ export interface PiWebConfigService {
   write: (config: PiWebConfigValues, serverSettingsUpdates: PiWebServerSettingsUpdates | undefined) => PiWebConfigResponse | Promise<PiWebConfigResponse>;
   /** Sets or clears the shared theme alone; a service without it serves no theme route. */
   writeTheme?: (theme: PiWebSharedThemeConfig | undefined) => PiWebConfigResponse | Promise<PiWebConfigResponse>;
+  /**
+   * Sets the ntfy block alone, or clears it. A write that names no topic keeps the stored one, because
+   * no browser ever reads the topic back. A service without it serves no ntfy config route.
+   */
+  writeNtfy?: (ntfy: NtfyConfig | undefined, write?: { readonly clearTopic?: boolean }) => PiWebConfigResponse | Promise<PiWebConfigResponse>;
   /**
    * Server-only: the stored plugin map with each plugin's private `serverSettings`, which this
    * process's plugin catalogs fingerprint and hand to server plugins. Never part of an answer. A
@@ -39,6 +45,10 @@ export function createFilePiWebConfigService(options: LoadOptions = {}): PiWebCo
     },
     writeTheme: (theme) => {
       saveSharedThemeConfig(theme, options);
+      return currentPiWebConfigResponse(options);
+    },
+    writeNtfy: (ntfy, write) => {
+      saveNtfyConfig(ntfy, options, write ?? {});
       return currentPiWebConfigResponse(options);
     },
     readRawPlugins: () => loadPiWebConfig(options).config.plugins ?? {},
@@ -72,6 +82,9 @@ export function currentPiWebConfigResponse(options: LoadOptions = {}): PiWebConf
     envOverrides: piWebConfigEnvOverrides(env),
     serverSettingsProtocol: PLUGIN_SERVER_SETTINGS_PROTOCOL,
     serverSettingsConfigured: serverSettingsConfigured(loaded.config),
+    // Presence only: the topic is what it takes to publish to the reader's channel, so it is not part
+    // of an answer, and the panel that edits ntfy is told only that one is stored.
+    ntfyConfigured: ntfyTopicConfigured(loaded.config.ntfy),
   };
 }
 
@@ -89,6 +102,32 @@ export function registerConfigRoutes(app: FastifyInstance, service: PiWebConfigS
       const config = parseConfigRequest(request.body?.config);
       const updates = parseServerSettingsUpdates(request.body?.serverSettingsUpdates);
       return publicPiWebConfigResponse(await service.write(config, updates));
+    } catch (error) {
+      const status = isConfigValidationError(error) ? 400 : 500;
+      return reply.code(status).send({ error: errorMessage(error) });
+    }
+  });
+}
+
+/**
+ * `PUT /api/config/ntfy`: the ntfy block alone, with the stored topic kept when the write names none.
+ *
+ * It is a separate route for one reason: the topic is a bearer secret on the public ntfy server, so a
+ * browser writes it and never reads it. A whole-config save round-trips the config through the
+ * browser, and a channel editor whose write carries no topic would then delete the topic - which is
+ * exactly what a reader turning on "notify me when a task fails" must not do.
+ *
+ * `clearTopic: true` is the one write that removes the topic while keeping the block. It is an explicit
+ * act because a blank box is not one: the panel's own rule is that an empty topic box keeps the stored
+ * topic, so the only way to stop using a topic is to say so.
+ */
+export function registerNtfyConfigRoute(app: FastifyInstance, writeNtfy: NonNullable<PiWebConfigService["writeNtfy"]>): void {
+  app.put<{ Body: { ntfy?: unknown; clearTopic?: unknown } | undefined }>("/api/config/ntfy", async (request, reply) => {
+    try {
+      const ntfy = request.body?.ntfy;
+      if (ntfy === undefined) throw new PiWebConfigError("PI WEB ntfy update must carry ntfy: an object, or null to stop using ntfy");
+      const parsed = ntfy === null ? undefined : parseNtfyConfig(ntfy, "request");
+      return publicPiWebConfigResponse(await writeNtfy(parsed, { clearTopic: request.body?.clearTopic === true }));
     } catch (error) {
       const status = isConfigValidationError(error) ? 400 : 500;
       return reply.code(status).send({ error: errorMessage(error) });

@@ -36,7 +36,9 @@ import { sessionWorkSettled } from "../sessionWorkSettled";
 import type { SessionStateBadgeKind } from "./activityBadge";
 import { isSessionActive } from "../../../shared/activity";
 import { notifyTaskFinished, ensureNotificationRegistration, setTaskNotificationsWanted, taskNotificationsWanted, requestTaskNotificationPermission, notificationAvailability, type NotificationAvailability } from "../notifications/taskNotifications";
-import { taskCompletionVerdict, taskFinishedNoticeContent } from "../notifications/taskCompletionNotice";
+import { notificationEdge, stoppedByReaderFacts } from "../notifications/sessionNotificationEdges";
+import { notifyBrowserChannel } from "../notifications/notificationDispatcher";
+import { sessionActivityCategory, type SessionActivityCategory } from "../../../shared/sessionActivityState";
 import { TurnRunClock, type FinishedTurn } from "../turnRunClock";
 import { canonicalJson } from "../../../shared/unknownValues";
 import { pageCommandOf, type PageCommandName } from "../../../shared/builtinSlashCommands";
@@ -1268,18 +1270,23 @@ export class PiWebApp extends LitElement {
     this.syncSelectedSessionReadState();
     this.syncFleetOnSettingsSection();
     this.syncDocumentTitle();
-    this.notifyFinishedTask();
+    this.notifySessionEvents();
   }
 
   /**
-   * A task that finished while the reader was elsewhere goes to the device's notification centre.
-   * The states that decide it are named once in `taskCompletionVerdict`; this is the executor, and
-   * it never decides anything of its own.
+   * The events the reader asked to be told about, handed to the browser's own channel.
    *
-   * Working edges are remembered per machine and session: a status frame is the fact, and the
-   * falling edge of one session's work is the moment the reader asked to be told about.
+   * The states that decide an event are named once in `sessionNotificationEdges`; this is the executor,
+   * and it decides nothing of its own. ntfy is not delivered from here: the session daemon posts it, so
+   * a phone is told whether this browser is open or not, and the two channels cannot block each other.
+   *
+   * Working edges are remembered per machine and session: a status frame is the fact, and the edge of
+   * one session's work is the moment the reader asked to be told about. The page being visible is not a
+   * reason to stay quiet - Safari shows a web notification to a foreground page unreliably, which is why
+   * the dispatcher reports what the notification centre actually took, and leaves the same words on the
+   * page when it took nothing.
    */
-  private notifyFinishedTask(): void {
+  private notifySessionEvents(): void {
     const status = this.state.status;
     const session = this.state.selectedSession;
     if (status === undefined) return;
@@ -1288,26 +1295,42 @@ export class PiWebApp extends LitElement {
     const working = isSessionActive(status);
     const wasWorking = this.workingEdge.get(key) === true;
     this.workingEdge.set(key, working);
-    if (working) this.turnClock.sawWorking(key, { partial: !this.workingEdge.has(key) });
+    if (working) this.turnClock.sawWorking(key, { partial: !wasWorking });
     const finishedTurn = working ? undefined : this.turnClock.sawFinish(key);
     if (finishedTurn !== undefined) this.lastTurnRun = { key, turn: finishedTurn };
-    const stoppedByReader = status.isStopping === true || this.stoppedByThisReader.delete(key);
-    const verdict = taskCompletionVerdict({
-      wasWorking,
-      isWorking: working,
-      stoppedByReader,
-      readerWatching: typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus(),
-      enabled: taskNotificationsWanted(),
+    const category = sessionActivityCategory(status, this.state.activity);
+    const previous = this.sessionCategory.get(key);
+    this.sessionCategory.set(key, category);
+    const edge = notificationEdge({
+      previous,
+      next: category,
+      stoppedByReader: stoppedByReaderFacts(status.isStopping, this.stoppedByThisReader.delete(key)),
     });
-    if (verdict !== "notify") return;
-    const notice = taskFinishedNoticeContent(session.name ?? "", finishedTurn?.durationMs);
-    void notifyTaskFinished({ title: notice.title, body: notice.body, url: window.location.href }, `task-${session.id}`).then((posted) => {
-      if (posted) this.setState(noticePatch(noticeForReader("PI WEB sent this task's finish to the device's notifications.")));
+    if (edge === "none") return;
+    const question = status.pendingDialogs?.at(-1)?.title;
+    const measured = status.lastRunDurationMs ?? finishedTurn?.durationMs;
+    void notifyBrowserChannel(
+      {
+        event: edge,
+        sessionId: session.id,
+        machineId: selectedMachineId(this.state),
+        sessionName: session.name ?? "",
+        ...(measured === undefined ? {} : { durationMs: measured }),
+        ...(question === undefined ? {} : { question }),
+      },
+      {
+        onInPageNotice: (notice) => { this.setState(noticePatch(noticeForReader(`${notice.title} - ${notice.body}`))); },
+      },
+    ).then((delivery) => {
+      if (delivery === "system") this.setState(noticePatch(noticeForReader("PI WEB sent this to the device's notifications.")));
     });
   }
 
   /** Which sessions were working the last time a status frame spoke about them. */
   private readonly workingEdge = new Map<string, boolean>();
+
+  /** What each session was doing the last time a frame spoke about it: the edge an event is read from. */
+  private readonly sessionCategory = new Map<string, SessionActivityCategory | undefined>();
 
   /**
    * Turns device notifications on or off, and reports what the browser answered.

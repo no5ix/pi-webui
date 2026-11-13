@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import type { PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig, PiWebTranslationConfig } from "./shared/apiTypes.js";
+import type { NtfyConfig, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig, PiWebTranslationConfig } from "./shared/apiTypes.js";
 import { isPiWebPluginId, piWebPluginIdPattern } from "./shared/pluginIds.js";
 import { isRecord } from "./shared/unknownValues.js";
+import { parseNtfyConfig } from "./shared/ntfy.js";
 import { isPluginModelGrant } from "./shared/pluginModelGrant.js";
-import { hasServerSettings, isPluginServerSettings, parseServerSettingsUpdates, preservePluginServerSettings } from "./shared/pluginConfigPrivacy.js";
+import { hasServerSettings, isPluginServerSettings, mergeNtfyConfig, parseServerSettingsUpdates, preservePluginServerSettings } from "./shared/pluginConfigPrivacy.js";
 
 /**
  * A config file or request that does not say what PI WEB accepts. The type is what answers a
@@ -231,7 +232,7 @@ export function resolveEffectivePiWebConfig(loaded: LoadedPiWebConfig, options: 
  */
 const SAVED_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "host", "port", "allowedHosts", "shortcuts", "plugins", "pathAccess", "uploads", "maxUploadBytes",
-  "logging", "listTiles", "askUser", "respectProjectTrust", "environmentFacts", "piBuiltInExtensions", "agent", "updateCommand",
+  "logging", "listTiles", "askUser", "respectProjectTrust", "environmentFacts", "piBuiltInExtensions", "agent", "updateCommand", "ntfy",
 ]);
 
 export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, serverSettingsUpdates?: PiWebServerSettingsUpdates): LoadedPiWebConfig {
@@ -245,6 +246,12 @@ export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, 
   const updates = parseServerSettingsUpdates(serverSettingsUpdates);
   const plugins = preservePluginServerSettings(storedPlugins, normalized.plugins, updates);
   if (normalized.plugins !== undefined || Object.keys(plugins).length > 0) normalized.plugins = plugins;
+  // The ntfy topic is the one setting a browser writes but never reads, so the stored file is its
+  // source: a save that carries no topic keeps it, exactly as a save keeps a plugin's private block.
+  const storedNtfy = existing["ntfy"] === undefined ? undefined : parseNtfyConfig(existing["ntfy"], path);
+  const ntfy = mergeNtfyConfig(storedNtfy, normalized.ntfy);
+  if (ntfy === undefined) delete normalized.ntfy;
+  else normalized.ntfy = ntfy;
   if (existing["agent"] !== undefined) parseAgentConfig(existing["agent"], path);
   const kept = Object.fromEntries(Object.entries(existing).filter(([key]) => !SAVED_CONFIG_KEYS.has(key)));
   writeConfigObject(path, { ...kept, ...piWebConfigRecord(normalized) });
@@ -257,6 +264,29 @@ export function saveSharedThemeConfig(theme: PiWebSharedThemeConfig | undefined,
   const path = piWebConfigPath(env, options.cwd ?? process.cwd());
   const others = Object.fromEntries(Object.entries(readExistingConfigObject(path)).filter(([key]) => key !== "theme"));
   const next = theme === undefined ? others : { ...others, theme: parseSharedThemeConfig(theme, path) };
+  const config = parsePiWebConfig(next, path);
+  writeConfigObject(path, next);
+  return { path, exists: true, config, deprecatedAgentInputs: detectDeprecatedAgentInputs(env, config) };
+}
+
+/**
+ * Sets the ntfy block alone, keeping the stored topic when the incoming write omits one.
+ *
+ * The Settings panel can show the reader's server, switches and topic presence, but never the topic
+ * itself, so its write carries no topic by design. Merging here is what stops "turn on the failure
+ * notice" from deleting the channel it is meant to travel on. `undefined` removes the block whole,
+ * topic included - the panel's "Stop using ntfy". `clearTopic` removes the topic and leaves the block:
+ * the panel's "Stop using this topic", an act the reader named, because an empty box is a typo and a
+ * bearer secret should not die to one.
+ */
+export function saveNtfyConfig(ntfy: NtfyConfig | undefined, options: LoadOptions = {}, write: { readonly clearTopic?: boolean } = {}): LoadedPiWebConfig {
+  const env = options.env ?? process.env;
+  const path = piWebConfigPath(env, options.cwd ?? process.cwd());
+  const existing = readExistingConfigObject(path);
+  const others = Object.fromEntries(Object.entries(existing).filter(([key]) => key !== "ntfy"));
+  const stored = existing["ntfy"] === undefined ? undefined : parseNtfyConfig(existing["ntfy"], path);
+  const merged = ntfy === undefined ? undefined : mergeNtfyConfig(stored, parseNtfyConfig(ntfy, path), write);
+  const next = merged === undefined ? others : { ...others, ntfy: merged };
   const config = parsePiWebConfig(next, path);
   writeConfigObject(path, next);
   return { path, exists: true, config, deprecatedAgentInputs: detectDeprecatedAgentInputs(env, config) };
@@ -368,6 +398,7 @@ export function parsePiWebConfig(value: Record<string, unknown>, path: string, a
     ...(value["extensionDialogsTimeoutMs"] !== undefined ? { extensionDialogsTimeoutMs: parseExtensionDialogsTimeoutMs(value["extensionDialogsTimeoutMs"], path) } : {}),
     ...(value["agent"] !== undefined ? { agent: parseAgentConfig(value["agent"], path, agentPathHost) } : {}),
     ...(value["translation"] !== undefined ? { translation: parseTranslationConfig(value["translation"], path) } : {}),
+    ...(value["ntfy"] !== undefined ? { ntfy: parseNtfyConfig(value["ntfy"], path) } : {}),
     ...(value["updateCommand"] !== undefined ? { updateCommand: parseUpdateCommand(value["updateCommand"], path) } : {}),
   };
 }

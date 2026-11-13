@@ -1,5 +1,6 @@
 import type { CardSubmission, InteractiveCard } from "./interactiveCard.js";
 import type { MachineStatusUiEvent } from "./machineStatus.js";
+import type { NtfyConfig } from "./ntfy.js";
 import type {
   DeleteWorkspaceFileResponse,
   FileContentMediaType,
@@ -272,6 +273,13 @@ export interface PiWebConfigValues {
    * Tuning knob only — extension dialogs are always enabled.
    */
   extensionDialogsTimeoutMs?: number;
+  /**
+   * ntfy notices: a plain HTTP POST to a topic, sent by the server that runs the task, so a notice
+   * reaches a phone with no browser open. Independent of the browser's own notification switch.
+   * See {@link NtfyConfig}; the topic is a bearer secret on a public server, so no config response
+   * carries it - only `ntfyConfigured` says whether one is stored.
+   */
+  ntfy?: NtfyConfig;
   /** Deprecated agent-configuration keys, still honored as aliases during the deprecation window and detected for the deprecation warning (see PiWebAgentConfig). */
   agent?: PiWebAgentConfig;
   /**
@@ -464,6 +472,11 @@ export interface PiWebConfigResponse {
   serverSettingsProtocol?: 1;
   /** Which plugins hold a `serverSettings` block (an empty block counts); presence only, never validity or a value. */
   serverSettingsConfigured?: Record<string, boolean>;
+  /**
+   * True when an ntfy topic is stored on this machine. Presence only: the topic is what it takes to
+   * publish to (and read) the reader's channel, so it is never part of an answer.
+   */
+  ntfyConfigured?: boolean;
 }
 
 export interface Project {
@@ -1513,6 +1526,17 @@ export interface SessionStatus {
    */
   turnStartedAt?: string;
   /**
+   * How long the task that just finished took, measured by the session daemon from the transcript: from
+   * the newest input boundary (the prompt the reader sent, or the steer that took the turn over) to the
+   * newest entry on the branch. Present when the session is settled and the transcript answers both
+   * ends; absent while it works, and from a daemon that predates the field.
+   *
+   * The number is the server's, so it does not depend on a page having watched the task: a browser that
+   * opens after a two-hour run, a device on a different clock, and a reload in the middle of it all
+   * read the same span. A device-measured span is a fallback for a daemon that does not publish this.
+   */
+  lastRunDurationMs?: number;
+  /**
    * The timestamp of the session's leaf entry, the newest on its current branch (B28). A session
    * list orders by when a session last changed; carried on every status frame, it moves a row when
    * the run ends instead of at the next whole read of the list. Absent from a daemon that predates it.
@@ -1603,6 +1627,7 @@ export interface SlashCommand {
 }
 
 export type { FileSuggestion, ProjectFolderContents, ProjectFolderCrumb, ProjectFolderEntry, ProjectFolderListing, ProjectFolderListingRequest, ProjectFolderUnreadableCause } from "./pluginApiTypes.js";
+export type { NtfyConfig, NotificationEvent } from "./ntfy.js";
 
 export interface TerminalInfo {
   id: string;

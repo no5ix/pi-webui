@@ -19,6 +19,7 @@ import { bootstrapAndFreezeGlobalExtensionProviders } from "./daemon/sessions/gl
 import { registerAuthRoutes } from "./daemon/sessions/authRoutes.js";
 import { ModelCatalogRefresher } from "./daemon/sessions/modelCatalogRefresher.js";
 import { PiSessionService } from "./daemon/sessions/piSessionService.js";
+import { createNtfyNotifier } from "./daemon/notifications/ntfyNotifier.js";
 import { installPlainGlobalTheme } from "./daemon/sessions/piGlobalTheme.js";
 import { quietPiVersionChecks } from "./daemon/piVersionChecks.js";
 import { startProcessLogging } from "./shared/logging/processLogging.js";
@@ -380,6 +381,13 @@ async function createSessionDaemonRuntime() {
       spawnTargets,
       pluginBackgroundWork: (session) => serverPlugins.backgroundWork(session),
       serverFacts,
+      // ntfy notices are sent from the machine that ran the task, so they reach a phone with no
+      // browser open. The config is read per notice, which is what makes a Settings change take
+      // effect on the next finished task without restarting the daemon.
+      ntfyNotifier: createNtfyNotifier({
+        readConfig: () => effectivePiWebConfig({ env: daemonEnvironment }).config.ntfy,
+        log: (fields, message) => { app.log.info({ component: "ntfy", ...fields }, message); },
+      }),
       folderHolds,
       hostContributions: {
         // Sessions always run nested in this daemon, so they always get the

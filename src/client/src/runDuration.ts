@@ -1,15 +1,8 @@
 /**
- * A span of work in the words a reader uses: `48s`, `1m 5s`, `1h 5m`.
+ * The words a span of work is shown in, shared with the server.
  *
- * The activity dock, the line at the bottom of the window, and the notice a finished task posts all
- * say the same number, so they say it the same way. It lives outside the components because the
- * notification's text is written by a module that has no business importing a transcript component,
- * and a transcript component has no business owning the words a service-worker message uses.
+ * The formatting lives in `shared/duration` because the session daemon writes the text of an ntfy
+ * notice for the same span, and the two surfaces must not say `1h 5m` and `1h 05m` about one task.
+ * This module keeps the client's import path.
  */
-export function runDuration(elapsedMs: number): string {
-  const seconds = Math.max(0, Math.round(elapsedMs / 1000));
-  if (seconds < 60) return `${String(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${String(minutes)}m ${String(seconds % 60)}s`;
-  return `${String(Math.floor(minutes / 60))}h ${String(minutes % 60)}m`;
-}
+export { runDuration } from "../../shared/duration";

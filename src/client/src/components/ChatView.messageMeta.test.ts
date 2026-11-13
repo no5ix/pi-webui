@@ -24,6 +24,23 @@ function metaSpans(view: ChatView): HTMLElement[] {
 }
 
 describe("the message header's metadata", () => {
+  it("names the top row's controls as the top row's", async () => {
+    // The same controls hang at both ends of a long card on purpose. Two buttons that say only
+    // "Copy user message" give a keyboard reader two indistinguishable stops, on a card that can be
+    // many screens tall (2026-11-13).
+    const view = await mount([{
+      role: "user",
+      parts: [{ type: "text", text: "the question" }],
+      meta: { timestamp: "2026-07-10T19:15:30.000Z" },
+    }]);
+    const names = [...(view.shadowRoot?.querySelectorAll<HTMLElement>(".msg-meta-row button") ?? [])]
+      .map((button) => button.getAttribute("aria-label") ?? "")
+      .filter((name) => name.startsWith("Copy"));
+    expect(names.length).toBe(2);
+    expect(names.some((name) => name.includes("top of the message"))).toBe(true);
+    expect(names.some((name) => !name.includes("top of the message"))).toBe(true);
+  });
+
   it("is shown for a message the server has described", async () => {
     const view = await mount([{
       role: "assistant",
@@ -54,7 +71,12 @@ describe("the message header's metadata", () => {
       },
     ]);
 
-    expect(metaSpans(view).length).toBe(1);
+    // The controls are drawn at both ends of a card, so a described message carries its metadata twice -
+    // in the sticky strip and under the text - and the message the server has not described carries none
+    // at all, at either end.
+    const spans = metaSpans(view);
+    expect(spans).toHaveLength(2);
+    expect(spans.every((span) => span.textContent.includes("anthropic/claude-opus-5"))).toBe(true);
   });
 });
 

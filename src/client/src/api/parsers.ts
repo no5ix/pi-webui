@@ -3,6 +3,7 @@ import { CARD_FIELD_LIMIT, CARD_OPTION_LIMIT, CARD_TYPED_TEXT_MAX_LENGTH, type C
 import { readInteractiveCard } from "../../../shared/interactiveCardReader";
 import { isRecord } from "../../../shared/unknownValues";
 import { parseServerSettingsStatus, publicPluginConfig } from "../../../shared/pluginConfigPrivacy";
+import type { NtfyConfig, NtfyStatus } from "../../../shared/ntfy";
 import { recordedDurationMs } from "../../../shared/toolDuration";
 import { parseSessionStep } from "./sessionStepParser";
 import type { PendingRestart, ServerVersionFacts, StaleProcess } from "../versionSkew";
@@ -609,6 +610,7 @@ export function parseSessionStatus(value: unknown): SessionStatus {
     ...optionalField("pluginSurfaces", parsePluginSurfaces(record["pluginSurfaces"])),
     ...optionalField("persisted", parseOptionalBoolean(record["persisted"], "persisted")),
     ...optionalField("turnStartedAt", optionalString(record, "turnStartedAt")),
+    ...optionalField("lastRunDurationMs", optionalNumber(record, "lastRunDurationMs")),
     ...optionalField("lastActivityAt", optionalString(record, "lastActivityAt")),
     ...optionalField("gitBranch", optionalString(record, "gitBranch")),
     isStreaming: requireBoolean(record, "isStreaming"),
@@ -692,6 +694,50 @@ export function parseTranslation(value: unknown): { text: string; source?: strin
 /** The language a deployment translates into. */
 export function parseTranslationLanguage(value: unknown): string {
   return requireString(requireRecord(value), "language");
+}
+
+/**
+ * The ntfy channel as the server describes it.
+ *
+ * There is no topic in this answer to parse, and a client that asked for one would be reading a
+ * bearer secret into a page: `topicConfigured` is the whole of what the panel is told about it.
+ */
+export function parseNtfyStatus(value: unknown): NtfyStatus {
+  const record = requireRecord(value);
+  const reason = optionalString(record, "reason");
+  const config = record["config"];
+  return {
+    enabled: requireBoolean(record, "enabled"),
+    ready: requireBoolean(record, "ready"),
+    ...(reason === undefined ? {} : { reason }),
+    topicConfigured: requireBoolean(record, "topicConfigured"),
+    ...(isRecord(config) ? { config: parseNtfyConfigValues(config) } : {}),
+  };
+}
+
+function parseNtfyConfigValues(record: Record<string, unknown>): NtfyConfig {
+  const serverUrl = optionalString(record, "serverUrl");
+  const clickUrlBase = optionalString(record, "clickUrlBase");
+  return {
+    ...optionalField("enabled", optionalBoolean(record, "enabled")),
+    ...optionalField("onCompleted", optionalBoolean(record, "onCompleted")),
+    ...optionalField("onFailed", optionalBoolean(record, "onFailed")),
+    ...optionalField("onAskUser", optionalBoolean(record, "onAskUser")),
+    ...optionalField("serverUrl", serverUrl),
+    ...optionalField("clickUrlBase", clickUrlBase),
+    ...optionalField("timeoutMs", optionalNumber(record, "timeoutMs")),
+  };
+}
+
+/** What sending a test notice cost: whether it arrived, how many tries, and why not when it did not. */
+export function parseNtfyDelivery(value: unknown): { delivered: boolean; attempts: number; reason?: string } {
+  const record = requireRecord(value);
+  const reason = optionalString(record, "reason");
+  return {
+    delivered: requireBoolean(record, "delivered"),
+    attempts: optionalNumber(record, "attempts") ?? 0,
+    ...(reason === undefined ? {} : { reason }),
+  };
 }
 
 export function parseTerminalInputDelivered(value: unknown): { consumed: boolean } {

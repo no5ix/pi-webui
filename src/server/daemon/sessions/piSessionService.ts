@@ -156,6 +156,9 @@ import type { SessionScope } from "../../../server-plugin-api.js";
 import type { SessionServerFact } from "../../shared/plugins/serverFactChannel.js";
 import type { ServerFactReporter } from "../plugins/daemonServerFactFeed.js";
 import { cutRunEnding, runLastReply, settledRunEnding, type RunEnding, type RunLastReply } from "./runOutcome.js";
+import type { NtfyNotifier } from "../notifications/ntfyNotifier.js";
+import { notificationContent, notificationSessionRoute } from "../../../shared/notificationEvents.js";
+import type { NotificationEvent } from "../../../shared/ntfy.js";
 import { recordedDurationMs } from "../../../shared/toolDuration.js";
 import { FolderHolds } from "../folderHolds.js";
 
@@ -1406,6 +1409,12 @@ export interface PiSessionServiceDependencies {
   pluginBackgroundWork?: (session: BackgroundWorkSession) => Promise<number>;
   /** Where the facts this service decides go to the server plugins. Omitted, nothing is reported. */
   serverFacts?: ServerFactReporter;
+  /**
+   * The ntfy notices a run's end and an open dialog produce. Omitted, the daemon notifies nothing:
+   * notices are a reader's extra channel, never part of a session's own work, and a delivery here is
+   * fire-and-forget by construction. See `daemon/notifications/ntfyNotifier.ts`.
+   */
+  ntfyNotifier?: NtfyNotifier;
   /** Folders a project rename is moving: no session opens or starts inside one. Omitted, none is held. */
   folderHolds?: FolderHolds;
   /**
@@ -1546,7 +1555,8 @@ export class PiSessionService implements SessionRouteService {
    * Entries are dropped as soon as their text leaves the queue.
    */
   private readonly queuedPromptClientIds = new Map<string, HeldSteerRecord[]>();
-  private readonly openRuns = new Map<string, { quietSince: number | undefined; lastReply?: RunLastReply | undefined; cutByReader?: boolean }>();
+  private readonly runSpans = new Map<string, { startedAt: string; endedAt: string }>();
+  private readonly openRuns = new Map<string, { openedAt: number; quietSince: number | undefined; lastReply?: RunLastReply | undefined; cutByReader?: boolean }>();
   private readonly directCommitWatchers = new Map<string, () => void>();
   private readonly runStartWatchers = new Map<string, () => void>();
   private readonly steerBatches = new Map<string, Promise<void>>();
@@ -1621,6 +1631,7 @@ export class PiSessionService implements SessionRouteService {
   private readonly hostContributions: HostContributions;
   private readonly pluginBackgroundWork: (session: BackgroundWorkSession) => Promise<number>;
   private readonly serverFacts: ServerFactReporter | undefined;
+  private readonly ntfyNotifier: NtfyNotifier | undefined;
   private readonly folderHolds: FolderHolds;
   /** Runtimes being constructed, by session id, with the folder each runs in and its file; a rename waits for none inside its folder, and leaves the file of one outside alone. */
   private readonly constructing = new Map<string, { readonly cwd: string; readonly file: string | undefined }>();
@@ -1677,6 +1688,7 @@ export class PiSessionService implements SessionRouteService {
     this.hostContributions = deps.hostContributions ?? EMPTY_HOST_CONTRIBUTIONS;
     this.pluginBackgroundWork = deps.pluginBackgroundWork ?? (() => Promise.resolve(0));
     this.serverFacts = deps.serverFacts;
+    this.ntfyNotifier = deps.ntfyNotifier;
     this.folderHolds = deps.folderHolds ?? new FolderHolds();
     this.archiveStore = deps.archiveStore ?? new SessionArchiveStore();
     this.agentDir = deps.agentDir;
@@ -2561,11 +2573,37 @@ export class PiSessionService implements SessionRouteService {
    */
   private openDialogRecord(session: PiAgentSession, input: PendingExtensionDialogOpenInput): PendingExtensionDialog {
     try {
-      return this.pendingExtensionDialogStore.open(input);
+      const dialog = this.pendingExtensionDialogStore.open(input);
+      this.notifyDialogOpened(session, dialog);
+      return dialog;
     } catch (error) {
       if (error instanceof PendingExtensionDialogValidationError) this.reportRefusedDialog(session, error.message);
       throw error;
     }
+  }
+  /**
+   * The ntfy notice for a session that stopped to ask the reader something.
+   *
+   * A dialog parks the run: nothing moves until the answer arrives, and the reader is by definition
+   * not looking at the page. This is the event the phone is most useful for, so it is asked for by the
+   * daemon when the dialog record opens - not by a page that happens to be watching it. The dialog's
+   * id is the dedupe key: a screen that redraws (its `update`) is not a second question.
+   */
+  private notifyDialogOpened(session: PiAgentSession, dialog: PendingExtensionDialog): void {
+    const notifier = this.ntfyNotifier;
+    if (notifier === undefined) return;
+    const content = notificationContent("ask-user", {
+      sessionName: session.sessionName ?? "",
+      question: dialog.title,
+    });
+    notifier.notify({
+      event: "ask-user",
+      title: content.title,
+      message: content.message,
+      tags: content.tags,
+      dedupeKey: `ask-user\u0000${session.sessionId}\u0000${dialog.dialogId}`,
+      route: notificationSessionRoute(session.sessionId),
+    });
   }
 
   private reportRefusedDialog(session: PiAgentSession, reason: string): void {
@@ -4121,7 +4159,7 @@ export class PiSessionService implements SessionRouteService {
     if (eventType === "agent_start") {
       const prior = this.openRuns.get(sessionId);
       if (prior === undefined) this.reportFact({ kind: "run.started", session: factScope(sessionId, session.sessionManager.getCwd()) });
-      this.openRuns.set(sessionId, { quietSince: undefined, ...(prior?.cutByReader === true ? { cutByReader: true } : {}) });
+      this.openRuns.set(sessionId, { openedAt: Date.now(), quietSince: undefined, ...(prior?.cutByReader === true ? { cutByReader: true } : {}) });
       const onRunStart = this.runStartWatchers.get(sessionId);
       this.runStartWatchers.delete(sessionId);
       onRunStart?.();
@@ -5611,10 +5649,52 @@ export class PiSessionService implements SessionRouteService {
 
   /** End a run this service saw open, once: the next `agent_start` is a new run. */
   private endRun(session: PiAgentSession, ending: RunEnding): void {
+    const open = this.openRuns.get(session.sessionId);
     if (!this.openRuns.delete(session.sessionId)) return;
+    // The span is written from the daemon's own two stamps: the moment it saw the run begin, and the
+    // newest entry now. A run's number is fixed when the run ends - a note an extension writes hours
+    // later, a shell run, a resync, none of them move it - and a session whose runs this daemon never
+    // opened has no span to offer, which the browser reads as unknown (2026-11-13).
+    const endedAt = leafEntryAt(session.sessionManager);
+    this.runSpans.set(session.sessionId, { startedAt: new Date(open?.openedAt ?? Date.now()).toISOString(), endedAt: endedAt ?? new Date().toISOString() });
     this.reportFact({ kind: "run.ended", session: factScope(session.sessionId, session.sessionManager.getCwd()), ...ending });
+    this.notifyRunEnded(session, ending);
   }
-
+  /**
+   * The ntfy notice for a run that ended, from the outcome this service decided.
+   *
+   * `completed` and `failed` are the events the reader asked to be told about. A run the reader cut
+   * with Stop, or one cut by `/new` or a closing session, is not: a notice that only reports their own
+   * action is the noise the browser channel already refuses. The span is the transcript's own - the
+   * last input boundary to the newest entry - so the notice and the status line show one number, and
+   * the dedupe key names that span: a session that settles twice tells the phone once.
+   */
+  private notifyRunEnded(session: PiAgentSession, ending: RunEnding): void {
+    const notifier = this.ntfyNotifier;
+    if (notifier === undefined) return;
+    const events: Record<RunEnding["outcome"], NotificationEvent | undefined> = { completed: "completed", failed: "failed", stopped: undefined, interrupted: undefined };
+    const event = events[ending.outcome];
+    if (event === undefined) return;
+    const span = this.runSpans.get(session.sessionId);
+    const durationMs = span === undefined ? undefined : Math.max(0, Date.parse(span.endedAt) - Date.parse(span.startedAt));
+    const content = notificationContent(event, {
+      sessionName: session.sessionName ?? "",
+      ...(durationMs === undefined || !Number.isFinite(durationMs) ? {} : { durationMs }),
+      ...(ending.error === undefined ? {} : { failureReason: ending.error }),
+    });
+    // The key names the run, not the session: two tasks that end two minutes apart are two notices, and
+    // the same run settling twice is one. A span is always present here, because the run ended in this
+    // process; the end stamp is the fallback so a missing span can never collapse the key to a constant.
+    const runStamp = span?.startedAt ?? span?.endedAt ?? new Date().toISOString();
+    notifier.notify({
+      event,
+      title: content.title,
+      message: content.message,
+      tags: content.tags,
+      dedupeKey: `${event}\u0000${session.sessionId}\u0000${runStamp}`,
+      route: notificationSessionRoute(session.sessionId),
+    });
+  }
   /** A run still open when its session closes, or the daemon shuts down, is cut off: stopped when the reader's Stop or `/new` cut it, interrupted otherwise. */
   private cutOpenRun(session: PiAgentSession): void {
     this.endRun(session, cutRunEnding(this.openRuns.get(session.sessionId)?.cutByReader === true));
@@ -7193,6 +7273,15 @@ export class PiSessionService implements SessionRouteService {
     const backgroundRunCount = this.backgroundRunCounts.get(session.sessionId) ?? 0;
     const turnStartedAt = { turn: facts.turnStartedAt, shell: this.shellStartedAt.get(session.sessionId), none: undefined }[workingClock(session)];
     const lastActivityAt = leafEntryAt(session.sessionManager);
+    const lastRunDurationMs = settledRunDurationMs({
+      startedAt: this.runSpans.get(session.sessionId)?.startedAt,
+      endedAt: this.runSpans.get(session.sessionId)?.endedAt,
+      working: session.isStreaming || session.isCompacting || session.isBashRunning,
+      runOpen: this.openRuns.has(session.sessionId),
+      queued: visibleQueued.length > 0,
+      asking: pendingDialogs.length > 0,
+      backgroundRuns: backgroundRunCount > 0,
+    });
     const surfaces = pluginSurfacePresence(session.resourceLoader);
     const extensionUi = this.extensionStanding.get(session)?.snapshot();
     const gitBranch = cachedGitBranch(session.sessionManager.getCwd());
@@ -7214,6 +7303,7 @@ export class PiSessionService implements SessionRouteService {
       // instead of re-clocking from the moment it happened to look.
       ...(turnStartedAt === undefined ? {} : { turnStartedAt }),
       ...(lastActivityAt === undefined ? {} : { lastActivityAt }),
+      ...(lastRunDurationMs === undefined ? {} : { lastRunDurationMs }),
       // The branch the session stands on, so a status bar can name it. Omitted outside a
       // repository, where there is nothing to name.
       ...(gitBranch === undefined ? {} : { gitBranch }),
@@ -7927,6 +8017,16 @@ function branchFactsOf(session: PiAgentSession, retrying: ReadonlySet<string>): 
  * at all yields undefined, and the client then clocks from when it first saw
  * the session working, which is at least an honest lower bound.
  */
+/**
+ * When the working turn began, read from the transcript itself.
+ *
+ * The turn's start is its last input boundary: the newest user message (a
+ * submitted prompt, a steer, an answered question) or the newest custom entry
+ * that triggered a turn. Scanning from the tail skips assistant and tool
+ * entries so mid-turn activity cannot move the anchor; a branch with no input
+ * at all yields undefined, and the client then clocks from when it first saw
+ * the session working, which is at least an honest lower bound.
+ */
 export function turnStartedAtFromBranch(branch: readonly unknown[]): string | undefined {
   for (let index = branch.length - 1; index >= 0; index -= 1) {
     const entry = branch[index];
@@ -7944,6 +8044,36 @@ export function turnStartedAtFromBranch(branch: readonly unknown[]): string | un
     return undefined;
   }
   return undefined;
+}
+
+/**
+ * The span of the task that just finished, as the daemon states it: the run it saw open, to the newest
+ * entry when that run ended.
+ *
+ * Only a settled session answers the question. While a turn, a shell run or a compaction is in flight
+ * the span is still growing; while a prompt waits in the queue, or a dialog waits for the reader, or a
+ * background run outlives its turn, what the reader asked for has not finished - reporting the span of
+ * the part that did is how a two-hour task reads as seven minutes. A session that has settled answers
+ * with the daemon's own two stamps, so the number does not depend on a browser having watched the work,
+ * and it is fixed when the run ends: an entry written later - an extension's note, a shell run, a
+ * resync - cannot lengthen a task that is already over (2026-11-13).
+ */
+export function settledRunDurationMs(facts: {
+  startedAt: string | undefined;
+  endedAt: string | undefined;
+  working: boolean;
+  runOpen: boolean;
+  queued: boolean;
+  asking: boolean;
+  backgroundRuns: boolean;
+}): number | undefined {
+  if (facts.working || facts.runOpen || facts.queued || facts.asking || facts.backgroundRuns) return undefined;
+  const { startedAt, endedAt } = facts;
+  if (startedAt === undefined || endedAt === undefined) return undefined;
+  const start = Date.parse(startedAt);
+  const end = Date.parse(endedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return undefined;
+  return end - start;
 }
 
 /**

@@ -6,7 +6,8 @@ import { renderBackIcon, renderCrossIcon, uiIconStyle } from "./uiIcons.js";
 import { disclosureIconStyle, renderDisclosureIcon } from "./disclosureIcon.js";
 import { customElement, property, state } from "lit/decorators.js";
 import type { AppAction } from "../actions";
-import { configApi, piPackagesApi, pluginsApi, type Machine, type MachineRuntime, type PiPackageMutationResponse, type PiPackageScope, type PiPackagesResponse, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
+import { configApi, notificationsApi, piPackagesApi, pluginsApi, type Machine, type MachineRuntime, type PiPackageMutationResponse, type PiPackageScope, type PiPackagesResponse, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
+import type { NtfyConfig, NtfyStatus } from "../../../shared/ntfy";
 import type { MachineReachabilityView } from "../machineReachability";
 import type { PiWebFleetReport, PiWebFleetRunResponse } from "../../../shared/apiTypes";
 import type { FleetStatusRead } from "../fleetMachineOffer";
@@ -78,6 +79,12 @@ export class SettingsDialog extends LitElement {
   @property({ attribute: false }) notificationsWanted = false;
   @property({ attribute: false }) onToggleNotifications?: (wanted: boolean) => Promise<NotificationAvailability>;
   @property({ attribute: false }) onTestNotification?: () => Promise<boolean>;
+  /**
+   * The ntfy channel as this PI WEB describes it. Read when the panel opens, because the answer is
+   * the server's: the notices are sent from the machine that runs the tasks, and its topic never
+   * reaches a browser, so the panel can only ask.
+   */
+  @state() private ntfyStatus: NtfyStatus | undefined = undefined;
   @property({ attribute: false }) fleetReport?: PiWebFleetReport;
   /** Each fleet machine's own PI WEB status read, by machine id. */
   @property({ attribute: false }) fleetStatuses: Readonly<Record<string, FleetStatusRead>> = {};
@@ -142,6 +149,7 @@ export class SettingsDialog extends LitElement {
     this.phoneLayout = this.phoneQuery?.matches ?? false;
     this.phoneQuery?.addEventListener("change", this.handlePhoneQueryChange);
     void this.loadConfig();
+    void this.loadNtfyStatus();
     void this.loadAccessConfigForTarget();
     void this.onRefreshMachineRuntime?.(this.settingsTarget().id);
     void this.loadPluginsForTarget();
@@ -255,7 +263,7 @@ export class SettingsDialog extends LitElement {
     return [
       { id: "general", label: "General", detail: "Gateway + selected machine" },
       { id: "appearance", label: "Appearance", detail: "Theme, lists and system preference" },
-      { id: "notifications", label: "Notifications", detail: "This device, task finished" },
+      { id: "notifications", label: "Notifications", detail: "This browser, ntfy, task events" },
       { id: "machines", label: "Machines", detail: "All connected devices" },
       { id: "packages", label: "Pi Packages", detail: "Selected machine" },
       { id: "plugins", label: "PI WEB Plugins", detail: "Selected machine" },
@@ -384,6 +392,9 @@ export class SettingsDialog extends LitElement {
           .wanted=${this.notificationsWanted}
           .onToggle=${(wanted: boolean) => this.onToggleNotifications?.(wanted) ?? Promise.resolve(this.notificationAvailability)}
           .onTest=${() => this.onTestNotification?.() ?? Promise.resolve(false)}
+          .ntfy=${this.ntfyStatus}
+          .onSaveNtfy=${(draft: NtfyConfig, write: { readonly clearTopic?: boolean }) => this.saveNtfy(draft, write)}
+          .onTestNtfy=${(draft: NtfyConfig) => this.testNtfy(draft)}
         ></settings-notifications-panel>
       `;
     }
@@ -488,6 +499,43 @@ export class SettingsDialog extends LitElement {
 
   private navigate(section: SettingsSection): void {
     this.onNavigate?.(section);
+  }
+
+  /**
+   * The ntfy channel, read from the machine that will send the notices.
+   *
+   * A read that fails leaves the status unknown rather than inventing "off": the panel then shows the
+   * fields unmarked, and "absent is not negation" - an unanswered question is not a No.
+   */
+  private async loadNtfyStatus(): Promise<void> {
+    try {
+      this.ntfyStatus = await notificationsApi.ntfyStatus();
+    } catch {
+      this.ntfyStatus = undefined;
+    }
+  }
+
+  /**
+   * The ntfy block the panel saved.
+   *
+   * The write goes to its own endpoint, not to the general config save, for one reason: the general
+   * save round-trips the whole config through this browser, and this browser has never seen the topic.
+   * Saving the switches that way would delete the channel they are meant to travel on.
+   */
+  private async saveNtfy(draft: NtfyConfig, write: { readonly clearTopic?: boolean }): Promise<void> {
+    const response = await configApi.saveNtfy(draft, write);
+    this.configResponse = response;
+    this.ntfyStatus = await notificationsApi.ntfyStatus().catch(() => this.ntfyStatus);
+  }
+
+  /**
+   * One notice, now, from the server, to the block the panel is showing.
+   *
+   * The draft travels because a reader who has just typed a server and a topic asked whether those
+   * work. A test that published the stored block answered a question nobody asked.
+   */
+  private async testNtfy(draft: NtfyConfig): Promise<{ delivered: boolean; attempts: number; reason?: string }> {
+    return await notificationsApi.sendNtfyTest(draft);
   }
 
   private async loadConfig(): Promise<void> {

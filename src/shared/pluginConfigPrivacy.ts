@@ -1,5 +1,6 @@
-import type { PiWebConfigResponse, PiWebConfigValues, PiWebPluginConfig, PiWebPluginConfigMap, PiWebPluginSettings, PiWebServerSettingsUpdates } from "./apiTypes.js";
+import type { NtfyConfig, PiWebConfigResponse, PiWebConfigValues, PiWebPluginConfig, PiWebPluginConfigMap, PiWebPluginSettings, PiWebServerSettingsUpdates } from "./apiTypes.js";
 import { isPiWebPluginId } from "./pluginIds.js";
+import { NTFY_REDACTED_TOPIC, publicNtfyConfig } from "./ntfy.js";
 import { isRecord } from "./unknownValues.js";
 
 /**
@@ -74,7 +75,33 @@ export function publicPluginConfig(plugins: PiWebPluginConfigMap): PiWebPluginCo
 }
 
 export function publicPiWebConfig(config: PiWebConfigValues): PiWebConfigValues {
-  return { ...config, ...(config.plugins === undefined ? {} : { plugins: publicPluginConfig(config.plugins) }) };
+  return {
+    ...config,
+    ...(config.plugins === undefined ? {} : { plugins: publicPluginConfig(config.plugins) }),
+    ...(config.ntfy === undefined ? {} : { ntfy: publicNtfyConfig(config.ntfy) }),
+  };
+}
+
+/**
+ * The ntfy block a browser writes, merged over the stored one.
+ *
+ * The topic is the one value a browser never reads back, so a save that omits it keeps the stored
+ * topic: turning the failure notice on must not silently delete the channel it is meant to travel on.
+ * `clearTopic` is how a reader says "stop using this topic" - an explicit act, not an empty box, because
+ * a settings panel that clears a bearer secret when a field is left blank loses the channel on a typo.
+ * A topic that is the old redaction marker is treated as not supplied: an echo of a redacted config is
+ * not the reader typing a topic, and `redacted` is a channel anyone on the public server can read.
+ */
+export function mergeNtfyConfig(stored: NtfyConfig | undefined, incoming: NtfyConfig | undefined, options: { readonly clearTopic?: boolean } = {}): NtfyConfig | undefined {
+  if (incoming === undefined) return stored;
+  const topic = incoming.topic === NTFY_REDACTED_TOPIC ? undefined : incoming.topic;
+  const merged: NtfyConfig = { ...stored, ...incoming };
+  if (topic === undefined) {
+    if (stored?.topic !== undefined) merged.topic = stored.topic;
+    else delete merged.topic;
+  }
+  if (options.clearTopic === true) delete merged.topic;
+  return merged;
 }
 
 export function serverSettingsConfigured(config: PiWebConfigValues): Record<string, boolean> {

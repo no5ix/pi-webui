@@ -1,4 +1,4 @@
-export { api, configApi, filesApi, fleetApi, machinesApi, machineStatusApi, piPackagesApi, piWebApi, pluginsApi, projectsApi, SessionTreeForkUnavailableError, sessionsApi, terminalsApi, trustApi, workspacesApi } from "./api/clients";
+export { api, configApi, filesApi, fleetApi, machinesApi, machineStatusApi, notificationsApi, piPackagesApi, piWebApi, pluginsApi, projectsApi, SessionTreeForkUnavailableError, sessionsApi, terminalsApi, trustApi, workspacesApi } from "./api/clients";
 export { pluginBackendRequestPath, pluginBackendRequestUrl, requestPluginBackend } from "./api/pluginBackends";
 export { HttpError } from "./api/http";
 export { machineTerminalSocket, realtimeEvents, sessionEvents, terminalSocket } from "./api/sockets";

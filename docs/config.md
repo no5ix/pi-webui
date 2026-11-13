@@ -151,6 +151,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | Web/API port | `port` | `PI_WEB_PORT`, `PORT` | Global | Not supported locally | Restart web/API |
 | HTTPS certificate chain and private key, PEM files at absolute or `~/` paths; both or neither ([Serve HTTPS directly](install.md#serve-https-directly)) | `tls.certFile`, `tls.keyFile` | `PI_WEB_TLS_CERT`, `PI_WEB_TLS_KEY` | Global | Not supported locally | Restart web/API; a renewed certificate in the same files within 10 minutes |
 | Text translation the reading toolbar asks for: `provider` `"google"` (default) or `"off"`, `baseUrl` (an endpoint of your own), `language` (the target, `zh-CN` by default), `timeoutMs` (250-60000, 8000 by default) | `translation.provider`, `translation.baseUrl`, `translation.language`, `translation.timeoutMs` | — | Global | Not supported locally | Next translation request |
+| ntfy notices the session daemon posts: `enabled`, `serverUrl` (default `https://ntfy.sh`), `topic` (a bearer secret: never sent to a browser), the three event switches, `clickUrlBase` (what a tap opens), `timeoutMs` (500-30000, 5000 by default) | `ntfy.enabled`, `ntfy.serverUrl`, `ntfy.topic`, `ntfy.onCompleted`, `ntfy.onFailed`, `ntfy.onAskUser`, `ntfy.clickUrlBase`, `ntfy.timeoutMs` | — | Global | Not supported locally | Next notice, no restart ([Notifications](notifications.md)) |
 | Access token file, one token per line, at an absolute or `~/` path; the web/API serves only its sign-in page without a token ([Require an access token](install.md#require-an-access-token)) | `access.tokenFile` | `PI_WEB_ACCESS_TOKEN_FILE` (wins over the key), or one token in `PI_WEB_ACCESS_TOKEN` | Global (web/API) | Not supported locally | Restart web/API |
 | Dev-server allowed hosts: `true` or an array of hostnames (env: `true` or a comma-separated list); used only by the Vite dev server (`pnpm run dev:client`), not by `pi-web-server` | `allowedHosts` | `PI_WEB_ALLOWED_HOSTS` | Global | Not supported locally | Restart dev web/UI |
 | External filesystem roots | `pathAccess.allowedPaths` | — | Global + project | **Merges**: global roots first, then project roots; duplicates removed | Next file request; refresh existing views if needed |
@@ -547,6 +548,46 @@ config is what decides where the text may go.
 no outbound traffic says so in the page instead of showing a translation that never arrives. Text asked
 for one time is answered from memory for half an hour, so re-reading a passage costs no new request.
 Requests are capped at 1500 characters: the toolbar is for a sentence, not a document.
+
+### Notifications
+
+The reader is told three things - a task finished, a task failed, a session is asking - on two channels:
+the browser's own notification centre, and ntfy. The browser channel is switched on per device in
+**Settings → Notifications**. ntfy is posted by the session daemon, so it reaches a device with no
+browser open, and its settings live in the config file (the same panel edits them).
+
+```json
+{
+  "ntfy": {
+    "enabled": true,
+    "serverUrl": "https://ntfy.sh",
+    "topic": "a-topic-only-you-know",
+    "onCompleted": true,
+    "onFailed": true,
+    "onAskUser": true,
+    "clickUrlBase": "https://mac.example.ts.net:8505",
+    "timeoutMs": 5000
+  }
+}
+```
+
+- `enabled`: the master switch. Off, nothing is posted, whatever the three event switches say.
+- `serverUrl`: your ntfy server. `https://ntfy.sh` is the default when the field is left empty in the
+  panel; a self-hosted server behind a reverse proxy (`https://example.com/ntfy`) is accepted.
+- `topic`: the address to publish to. **A topic is a bearer secret**: on the public server it is the whole
+  address, and anyone who can name it publishes to your phone and reads what arrives. Treat it as a
+  password, and on a server you run prefer an access token in front of it.
+- `onCompleted`, `onFailed`, `onAskUser`: which events to send. A switch you never touched is off.
+- `clickUrlBase`: the address a tap opens, e.g. the Tailscale address of this PI WEB. Without it the
+  notice arrives with no tap target, because the page address is not something the daemon should guess.
+- `timeoutMs`: how long one publish may take, 500 to 30000 ms. A publish is tried twice.
+
+The topic is never part of an answer a browser reads: the config response, a remote machine's read of
+it, and the settings panel all carry `topicConfigured` ("a topic is stored") and never its value. A save
+that omits the topic keeps the stored one, so turning an event switch on cannot delete the channel; an
+explicit empty topic clears it. Notices are posted by the session daemon and read the config per notice,
+so a change in the panel is used by the next event with no restart. See
+[Notifications](notifications.md) for what each channel does and what a notice says.
 
 ### Shortcut config
 
