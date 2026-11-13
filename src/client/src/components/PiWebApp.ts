@@ -1301,6 +1301,10 @@ export class PiWebApp extends LitElement {
     const category = sessionActivityCategory(status, this.state.activity);
     const previous = this.sessionCategory.get(key);
     this.sessionCategory.set(key, category);
+    // The first status for a session after the page boots or switches sessions is a baseline,
+    // not a transition the reader witnessed. In particular, an already-idle session must not
+    // generate a "task finished" notification merely because its initial status was hydrated.
+    if (previous === undefined) return;
     const edge = notificationEdge({
       previous,
       next: category,
