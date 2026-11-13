@@ -164,17 +164,23 @@ describe("stepping between the reader's prompts", () => {
     expect(Math.round(chat.scrollTop)).toBe(0);
   });
 
-  it("goes to the newest message when the reader steps past the last prompt", async () => {
+  it("scrolls to the loaded content bottom when the reader steps past the last prompt", async () => {
     const { view, host } = await transcript(prompts);
     const { chat, scrollTo } = withLayout(host, [0, 900]);
     chat.scrollTop = 900;
     press(host, "Next prompt");
     await view.updateComplete;
-    // The scroller has no layout to compute a bottom against, so the follow runs through
-    // `scrollToBottom`, whose effect is the follow state it restores.
     expect(view.followsNewest).toBe(true);
-    expect(chat.scrollTop).toBe(900);
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledWith({ top: chat.scrollHeight, behavior: "auto" });
+  });
+
+
+  it("scrolls to the loaded content top when the reader steps above the first prompt", async () => {
+    const { host } = await transcript(prompts);
+    const { chat, scrollTo } = withLayout(host, [0, 900]);
+    chat.scrollTop = 0;
+    press(host, "Previous prompt");
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
   });
 
   it("leaves the bottom when the reader steps back, so a new message does not snap the view away", async () => {
