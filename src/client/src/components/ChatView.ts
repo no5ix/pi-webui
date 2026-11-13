@@ -15,11 +15,7 @@ import { groupEventKey, groupMarkerKey, groupRowKey, positionalRowKey, rowKeys }
 import { extensionNoticeOf, NOTICE_PREFIX, noticeSegments, type ExtensionNoticePart } from "../extensionNotices";
 import { writeClipboardText } from "../clipboard";
 import { messageCopyText } from "../chatMessages";
-import { attachReadingTools, type ReadingTools } from "../reading/readingTools";
 import { runDuration } from "../runDuration";
-import "./ReadingToolbar";
-import type { ReadingAction, ReadingSurface } from "./ReadingToolbar";
-import { readingApi } from "../api/clients";
 import { followScrollVerdict } from "../followScrollAdoption.js";
 import { pushPastEnd, readerScrollDirection, viewportDecision, followsAfterRowsChange, followsAfterScroll, isRestoring, readerCanTakeOver } from "../chatViewport/viewportDecision.js";
 import type { PageWant, ViewportAction, ViewportEvent, ViewportMetrics, ViewportState } from "../chatViewport/viewportDecision.js";
@@ -748,13 +744,6 @@ export class ChatView extends LitElement {
   @state() private zoomTransform: ZoomTransform = IDENTITY_ZOOM;
   @state() private expandedMetaKey: string | undefined;
   @state() private copiedMessageKey: string | undefined;
-  /** What a reading gesture answered with: a pill over a word, or a translation under a sentence. */
-  @state() private reading: ReadingSurface | undefined;
-  private readingTools: ReadingTools | undefined;
-  /** The scroller element the reading gestures are attached to, kept so a replaced element is noticed. */
-  private readingAttachedTo: HTMLElement | undefined;
-  private translationLanguage: string | undefined;
-  private translationLanguageRequest: Promise<string> | undefined;
   @property() machineId = "local";
   @property() sessionCwd?: string;
   /** When this browser first saw the current turn working, and a clock to age it. */
@@ -1103,50 +1092,7 @@ export class ChatView extends LitElement {
 
   protected override firstUpdated(): void {
     this.lastClientHeight = this.chat?.clientHeight ?? 0;
-    this.syncReadingTools();
   }
-
-  /**
-   * The reading gestures over this transcript: a double-click asks about a word, a hold asks about a
-   * sentence. See `reading/readingTools.ts` for why the page owns these and not a userscript.
-   *
-   * The attach is re-checked against the scroller element the listeners went on: the template's
-   * scroller is replaced when the page changes and this component is not re-created, so gestures
-   * attached once die with the element they were attached to.
-   */
-  private syncReadingTools(): void {
-    const scroller = this.chat;
-    if (scroller === undefined || this.readingAttachedTo === scroller) return;
-    this.readingTools?.dispose();
-    this.readingTools = undefined;
-    const root = this.shadowRoot;
-    if (root === null) return;
-    this.readingAttachedTo = scroller;
-    this.readingTools = attachReadingTools({
-      scroller,
-      root,
-      show: (surface) => { this.reading = surface; },
-      hide: () => { this.reading = undefined; },
-      translate: (text, to) => readingApi.translate(text, to).then((answer) => answer.text),
-      language: () => this.readTranslationLanguage(),
-      search: (text) => { window.open(`https://duckduckgo.com/?q=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer"); },
-    });
-  }
-
-  /** The language this deployment translates into, asked once and kept; a deployment sets it in config. */
-  private readTranslationLanguage(): Promise<string> {
-    if (this.translationLanguage !== undefined) return Promise.resolve(this.translationLanguage);
-    this.translationLanguageRequest ??= readingApi.translationLanguage().then((language) => {
-      this.translationLanguage = language;
-      return language;
-    });
-    return this.translationLanguageRequest;
-  }
-
-  private readingAction(action: ReadingAction, surface: ReadingSurface): void {
-    this.readingTools?.perform(action, surface);
-  }
-
 
   override disconnectedCallback(): void {
     this.readingTools?.dispose();
@@ -1545,7 +1491,6 @@ export class ChatView extends LitElement {
         ${this.renderActivityDock()}
       </div>
       ${this.renderImageZoom()}
-      <reading-toolbar .surface=${this.reading} .onAction=${(action: ReadingAction, surface: ReadingSurface) => { this.readingAction(action, surface); }} .onClose=${() => { this.readingTools?.close(); }}></reading-toolbar>
     `;
   }
 
