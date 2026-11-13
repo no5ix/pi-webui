@@ -136,6 +136,24 @@ describe("stepping between the reader's prompts", () => {
     expect(Math.round(chat.scrollTop)).toBe(900);
   });
 
+  it("keeps both controls mounted when the conversation changes from one prompt to many", async () => {
+    const { view, host } = await transcript([line("user", "first"), line("assistant", "answer")]);
+    expect(host.querySelectorAll(".prompt-nav button")).toHaveLength(2);
+    view.messages = prompts;
+    await view.updateComplete;
+    expect(host.querySelectorAll(".prompt-nav button")).toHaveLength(2);
+  });
+
+  it("keeps both controls mounted when the jump-to-bottom button changes visibility", async () => {
+    const { view, host } = await transcript(prompts);
+    const navButtons = () => host.querySelectorAll(".prompt-nav button").length;
+    expect(navButtons()).toBe(2);
+    const jump = host.querySelector<HTMLButtonElement>(".jump-to-bottom");
+    if (jump !== null) jump.click();
+    await view.updateComplete;
+    expect(navButtons()).toBe(2);
+  });
+
   it("steps back to the previous prompt", async () => {
     const { view, host } = await transcript(prompts);
     const { chat } = withLayout(host, [0, 900]);
