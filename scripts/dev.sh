@@ -17,9 +17,6 @@ set -uo pipefail
 DEV_PORT="${PI_WEB_DEV_TAILSCALE_PORT:-8505}"
 TAILSCALE_READY_TIMEOUT_SECONDS="${PI_WEB_DEV_TAILSCALE_WAIT_SECONDS:-120}"
 STOP_GRACE_SECONDS="${PI_WEB_DEV_STOP_GRACE_SECONDS:-5}"
-# The serve watchdog's ceiling: it exists to clear the mapping when the supervisor dies, and a bounded
-# life keeps a confused process table from keeping one alive forever.
-WATCHDOG_LIFETIME_SECONDS="${PI_WEB_DEV_WATCHDOG_SECONDS:-180}"
 TAILSCALE_HOST_SUFFIX="${PI_WEB_DEV_TAILSCALE_HOST_SUFFIX:-.ts.net}"
 
 # The phases, in one place: boot -> tailscale -> running -> stopping -> stopped. A start step that
@@ -352,13 +349,11 @@ start_serve_watchdog() {
   set -m
   (
     trap '' HUP INT TERM
-    # The supervisor's pid is the fact to watch, and a pid is reused sooner than a watchdog may be
-    # waiting on it, so liveness alone is not enough: the command line has to say the same thing. (A
-    # first version watched this subshell's own parent through `ps -o ppid=`, which on bash 3.2 names a
-    # command-substitution pid that is already gone - the watchdog read an empty answer, concluded the
-    # supervisor had died, and cleared the mapping about a second after startup. Live cycles, 2026-11-14.)
-    lifetime=$((SECONDS + WATCHDOG_LIFETIME_SECONDS))
-    while [ "$SECONDS" -lt "$lifetime" ]; do
+    # Keep monitoring for the entire lifetime of the supervisor. A fixed watchdog lifetime
+    # incorrectly removed the HTTPS mapping after three minutes even when `pnpm run dev` was
+    # still serving traffic. Check both process state and command identity so a reused PID cannot
+    # make this watchdog outlive its owner.
+    while :; do
       state="$(ps -o stat= -p "$parent" 2>/dev/null | tr -d ' ')"
       case "$state" in
         "" | Z*) break ;;
