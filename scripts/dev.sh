@@ -429,6 +429,13 @@ main() {
     phase=running
   fi
 
+  say "building plugin artifacts once"
+  if ! pnpm run build:plugins; then
+    trouble "the plugin build failed; the development stack was not started"
+    return 1
+  fi
+  export PI_WEB_DEV_SKIP_PLUGIN_BUILD=1
+
   say "starting the session daemon, the web/API process, the Vite UI and the plugin watchers"
   start_children || return 1
   watch_children

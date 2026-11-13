@@ -50,8 +50,8 @@
   ],
   "scripts": {
     "dev": "bash scripts/dev.sh",
-    "dev:sessiond": "pnpm run build:plugins && tsx watch src/server/sessiond.ts",
-    "dev:web": "bash -c 'set -e; pnpm run build:plugins; trap \"kill 0\" EXIT; pnpm run dev:plugins & tsx watch src/server/index.ts & wait'",
+    "dev:sessiond": "bash -c 'if [ \"${PI_WEB_DEV_SKIP_PLUGIN_BUILD:-}\" != \"1\" ]; then pnpm run build:plugins; fi; exec tsx watch src/server/sessiond.ts'",
+    "dev:web": "bash -c 'set -e; if [ \"${PI_WEB_DEV_SKIP_PLUGIN_BUILD:-}\" != \"1\" ]; then pnpm run build:plugins; fi; trap \"kill 0\" EXIT; pnpm run dev:plugins -- --skip-initial-build & tsx watch src/server/index.ts & wait'",
     "dev:server": "pnpm run dev:web",
     "dev:client": "vite --host 127.0.0.1",
     "dev:plugins": "node scripts/build-plugins.mjs --watch",

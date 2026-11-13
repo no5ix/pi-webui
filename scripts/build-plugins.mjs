@@ -236,6 +236,7 @@ async function readDirectory(dir) {
 }
 
 async function watchAndBuild() {
+  const skipInitialBuild = process.argv.includes("--skip-initial-build");
   let watchers = [];
   let timer;
   let building = false;
@@ -288,7 +289,11 @@ async function watchAndBuild() {
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 
-  await runBuild();
+  if (skipInitialBuild) {
+    await refreshWatchers();
+  } else {
+    await runBuild();
+  }
   console.log(`[plugins] watching ${relative(cwd, rootDir)}`);
   await new Promise(() => undefined);
 }
