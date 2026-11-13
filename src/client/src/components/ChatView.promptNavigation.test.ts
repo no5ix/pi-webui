@@ -56,7 +56,9 @@ function withLayout(host: ShadowRoot, promptTops: number[]) {
   Object.defineProperty(chat, "getBoundingClientRect", { configurable: true, value: () => rectObject(0, 600) });
   Object.defineProperty(chat, "clientHeight", { configurable: true, value: 600 });
   Object.defineProperty(chat, "scrollTop", { configurable: true, writable: true, value: 0 });
-  const scrollTo = vi.fn();
+  const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
+    if (typeof top === "number") chat.scrollTop = top;
+  });
   Object.defineProperty(chat, "scrollTo", { configurable: true, value: scrollTo });
   return { chat, scrollTo, prompts: prompts.length };
 }
@@ -131,9 +133,8 @@ describe("stepping between the reader's prompts", () => {
     expect(count).toBe(2);
     press(host, "Next prompt");
     await view.updateComplete;
-    // The contract is the position the reader lands on, not the call used to get there: the same
-    // smooth-scroll call was a no-op on this scroller in a real browser (2026-11-13).
     expect(Math.round(chat.scrollTop)).toBe(900);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 900, behavior: "auto" });
   });
 
   it("keeps both controls mounted when the conversation changes from one prompt to many", async () => {

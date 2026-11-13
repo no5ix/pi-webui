@@ -1606,7 +1606,7 @@ export class ChatView extends LitElement {
         <button type="button" title="Next prompt" aria-label="Next prompt" @click=${() => { this.stepPrompt("next"); }}>
           <svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m6 13 6 6 6-6"></path></svg>
         </button>
-      </div>
+      </nav>
     `;
   }
 
@@ -1641,7 +1641,10 @@ export class ChatView extends LitElement {
     this.withSuppressedScrollSave(() => {
       // Resolve the target element again at click time: images, lazy renderers and streaming content
       // can shift measured offsets between rendering the controls and pressing one.
-      anchor.element.scrollIntoView({ block: "start", behavior: "instant" });
+      const chatBounds = chat.getBoundingClientRect();
+      const anchorBounds = anchor.element.getBoundingClientRect();
+      const destination = Math.max(0, chat.scrollTop + anchorBounds.top - chatBounds.top);
+      chat.scrollTo({ top: destination, behavior: "auto" });
       this.lastScrollTop = chat.scrollTop;
       this.lastClientHeight = chat.clientHeight;
     });

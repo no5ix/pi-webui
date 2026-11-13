@@ -241,11 +241,57 @@ on_stop_signal() {
   exit "$code"
 }
 
+wait_for_sessiond() {
+  local timeout="${PI_WEB_DEV_BACKEND_WAIT_SECONDS:-90}" waited=0 socket_path
+  if [ -n "${PI_WEB_SESSIOND_PORT:-}" ]; then
+    while [ "$waited" -lt "$timeout" ]; do
+      if nc -z "${PI_WEB_SESSIOND_HOST:-127.0.0.1}" "$PI_WEB_SESSIOND_PORT" 2>/dev/null; then return 0; fi
+      if ! children_alive; then trouble "the session daemon exited before becoming ready"; return 1; fi
+      sleep 1; waited=$((waited + 1))
+    done
+  elif [ -n "${PI_WEB_SESSIOND_URL:-}" ]; then
+    while [ "$waited" -lt "$timeout" ]; do
+      if curl -kfsS --max-time 1 "${PI_WEB_SESSIOND_URL%/}/" >/dev/null 2>&1; then return 0; fi
+      if ! children_alive; then trouble "the session daemon exited before becoming ready"; return 1; fi
+      sleep 1; waited=$((waited + 1))
+    done
+  else
+    socket_path="${PI_WEB_SESSIOND_SOCKET:-${PI_WEB_DATA_DIR:-$HOME/.pi-web}/sessiond.sock}"
+    case "$socket_path" in /*) : ;; *) socket_path="$PWD/$socket_path" ;; esac
+    while [ "$waited" -lt "$timeout" ]; do
+      if [ -S "$socket_path" ]; then return 0; fi
+      if ! children_alive; then trouble "the session daemon exited before creating its socket"; return 1; fi
+      sleep 1; waited=$((waited + 1))
+    done
+  fi
+  trouble "the session daemon did not become ready within ${timeout}s"
+  return 1
+}
+
+wait_for_web_api() {
+  local timeout="${PI_WEB_DEV_BACKEND_WAIT_SECONDS:-90}" waited=0 port scheme
+  port="${PI_WEB_PORT:-${PORT:-8504}}"
+  scheme="${PI_WEB_DEV_API_SCHEME:-http}"
+  while [ "$waited" -lt "$timeout" ]; do
+    if curl -kfsS --max-time 1 "${scheme}://127.0.0.1:${port}/api/config" >/dev/null 2>&1; then return 0; fi
+    if ! children_alive; then trouble "the web/API process exited before becoming ready"; return 1; fi
+    sleep 1; waited=$((waited + 1))
+  done
+  trouble "the web/API server on port ${port} did not become ready within ${timeout}s"
+  return 1
+}
+
 start_children() {
+  # Start dependencies before Vite. Otherwise the browser requests arrive as soon as Vite
+  # listens and generate a screenful of ECONNREFUSED proxy errors while the API and daemon boot.
   pnpm run dev:sessiond &
   children+=("$!")
+  wait_for_sessiond || return 1
+
   pnpm run dev:web &
   children+=("$!")
+  wait_for_web_api || return 1
+
   pnpm run dev:client &
   children+=("$!")
 }

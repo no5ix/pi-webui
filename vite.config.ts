@@ -5,7 +5,7 @@ import { extname, join, resolve, sep } from "node:path";
 import type { Plugin } from "vite";
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
-import { effectivePiWebConfig, piWebTlsConfig } from "./src/config";
+import { effectivePiWebConfig, piWebTlsConfig } from "./src/config.ts";
 
 const { config } = effectivePiWebConfig();
 const apiPort = config.port ?? 8504;
@@ -23,12 +23,9 @@ const devPort = 8505;
  * is a specific device a reader asked to reach by name. Both sets are answered: a config file that
  * names a host and a suffix from the dev script are additive, never one replacing the other.
  */
-const devAllowedHostNames = ["macb00kpr0m4.taila0e40f.ts.net"];
-
 function devAllowedHosts(): string[] | true {
   if (config.allowedHosts === true) return true;
-  const configured = config.allowedHosts ?? [];
-  return [...new Set([...devAllowedHostNames, ...configured])];
+  return config.allowedHosts ?? [];
 }
 const docsRoot = resolve("docs");
 const docsPrefix = "/site";
