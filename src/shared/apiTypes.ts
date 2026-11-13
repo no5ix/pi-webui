@@ -282,44 +282,6 @@ export interface PiWebConfigValues {
   ntfy?: NtfyConfig;
   /** Deprecated agent-configuration keys, still honored as aliases during the deprecation window and detected for the deprecation warning (see PiWebAgentConfig). */
   agent?: PiWebAgentConfig;
-  /**
-   * The text translation the reading toolbar asks for: a double-clicked word or a held sentence
-   * comes back in another language. On by default through Google's free endpoint; `provider: "off"`
-   * leaves the toolbar's Translate action unanswered and `baseUrl` points the same request at a
-   * self-hosted mirror for a machine that should not send its transcript to Google.
-   */
-  translation?: PiWebTranslationConfig;
-}
-
-/**
- * How PI WEB answers a translation request.
- *
- * The reading toolbar is a reading aid, not a pipeline: one short string in, one short string out.
- * The default endpoint needs no account, and its answers are good enough for that. A deployment
- * that must not send text outward sets `provider: "off"` (the toolbar stops offering Translate) or
- * `baseUrl` (the same request goes to a mirror it runs). `language` is the target the toolbar asks
- * for, so a deployment whose readers read another language sets it once here.
- */
-export interface PiWebTranslationConfig {
-  provider?: PiWebTranslationProvider;
-  /** The endpoint asked for one translation; defaults to Google's free translate endpoint. */
-  baseUrl?: string;
-  /** The language the toolbar translates into. Simplified Chinese, because that is what its readers asked for. */
-  language?: string;
-  /** How long one translation may take before the request is given up on. */
-  timeoutMs?: number;
-}
-
-/**
- * How a translation request is answered: Google's free endpoint, or nothing at all. A deployment
- * that runs its own mirror keeps `google` and points `baseUrl` at it, because the request shape is
- * the same.
- */
-export type PiWebTranslationProvider = "google" | "off";
-
-/**
- * `level`: `errors` records failed (5xx) and slow requests, `requests` every request, `debug`
- * every request and debug messages. `maxFileMb` and `keepFiles`: a log file larger than
  * `maxFileMb` is moved to `<name>.1` and started again; `keepFiles` older copies are kept.
  */
 export interface PiWebLoggingConfig {
