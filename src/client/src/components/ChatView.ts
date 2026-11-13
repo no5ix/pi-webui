@@ -5,7 +5,6 @@ import { deferredImagePath } from "../api/urls";
 import { resolveAppUrl } from "../appUrl";
 import type { FoldedMarkdown, SessionRef } from "../../../shared/apiTypes";
 import { showsJumpToBottom } from "../chatScrollPosition";
-import { promptStepTargets, showsPromptNavigation } from "./chatPromptNavigation";
 import { ScrollFollowGate, TOUCH_SETTLE_MS } from "../scrollFollowGate";
 import { drawnWaitingCards, shownWaitingCards, type ShownWaiting, type WaitingCards } from "../waitingSlotHold";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -139,19 +138,6 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   @media (pointer: coarse) { .jump-to-bottom::after { content: ""; position: absolute; inset: -4px; } }
   .jump-to-bottom:focus-visible { border-color: var(--pi-accent); }
   @media (hover: hover) { .jump-to-bottom:hover { border-color: var(--pi-accent); } }
-  /* Prompt navigation has one stable position and never trades places with jump-to-bottom. */
-  .prompt-nav { position: absolute; right: calc(var(--pi-chat-gutter) + var(--pi-space-4)); bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4) + var(--pi-control-height-comfort) + var(--pi-space-3)); z-index: var(--pi-layer-sticky); display: flex; flex-direction: column; gap: var(--pi-space-2); }
-  .prompt-nav button { box-sizing: border-box; position: relative;
-    display: flex; align-items: center; justify-content: center;
-    width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); padding: 0;
-    border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md);
-    background: var(--pi-surface-raised); color: var(--pi-text);
-    font-size: var(--pi-text-lg); line-height: 1; cursor: pointer;
-    box-shadow: var(--pi-elevation-2);
-  }
-  @media (pointer: coarse) { .prompt-nav button::after { content: ""; position: absolute; inset: -4px; } }
-  .prompt-nav button:focus-visible { border-color: var(--pi-accent); }
-  @media (hover: hover) { .prompt-nav button:hover { border-color: var(--pi-accent); } }
   .quote-chip { position: fixed; z-index: var(--pi-layer-popover); box-sizing: border-box; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-accent-border); border-radius: var(--pi-radius-md); background: var(--pi-surface-raised); color: var(--pi-text); font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; box-shadow: var(--pi-elevation-2); }
   /* The 64px bottom padding was the reservation for the activity dock back when
      it floated over the scroller's bottom edge (both arrived in the commit that
@@ -1585,72 +1571,6 @@ export class ChatView extends LitElement {
       return;
     }
     if (!this.startNewestPage()) this.dispatchViewport({ kind: "pageFailed" });
-  }
-
-  /**
-   * The steppers between the reader's own prompts, and what each press does.
-   *
-   * Which anchor a step lands on is decided in `chatPromptNavigation.ts`; this is the executor. A step
-   * past the newest prompt goes to the bottom of the transcript, because that is what further is
-   * there; a step past the oldest goes nowhere, because the reader is already at the oldest prompt this
-   * transcript holds and sliding somewhere else reads as a bug. Both arrows are always live - a control
-   * that greys out at a boundary needs a measurement every frame to stay honest, and a no-op at the
-   * boundary is the same answer without the lie.
-   */
-  private renderPromptNavigation() {
-    return html`
-      <nav class="prompt-nav" aria-label="Prompt navigation">
-        <button type="button" title="Previous prompt" aria-label="Previous prompt" @click=${() => { this.stepPrompt("previous"); }}>
-          <svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m6 11 6-6 6 6"></path></svg>
-        </button>
-        <button type="button" title="Next prompt" aria-label="Next prompt" @click=${() => { this.stepPrompt("next"); }}>
-          <svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m6 13 6 6 6-6"></path></svg>
-        </button>
-      </nav>
-    `;
-  }
-
-  /** The prompts in this transcript, in the order the reader sent them. */
-  private get userPromptCount(): number {
-    return this.messages.filter((message) => message.role === "user").length;
-  }
-
-  private stepPrompt(direction: "previous" | "next"): void {
-    const chat = this.chat;
-    if (chat === undefined) return;
-    const anchors = this.promptAnchors(chat);
-    if (anchors.length === 0) return;
-    const targets = promptStepTargets(anchors.map((anchor) => anchor.top), { top: chat.scrollTop, bottom: chat.scrollTop + chat.clientHeight });
-    const target = direction === "previous" ? targets.previous : targets.next;
-    if (target === undefined) {
-      // Stay within the content currently rendered by the chat. Do not request another page or
-      // change the independent jump-to-newest behavior at this boundary.
-      this.pinnedToBottom = direction === "next";
-      this.withSuppressedScrollSave(() => {
-        chat.scrollTo({ top: direction === "previous" ? 0 : chat.scrollHeight, behavior: "auto" });
-        this.lastScrollTop = chat.scrollTop;
-        this.lastClientHeight = chat.clientHeight;
-      });
-      return;
-    }
-    const anchor = anchors.find((candidate) => Math.abs(candidate.top - target) < 1);
-    if (anchor === undefined) return;
-    // Stepping away from the newest is the reader choosing to read: the transcript must not snap back
-    // to the bottom when the next message arrives.
-    this.pinnedToBottom = false;
-    // The jump is written the way the transcript's other jumps are written. A smooth scroll animates and
-    // cancels: the same call on this scroller was a no-op in a real browser (2026-11-13), and a
-    // navigation control that answers with nothing is worse than one that arrives at once.
-    this.withSuppressedScrollSave(() => {
-      // Resolve the target element again at click time: images, lazy renderers and streaming content
-      // can shift measured offsets between rendering the controls and pressing one.
-      const chatBounds = chat.getBoundingClientRect();
-      const anchorBounds = anchor.element.getBoundingClientRect();
-      const destination = Math.max(0, chat.scrollTop + anchorBounds.top - chatBounds.top);
-      chat.scrollTo({ top: destination, behavior: "auto" });
-      this.lastScrollTop = chat.scrollTop;
-      this.lastClientHeight = chat.clientHeight;
-    });
   }
 
   /**
