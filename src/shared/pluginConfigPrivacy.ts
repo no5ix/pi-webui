@@ -73,8 +73,23 @@ export function publicPluginConfig(plugins: PiWebPluginConfigMap): PiWebPluginCo
   return Object.fromEntries(Object.entries(plugins).map(([id, config]) => [id, withoutServerSettings(config)]));
 }
 
+/**
+ * The config a browser is given.
+ *
+ * A VAPID private key signs every push the server sends; a browser has no use for it and every
+ * device that can read the settings page would hold it. The public key stays, because a browser
+ * needs it to ask its push manager for a subscription.
+ */
 export function publicPiWebConfig(config: PiWebConfigValues): PiWebConfigValues {
-  return { ...config, ...(config.plugins === undefined ? {} : { plugins: publicPluginConfig(config.plugins) }) };
+  const push = config.push;
+  if (push === undefined) return { ...config, ...(config.plugins === undefined ? {} : { plugins: publicPluginConfig(config.plugins) }) };
+  const publicPush = { ...push };
+  delete publicPush.vapidPrivateKey;
+  return {
+    ...config,
+    push: publicPush,
+    ...(config.plugins === undefined ? {} : { plugins: publicPluginConfig(config.plugins) }),
+  };
 }
 
 export function serverSettingsConfigured(config: PiWebConfigValues): Record<string, boolean> {

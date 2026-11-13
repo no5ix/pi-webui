@@ -121,7 +121,7 @@ PI WEB has no user accounts and assumes trusted users, repositories and server p
 
 - [Install](docs/install.md): requirements, install options, services, updates, remote access
 - [Configuration](docs/config.md): config files, keys, environment variables, restart rules
-- [Notifications](docs/notifications.md): task-finished notices in the device's notification centre
+- [Notifications](docs/notifications.md): task-finished and question-waiting notices in the device's notification centre, on this device and on every device registered for push, including a phone's
 - [FAQ](docs/faq.md): the reading toolbar's word and sentence translation, response footers, the branch and running time in the status bar
 - [Machines](docs/machines.md): use several PI WEB machines from one page
 - [Remote-first development](docs/remote-first.md)

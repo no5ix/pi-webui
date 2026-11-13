@@ -1,5 +1,7 @@
 import { css, LitElement, html, unsafeCSS } from "lit";
 import type { FinishedTurn } from "../turnRunClock";
+import type { TaskRunRecord } from "../taskRunLedger";
+import { taskRunStatusText } from "../taskRunLedger";
 import { runDuration } from "../runDuration";
 import { renderBranchIcon, renderDownIcon, renderUpIcon, uiIconStyle } from "./uiIcons.js";
 import { customElement, property } from "lit/decorators.js";
@@ -41,6 +43,12 @@ export class StatusBar extends LitElement {
    * the work is over, which is when the reader asks how long that took.
    */
   @property({ attribute: false }) lastRun?: FinishedTurn;
+  /**
+   * The last run this page's task lifecycle closed, with how it ended. It answers with a verdict -
+   * finished, failed, stopped - where `lastRun` only knows that a span ended, so it is shown when the
+   * page has it.
+   */
+  @property({ attribute: false }) lastTask?: TaskRunRecord;
   override render() {
     const status = this.status;
     const line = sessionStatusLine({ hasStatus: status !== undefined, failure: this.failure });
@@ -63,7 +71,11 @@ export class StatusBar extends LitElement {
         <span>${renderDownIcon()} ${formatTokenCount(tokens.output)} tok</span>
         <span class=${CONTEXT_FILL_CLASS[contextFill(context?.percent)]}>${contextText}</span>
         ${status.gitBranch === undefined ? null : html`<span class="branch" title=${`Git branch: ${status.gitBranch}`}>${renderBranchIcon()} ${status.gitBranch}</span>`}
-        ${this.lastRun === undefined ? null : html`<span class="run-time" title=${runTimeTitle(this.lastRun)}>took ${runDuration(this.lastRun.durationMs)}</span>`}
+        ${this.lastTask === undefined
+          ? this.lastRun === undefined
+            ? null
+            : html`<span class="run-time" title=${runTimeTitle(this.lastRun)}>took ${runDuration(this.lastRun.durationMs)}</span>`
+          : html`<span class="run-time" title=${taskRunStatusText(this.lastTask).title}>${taskRunStatusText(this.lastTask).text}</span>`}
         <span class="statuses" title=${statuses}><span class="statuses-text">${statuses}</span></span>
         <span class="cost">${formatCost(status.cost)}</span>
       </div>

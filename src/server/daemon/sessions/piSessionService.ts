@@ -99,6 +99,7 @@ import { PendingExtensionDialogStore, PendingExtensionDialogValidationError, typ
 import type { CommandResultState, DeviceOperation, ExtensionNoticeLevel, OperationAppliedOutcome, OperationBatch, OperationBatchAnswer, OperationResult, OperationStanding, PendingExtensionDialog } from "../../../shared/apiTypes.js";
 import { ExtensionDialogWaiters, effectiveExtensionDialogTimeoutMs, extensionDialogCancelValue } from "./extensionDialogWaiters.js";
 import { DEFAULT_EXTENSION_DIALOGS_TIMEOUT_MS } from "../../../config.js";
+import type { SessionNotices } from "../notifications/sessionNotices.js";
 import type { DelegationRequest, SpawnSessionInvocation, SpawnSessionResult, SpawnSubsessionInvocation, SpawnSubsessionResult, SubsessionCheckResult, SubsessionReadQuery, SubsessionReadResult, SubsessionStatus, SubsessionSummary } from "./delegation.js";
 import { countBackgroundRuns } from "./backgroundRunCount.js";
 import { BackgroundWorkWatcher } from "./backgroundWorkWatcher.js";
@@ -1427,6 +1428,12 @@ export interface PiSessionServiceDependencies {
   logger?: PiSessionLogger;
   /** Clock seam for cleanup planning tests. */
   now?: () => Date;
+  /**
+   * The device notices a session produces: a run's confirmed end, and a questionnaire that is
+   * waiting for an answer. Absent in tests and in a daemon with notifications unavailable, where the
+   * session behaves exactly as it did before.
+   */
+  taskNotices?: SessionNotices;
   /** Daemon-lifetime notification state, injected by sessiond in production. */
   notificationStore?: SessionNotificationStore;
   /** Durable daemon-owned unread state; defaults to an in-memory store in tests. */
@@ -1546,7 +1553,7 @@ export class PiSessionService implements SessionRouteService {
    * Entries are dropped as soon as their text leaves the queue.
    */
   private readonly queuedPromptClientIds = new Map<string, HeldSteerRecord[]>();
-  private readonly openRuns = new Map<string, { quietSince: number | undefined; lastReply?: RunLastReply | undefined; cutByReader?: boolean }>();
+  private readonly openRuns = new Map<string, { quietSince: number | undefined; startedAtMs: number; lastReply?: RunLastReply | undefined; cutByReader?: boolean }>();
   private readonly directCommitWatchers = new Map<string, () => void>();
   private readonly runStartWatchers = new Map<string, () => void>();
   private readonly steerBatches = new Map<string, Promise<void>>();
@@ -1626,6 +1633,8 @@ export class PiSessionService implements SessionRouteService {
   private readonly constructing = new Map<string, { readonly cwd: string; readonly file: string | undefined }>();
   private readonly pendingExtensionDialogStore: PendingExtensionDialogStore;
   private readonly extensionDialogsTimeoutMs: number;
+  /** The device notices a run's end and a waiting questionnaire produce; absent when notifications are unavailable. */
+  private readonly taskNotices: SessionNotices | undefined;
   /** The parked extension Promise resolvers behind the store's open dialogs. */
   /** The last factory call's stack, read for the extension's own frame. */
   private customScreenStack: string | undefined;
@@ -1685,6 +1694,7 @@ export class PiSessionService implements SessionRouteService {
     this.spawnTargets = deps.spawnTargets;
     this.logger = deps.logger ?? noopLogger;
     this.now = deps.now ?? (() => new Date());
+    this.taskNotices = deps.taskNotices;
     this.notificationStore = deps.notificationStore ?? new SessionNotificationStore();
     this.unreadStore = deps.unreadStore ?? new SessionUnreadStore();
     this.onUnreadChanged = deps.onUnreadChanged;
@@ -2275,9 +2285,7 @@ export class PiSessionService implements SessionRouteService {
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
       runScoped: this.dialogRunScoped(session),
     });
-    const revision = this.nextDialogRevision(session.sessionId);
-    this.events.publish(session.sessionId, { type: "dialog.opened", dialog, revision, daemonInstanceId: this.notificationStore.daemonInstanceId });
-    this.publishStatus(session);
+    this.publishDialogOpened(session, dialog);
     return this.dialogWaiters.park(dialog, {
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
       ...(signal === undefined ? {} : { signal }),
@@ -2424,9 +2432,7 @@ export class PiSessionService implements SessionRouteService {
         : { lines: [], screen: content.screen }),
       runScoped: this.dialogRunScoped(session),
     });
-    const revision = this.nextDialogRevision(session.sessionId);
-    this.events.publish(session.sessionId, { type: "dialog.opened", dialog, revision, daemonInstanceId: this.notificationStore.daemonInstanceId });
-    this.publishStatus(session);
+    this.publishDialogOpened(session, dialog);
     return dialog.dialogId;
   }
 
@@ -2502,6 +2508,26 @@ export class PiSessionService implements SessionRouteService {
    * probe, say) and a command's dialogs, even one typed mid-run, are not
    * run-scoped and survive, because their waiter outlives the run.
    */
+  /**
+   * Announce a dialog that opened, on the page's stream and to the devices that asked to be told.
+   *
+   * A dialog is a run parked on an answer: `ctx.ui.confirm`, `select`, `input`, `editor` and a
+   * declared card each block the extension's own promise until the browser answers, so this is the
+   * waiting-for-input state, named once, from the record that proves it. A phone that is not looking
+   * at the page has no other way to learn that a task is not slow but stopped, waiting for it.
+   */
+  private publishDialogOpened(session: PiAgentSession, dialog: PendingExtensionDialog): void {
+    const revision = this.nextDialogRevision(session.sessionId);
+    this.events.publish(session.sessionId, { type: "dialog.opened", dialog, revision, daemonInstanceId: this.notificationStore.daemonInstanceId });
+    this.publishStatus(session);
+    this.taskNotices?.userInputRequired({
+      sessionId: session.sessionId,
+      sessionName: session.sessionName ?? "",
+      cwd: session.sessionManager.getCwd(),
+      dialog,
+    });
+  }
+
   private abortRunScopedExtensionDialogs(sessionId: string): void {
     let closedAny = false;
     for (const dialog of this.pendingExtensionDialogStore.pendingDialogs(sessionId)) {
@@ -4121,7 +4147,7 @@ export class PiSessionService implements SessionRouteService {
     if (eventType === "agent_start") {
       const prior = this.openRuns.get(sessionId);
       if (prior === undefined) this.reportFact({ kind: "run.started", session: factScope(sessionId, session.sessionManager.getCwd()) });
-      this.openRuns.set(sessionId, { quietSince: undefined, ...(prior?.cutByReader === true ? { cutByReader: true } : {}) });
+      this.openRuns.set(sessionId, { quietSince: undefined, startedAtMs: this.now().getTime(), ...(prior?.cutByReader === true ? { cutByReader: true } : {}) });
       const onRunStart = this.runStartWatchers.get(sessionId);
       this.runStartWatchers.delete(sessionId);
       onRunStart?.();
@@ -5611,8 +5637,19 @@ export class PiSessionService implements SessionRouteService {
 
   /** End a run this service saw open, once: the next `agent_start` is a new run. */
   private endRun(session: PiAgentSession, ending: RunEnding): void {
+    const open = this.openRuns.get(session.sessionId);
     if (!this.openRuns.delete(session.sessionId)) return;
     this.reportFact({ kind: "run.ended", session: factScope(session.sessionId, session.sessionManager.getCwd()), ...ending });
+    // The notice is the run's end as a fact the daemon confirmed - `completed`, `failed`, `stopped`
+    // or `interrupted` - which is what a device that is not looking at the page cannot decide for
+    // itself. It rides on the clock the daemon kept for the run, not on a page's view of it.
+    this.taskNotices?.taskFinished({
+      sessionId: session.sessionId,
+      sessionName: session.sessionName ?? "",
+      cwd: session.sessionManager.getCwd(),
+      ending,
+      elapsedMs: open === undefined ? undefined : Math.max(0, this.now().getTime() - open.startedAtMs),
+    });
   }
 
   /** A run still open when its session closes, or the daemon shuts down, is cut off: stopped when the reader's Stop or `/new` cut it, interrupted otherwise. */

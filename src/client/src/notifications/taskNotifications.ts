@@ -84,13 +84,21 @@ export async function requestTaskNotificationPermission(): Promise<NotificationA
 }
 
 /**
- * Posts the notice. Returns whether the notification centre got it, so the caller can say so
+ * Posts a notice. Returns whether the notification centre got it, so the caller can say so
  * honestly rather than assuming.
  *
- * `tag` keeps one session's notices together: a second finished task replaces the first notice
- * rather than stacking a pile on a phone's lock screen.
+ * `tag` keeps one event's notices together. It is the event's id, shared by every path that carries
+ * the event: the page that is looking at the session posts it, and the push service delivers the same
+ * id to the same browser, so the notification centre shows one notice for one event rather than two.
+ * The same tag is what lets a page close the notice once the reader has answered the question it
+ * asked.
  */
 export async function notifyTaskFinished(notice: TaskFinishedNotice, tag: string): Promise<boolean> {
+  return postDeviceNotice(notice, tag);
+}
+
+/** Post any device notice - a task's end, a question waiting - through the service worker. */
+export async function postDeviceNotice(notice: TaskFinishedNotice, tag: string): Promise<boolean> {
   if (!Reflect.has(globalThis, "Notification") || Notification.permission !== "granted") return false;
   const registration = (await navigator.serviceWorker.getRegistration()) ?? (await ensureNotificationRegistration());
   if (registration === undefined) return false;
@@ -107,4 +115,20 @@ export async function notifyTaskFinished(notice: TaskFinishedNotice, tag: string
   } catch {
     return false;
   }
+}
+
+/**
+ * Take back a notice the reader has answered.
+ *
+ * A question that has been answered should not stay on a lock screen: the notice asked for something
+ * that has happened. The tag is the event's id, so the page closes exactly the notice that asked and
+ * no other - including the one the push service delivered to this same browser.
+ */
+export async function closeDeviceNotice(tag: string): Promise<boolean> {
+  if (!Reflect.has(globalThis, "Notification")) return false;
+  const registration = await navigator.serviceWorker.getRegistration().catch(() => undefined);
+  if (registration === undefined) return false;
+  const notices = await registration.getNotifications({ tag }).catch(() => []);
+  for (const notice of notices) notice.close();
+  return notices.length > 0;
 }

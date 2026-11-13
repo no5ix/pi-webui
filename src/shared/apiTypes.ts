@@ -281,6 +281,30 @@ export interface PiWebConfigValues {
    * self-hosted mirror for a machine that should not send its transcript to Google.
    */
   translation?: PiWebTranslationConfig;
+  /**
+   * Web Push: the VAPID key pair that authorises this PI WEB at the push services, the contact address
+   * the push services ask for, how long an undeliverable message may be kept, and the switch.
+   *
+   * Without a key pair the daemon generates one into its own data directory, so push works on the
+   * first HTTPS start; a deployment that owns its key pair sets both keys and keeps a phone's
+   * subscriptions across a reinstall. The private key is a secret: it is never part of the config the
+   * browser is given, and it is not something to commit.
+   */
+  push?: PiWebPushConfig;
+}
+
+/** How this PI WEB sends Web Push to the devices that registered with it. */
+export interface PiWebPushConfig {
+  /** `false` leaves push off: devices cannot subscribe and nothing is sent. On by default. */
+  enabled?: boolean;
+  /** The VAPID public key the browser hands its push manager. */
+  vapidPublicKey?: string;
+  /** The VAPID signing key: an EC P-256 JWK as JSON, or a PEM private key. Never sent to a browser. */
+  vapidPrivateKey?: string;
+  /** The contact the push services ask a sender to identify itself with: `mailto:` or an https URL. */
+  subject?: string;
+  /** How long a push service may hold a message for a device that is unreachable, in seconds. */
+  ttlSeconds?: number;
 }
 
 /**

@@ -35,6 +35,11 @@ import { FileSessionUnreadPersistence, SessionUnreadStore, defaultSessionUnreadF
 import { ProjectScopedSpawnTargetResolver } from "./daemon/sessions/spawnTargetResolver.js";
 import { ProjectService } from "./shared/projects/projectService.js";
 import { ProjectStore, projectStorePath } from "./shared/storage/projectStore.js";
+import { PushSubscriptionStore, defaultPushSubscriptionFilePath } from "./daemon/notifications/pushSubscriptionStore.js";
+import { DeviceNotificationService } from "./daemon/notifications/deviceNotificationService.js";
+import { SessionNotices, projectScopeName } from "./daemon/notifications/sessionNotices.js";
+import { resolveVapidKeys, effectiveVapidSubject } from "./daemon/notifications/vapidKeys.js";
+import { registerPushRoutes } from "./daemon/notifications/pushRoutes.js";
 import { projectPluginRoots } from "./shared/plugins/projectPluginRoots.js";
 import { recordDeclaredAgentFacts } from "./daemon/sessions/declaredAgentFacts.js";
 import {
@@ -330,6 +335,29 @@ async function createSessionDaemonRuntime() {
     catalogRefresher.start();
     auth.subscribe(() => { catalogRefresher.requestRefresh(); });
     const projects = new ProjectService(daemonProjectStore);
+    // Device notices: a run's confirmed end, and a questionnaire parked on an answer, go to the
+    // devices that registered for push. The store and the senders live on the daemon because the
+    // events are the daemon's, so a web/API restart cannot stop a phone being told. The VAPID key
+    // pair is generated into the data directory when the config names none, and the private half is
+    // never part of the config a browser is shown.
+    const pushSubscriptions = new PushSubscriptionStore({ filePath: defaultPushSubscriptionFilePath(daemonEnvironment) });
+    const vapidKeys = await resolveVapidKeys({
+      ...(config.push?.vapidPublicKey === undefined ? {} : { publicKey: config.push.vapidPublicKey }),
+      ...(config.push?.vapidPrivateKey === undefined ? {} : { privateKey: config.push.vapidPrivateKey }),
+    });
+    if (vapidKeys.problem !== undefined) app.log.warn(`[notifications] push is off: ${vapidKeys.problem}`);
+    const deviceNotifications = new DeviceNotificationService({
+      subscriptions: pushSubscriptions,
+      keys: vapidKeys,
+      subject: effectiveVapidSubject(config.push?.subject),
+      ...(config.push?.ttlSeconds === undefined ? {} : { ttlSeconds: config.push.ttlSeconds }),
+      ...(config.push?.enabled === undefined ? {} : { enabled: config.push.enabled }),
+      logger: app.log,
+    });
+    const taskNotices = new SessionNotices(deviceNotifications, {
+      projectName: async (cwd) => projectScopeName(await daemonProjectStore.list(), cwd),
+    });
+    registerPushRoutes(app, deviceNotifications, pushSubscriptions);
     const providerHealth = await serverPlugins.inspectHealth();
     const workspaceProviders = new WorkspaceProviderRegistry({
       contributions: eligibleWorkspaceProviderContributions(serverPlugins.providerContributions(), providerHealth),
@@ -406,6 +434,7 @@ async function createSessionDaemonRuntime() {
         extensionFactories: config.piBuiltInExtensions ? piBuiltInExtensions() : [],
       },
       extensionDialogsTimeoutMs: config.extensionDialogsTimeoutMs,
+      taskNotices,
       notificationStore,
       unreadStore,
       onUnreadChanged: () => { machineStatus.notifyChanged(); },

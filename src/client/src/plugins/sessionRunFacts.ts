@@ -12,6 +12,12 @@ type ReplyEnd = "finished" | FailureKind;
 interface Run {
   readonly startedOn: FrameSource;
   /**
+   * When this page saw the run start, on its own clock. The span of a finished task is measured here
+   * because the transcript cannot answer it: its rows carry the stamp of the moment an entry was
+   * written, and a prompt and the reply it produced are stamped milliseconds apart.
+   */
+  readonly startedAtMs: number;
+  /**
    * The page did not hold the run's stream throughout: the run was already going when the page
    * first heard of it, a frame of the session came through its machine's announcements, the
    * stream's connection went away, its lost frames could not be replayed, or the page left the
@@ -71,9 +77,21 @@ function runEvidence(run: Run, endedOn: FrameSource): RunEvidence {
   return run.startedOn === "stream" && endedOn === "stream" && !run.leftStream ? evidence : "none";
 }
 
+/**
+ * How long a run took, as this page measured it.
+ *
+ * `partial` says the page did not hold the run throughout - it joined a run already going, the stream
+ * went away, it left the session - so the span is a lower bound and the surface that shows it says so
+ * rather than presenting a guess as a measurement.
+ */
+export interface SessionRunSpan {
+  readonly elapsedMs: number;
+  readonly partial: boolean;
+}
+
 export interface SessionRunFactSink {
   started(machineId: string, sessionId: string): void;
-  ended(machineId: string, sessionId: string, outcome: SessionRunOutcome): void;
+  ended(machineId: string, sessionId: string, outcome: SessionRunOutcome, span: SessionRunSpan): void;
 }
 
 /**
@@ -90,7 +108,11 @@ export class SessionRunWatch {
   private readonly idle = new Map<string, Set<string>>();
   private version = 0;
 
-  constructor(private readonly sink: SessionRunFactSink, private readonly holdsStream: (machineId: string, sessionId: string) => boolean) {}
+  constructor(
+    private readonly sink: SessionRunFactSink,
+    private readonly holdsStream: (machineId: string, sessionId: string) => boolean,
+    private readonly now: () => number = () => Date.now(),
+  ) {}
 
   /** A frame of the session on screen's stream; `sessionId` is the session the stream belongs to. */
   streamFrame(machineId: string, sessionId: string, event: SessionUiEvent): void {
@@ -140,7 +162,7 @@ export class SessionRunWatch {
    */
   forgetMachine(machineId: string): void {
     for (const [sessionId, run] of this.runs.get(machineId) ?? []) {
-      this.sink.ended(machineId, sessionId, OUTCOME[runEvidence(run, "machine")]);
+      this.sink.ended(machineId, sessionId, OUTCOME[runEvidence(run, "machine")], runSpan(run, this.now()));
     }
     this.runs.delete(machineId);
     this.idle.delete(machineId);
@@ -165,7 +187,7 @@ export class SessionRunWatch {
     if (isStreaming) {
       if (run !== undefined) return;
       const wasIdle = idle.delete(sessionId);
-      runs.set(sessionId, { startedOn: source, leftStream: !wasIdle, cutHeard: undefined, lastPhase: undefined, lastReply: undefined });
+      runs.set(sessionId, { startedOn: source, startedAtMs: this.now(), leftStream: !wasIdle, cutHeard: undefined, lastPhase: undefined, lastReply: undefined });
       this.version += 1;
       if (wasIdle) this.sink.started(machineId, sessionId);
       return;
@@ -175,7 +197,7 @@ export class SessionRunWatch {
     this.version += 1;
     if (run === undefined) return;
     runs.delete(sessionId);
-    this.sink.ended(machineId, sessionId, OUTCOME[runEvidence(run, source)]);
+    this.sink.ended(machineId, sessionId, OUTCOME[runEvidence(run, source)], runSpan(run, this.now()));
   }
 
   private activity(machineId: string, activity: SessionActivity): void {
@@ -209,4 +231,9 @@ export class SessionRunWatch {
     this.idle.set(machineId, created);
     return created;
   }
+}
+
+/** A finished run's span, measured on the page's clock from the start it saw. */
+function runSpan(run: Run, nowMs: number): SessionRunSpan {
+  return { elapsedMs: Math.max(0, nowMs - run.startedAtMs), partial: run.leftStream };
 }

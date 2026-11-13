@@ -40,8 +40,13 @@ import { isScrollKey, wheelReachesScroller } from "../readerScrollInput";
 const READER_INPUT_WINDOW_MS = 500;
 /** One wheel notch, as a scale factor: exp(-deltaY / this). */
 const WHEEL_ZOOM_STEP = 300;
+/** How far below the scroller's top edge a jumped-to row is placed, so its header is visible. */
+const CONVERSATION_NAVIGATION_TOP_OFFSET_PX = 8;
+/** How long the conversation controls wait after the last scroll event to recompute their targets. */
+const CONVERSATION_NAVIGATION_SYNC_MS = 240;
 import { isResendableLine, sentPromptOf, type SentPrompt } from "../resendMessage";
 import { sessionActivityCategory, type SessionActivityCategory } from "../../../shared/sessionActivityState";
+import { conversationRole, conversationRows, latestUserPrompt, nextAssistantResponse, type ConversationRow } from "../conversationNavigation";
 import { openingMarkStyles, renderOpeningSpinner } from "./openingMark";
 import { isSessionActive } from "../../../shared/activity";
 import type { ChatLine, ChatPart, MessageDelivery, ToolExecutionPart } from "./shared";
@@ -122,10 +127,16 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      reading as a button welded to the card rather than one floating over it.
      It is inset by a step of the scale so the border stays visible. */
   .jump-icon { width: 16px; height: 16px; }
-  .jump-to-bottom { box-sizing: border-box;
-    position: absolute;
+  /* The two conversation controls share the corner above the activity dock, stacked: a reader's eye is
+   already on the bottom edge, and one column of two buttons is where a phone's thumb reaches without
+   covering the transcript. The container owns the position - the dock's height is measured, not
+   guessed - and the buttons keep the size, border, colour and shadow of a floating control. */
+  .conversation-navigation { position: absolute;
     right: calc(var(--pi-chat-gutter) + var(--pi-space-4));
     bottom: calc(var(--pi-chat-dock-room, 0px) + var(--pi-space-4)); z-index: var(--pi-layer-sticky);
+    display: grid; gap: var(--pi-space-3);
+  }
+  .jump-to-bottom { box-sizing: border-box; position: relative;
     display: flex; align-items: center; justify-content: center;
     width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); padding: 0;
     border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md);
@@ -133,6 +144,9 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
     font-size: var(--pi-text-lg); line-height: 1; cursor: pointer;
     box-shadow: var(--pi-elevation-2);
   }
+  /* A control with nothing to jump to says so instead of doing nothing: the disabled state is the
+   answer to "is there a next answer?". */
+  .jump-to-bottom[disabled] { opacity: var(--pi-disabled-opacity); cursor: default; }
   /* The drawn box stays 36 like every floating control; the coarse floor is
      met by an invisible reach, the same pattern the message actions use. */
   @media (pointer: coarse) { .jump-to-bottom::after { content: ""; position: absolute; inset: -4px; } }
@@ -727,6 +741,12 @@ export class ChatView extends LitElement {
   private readonly followGate = new ScrollFollowGate();
   /** Whether the newest message is far enough away to be worth a button. */
   @state() private jumpToBottomVisible = false;
+  /** A scroll-debounced recompute of the two conversation targets; one is pending at a time. */
+  private conversationNavigationTimer: number | undefined;
+  /** Whether a prompt the reader sent sits above them. */
+  @state() private jumpToPromptVisible = false;
+  /** The next answer below the reader, in the transcript's own row index; nothing when there is none. */
+  @state() private nextResponseIndex: number | undefined;
   @state() private zoomedImage: { src: string; alt: string } | undefined = undefined;
   @state() private zoomTransform: ZoomTransform = IDENTITY_ZOOM;
   @state() private expandedMetaKey: string | undefined;
@@ -1142,6 +1162,7 @@ export class ChatView extends LitElement {
     for (const timer of this.imageRetryTimers.values()) clearTimeout(timer);
     this.imageRetryTimers.clear();
     this.stopTurnClock();
+    this.clearConversationNavigationSync();
     window.clearTimeout(this.deliveryGraceTimer);
     this.deliveryGraceTimer = undefined;
     this.deliveryGraceDue = undefined;
@@ -1294,6 +1315,16 @@ export class ChatView extends LitElement {
     this.holdBottomEdge();
     this.watchStreamingGrowth();
     this.observeStreamingContent();
+    if (changed.has("sessionId")) {
+      // A session's rows are another conversation: its controls answer for its rows, not the ones the
+      // reader left, so the targets are dropped and recomputed from what this session shows.
+      this.clearConversationNavigationSync();
+      this.jumpToPromptVisible = false;
+      this.nextResponseIndex = undefined;
+    }
+    if (changed.has("sessionId") || changed.has("messages") || changed.has("messageStart") || changed.has("messageTotal")) {
+      this.scheduleConversationNavigationSync();
+    }
     if (changed.has("loadingMore") && !this.loadingMore) {
       this.loadMoreRequested = false;
       this.newerRequested = false;
@@ -1523,7 +1554,7 @@ export class ChatView extends LitElement {
           ${this.renderQueuedMessages()}
           ${this.renderWaitingForYou()}
         </div>
-        ${this.renderJumpToBottom()}
+        ${this.renderConversationNavigation()}
         ${this.renderActivityDock()}
       </div>
       ${this.renderImageZoom()}
@@ -1555,18 +1586,140 @@ export class ChatView extends LitElement {
     if (!this.startNewestPage()) this.dispatchViewport({ kind: "pageFailed" });
   }
 
-  private renderJumpToBottom() {
-    if (!this.jumpToBottomVisible) return null;
+  /**
+   * The two conversation controls: the last prompt above the reader, the next answer below them.
+   *
+   * The down control used to mean one thing - go to the newest - and a reader working through a long
+   * transcript presses it to find out what came next. It now goes to the next assistant response, and
+   * keeps its old meaning exactly where the new one has nothing to offer: with no answer below, it
+   * jumps to the newest message, which is what the arrow at the bottom of a conversation has always
+   * meant. The disabled state is not used, so the control always answers with a movement.
+   */
+  private renderConversationNavigation() {
+    const nextResponse = this.nextResponseIndex;
+    const showDown = this.jumpToBottomVisible || nextResponse !== undefined;
+    if (!this.jumpToPromptVisible && !showDown) return null;
     return html`
-      <button
-        class="jump-to-bottom"
-        type="button"
-        title="Jump to the newest message"
-        aria-label="Jump to the newest message"
-        @click=${() => { this.jumpToNewest(); }}
-      ><svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m6 13 6 6 6-6"></path></svg></button>
+      <div class="conversation-navigation">
+        ${this.jumpToPromptVisible ? html`
+          <button
+            class="jump-to-bottom jump-to-prompt"
+            type="button"
+            title="Jump to the last prompt you sent"
+            aria-label="Jump to the last prompt you sent"
+            @click=${() => { this.jumpToLatestPrompt(); }}
+          ><svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m6 11 6-6 6 6"></path></svg></button>` : null}
+        ${showDown ? html`
+          <button
+            class="jump-to-bottom jump-to-newest"
+            type="button"
+            title=${nextResponse === undefined ? "Jump to the newest message" : "Jump to the next answer"}
+            aria-label=${nextResponse === undefined ? "Jump to the newest message" : "Jump to the next answer"}
+            @click=${() => { this.jumpDownward(); }}
+          ><svg class="jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m6 13 6 6 6-6"></path></svg></button>` : null}
+      </div>
     `;
   }
+
+  /**
+   * The reader pressed the down control: the next answer if there is one, the newest message if not.
+   *
+   * The row the page is showing decides, so a transcript that loads in pages behaves the same way: an
+   * answer that has not been loaded is not skipped to, and the newest-message path is the one that
+   * asks for the newest page.
+   */
+  private jumpDownward(): void {
+    const target = this.nextResponseIndex;
+    if (target === undefined) {
+      this.jumpToNewest();
+      return;
+    }
+    if (!this.scrollToRowIndex(target)) this.jumpToNewest();
+  }
+
+  /** The reader pressed the up control: the most recent prompt they sent, at its beginning. */
+  private jumpToLatestPrompt(): void {
+    const target = latestUserPrompt(this.conversationRowsInView(), this.readingRowIndex());
+    if (target === undefined) return;
+    this.scrollToRowIndex(target);
+  }
+
+  /**
+   * Land on the beginning of a row.
+   *
+   * Measured, not scrolled by a guess: the row's own top edge is placed a step below the scroller's,
+   * so the reader sees the row's header, not its middle. The scroll save is suppressed because this
+   * movement is the page's, and a saved position taken from mid-jump is how a return to a session
+   * lands somewhere the reader never read.
+   */
+  private scrollToRowIndex(index: number): boolean {
+    const chat = this.chat;
+    if (chat === undefined) return false;
+    const row = this.renderRoot.querySelector<HTMLElement>(`article.msg[data-index="${String(index)}"]`);
+    if (row === null) return false;
+    this.pinnedToBottom = false;
+    this.followScrollTarget = undefined;
+    this.setJumpToBottomVisible(showsJumpToBottom(chat));
+    this.withSuppressedScrollSave(() => {
+      const chatBox = chat.getBoundingClientRect();
+      const rowBox = row.getBoundingClientRect();
+      chat.scrollTop = chat.scrollTop + (rowBox.top - chatBox.top) - CONVERSATION_NAVIGATION_TOP_OFFSET_PX;
+    });
+    this.lastScrollTop = chat.scrollTop;
+    this.scheduleConversationNavigationSync();
+    return true;
+  }
+
+  /** The rows the page is showing, as navigation sees them: index and role, in transcript order. */
+  private conversationRowsInView(): ConversationRow[] {
+    return conversationRows(this.articles().map((row) => ({ index: row.dataset["index"], role: conversationRole(Array.from(row.classList)) })));
+  }
+
+  /**
+   * Where the reader is reading, as a row index.
+   *
+   * The first row in the viewport is the row their eyes are on. At the bottom there is no row below
+   * them to jump to, and the answer to "what is next?" is none; at the top, the first row they can
+   * see is above any prompt that begins below it.
+   */
+  private readingRowIndex(): number {
+    const chat = this.chat;
+    if (chat === undefined) return 0;
+    if (this.pinnedToBottom) return Number.MAX_SAFE_INTEGER;
+    const first = this.firstVisibleArticle();
+    const index = first === undefined ? undefined : Number(first.dataset["index"]);
+    return index === undefined || !Number.isFinite(index) ? 0 : index;
+  }
+
+  /**
+   * Recompute what the two controls can do, at most every so often while the reader scrolls.
+   *
+   * A transcript of thousands of rows is not scanned on every scroll event: the targets only matter
+   * when the reader stops to press a button, and a quarter-second is shorter than a thumb.
+   */
+  private scheduleConversationNavigationSync(): void {
+    if (this.conversationNavigationTimer !== undefined) return;
+    this.conversationNavigationTimer = window.setTimeout(() => {
+      this.conversationNavigationTimer = undefined;
+      this.syncConversationNavigation();
+    }, CONVERSATION_NAVIGATION_SYNC_MS);
+  }
+
+  private syncConversationNavigation(): void {
+    const rows = this.conversationRowsInView();
+    const reading = this.readingRowIndex();
+    const promptAbove = latestUserPrompt(rows, reading) !== undefined;
+    if (this.jumpToPromptVisible !== promptAbove) this.jumpToPromptVisible = promptAbove;
+    const next = nextAssistantResponse(rows, reading);
+    if (this.nextResponseIndex !== next) this.nextResponseIndex = next;
+  }
+
+  private clearConversationNavigationSync(): void {
+    if (this.conversationNavigationTimer === undefined) return;
+    window.clearTimeout(this.conversationNavigationTimer);
+    this.conversationNavigationTimer = undefined;
+  }
+
 
 
   private renderImageZoom() {
@@ -2620,6 +2773,7 @@ export class ChatView extends LitElement {
   private onScroll() {
     if (this.quoteChip !== undefined) { this.quoteChip = undefined; this.requestUpdate(); }
     this.updatePinnedToBottomFromScroll();
+    this.scheduleConversationNavigationSync();
     this.requestPages(true);
     if (!this.suppressScrollSave) this.scheduleScrollPositionSave();
   }

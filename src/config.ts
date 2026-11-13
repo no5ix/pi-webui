@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import type { PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig, PiWebTranslationConfig } from "./shared/apiTypes.js";
+import type { PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebPushConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig, PiWebTranslationConfig } from "./shared/apiTypes.js";
 import { isPiWebPluginId, piWebPluginIdPattern } from "./shared/pluginIds.js";
 import { isRecord } from "./shared/unknownValues.js";
 import { isPluginModelGrant } from "./shared/pluginModelGrant.js";
@@ -237,10 +237,10 @@ const SAVED_CONFIG_KEYS: ReadonlySet<string> = new Set([
 export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, serverSettingsUpdates?: PiWebServerSettingsUpdates): LoadedPiWebConfig {
   const env = options.env ?? process.env;
   const path = piWebConfigPath(env, options.cwd ?? process.cwd());
-  const normalized = parsePiWebConfig(piWebConfigRecord(config), path);
+  const existing = readExistingConfigObject(path);
+  const normalized = parsePiWebConfig(withStoredPushSecret(piWebConfigRecord(config), existing), path);
   if (hasServerSettings(normalized)) throw new PiWebConfigError("PI WEB config plugin serverSettings change only through serverSettingsUpdates operations");
   effectiveAgentConfig(env, normalized);
-  const existing = readExistingConfigObject(path);
   const storedPlugins = existing["plugins"] === undefined ? {} : parsePlugins(existing["plugins"], path);
   const updates = parseServerSettingsUpdates(serverSettingsUpdates);
   const plugins = preservePluginServerSettings(storedPlugins, normalized.plugins, updates);
@@ -251,8 +251,24 @@ export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, 
   return { path, exists: true, config: normalized, deprecatedAgentInputs: detectDeprecatedAgentInputs(env, normalized) };
 }
 
-/** Sets or clears the shared theme alone; every other key stays exactly as the file holds it. */
-export function saveSharedThemeConfig(theme: PiWebSharedThemeConfig | undefined, options: LoadOptions = {}): LoadedPiWebConfig {
+/**
+ * The VAPID private key the browser is never shown, put back from the file before a save is parsed.
+ *
+ * The config a browser reads has the private key removed, and a browser's save writes what it was
+ * shown. Without this, toggling a plugin from Settings would drop the key that signs every push and
+ * the save would be refused as a half-configured key pair - a Settings page quietly destroying the
+ * notification setup. A reader who edits the file by hand keeps the same rule: the key is stored, and
+ * the public half alone never overwrites it.
+ */
+function withStoredPushSecret(incoming: Record<string, unknown>, existing: Record<string, unknown>): Record<string, unknown> {
+  const push = incoming["push"];
+  if (!isRecord(push) || typeof push["vapidPublicKey"] !== "string" || push["vapidPrivateKey"] !== undefined) return incoming;
+  const stored = existing["push"];
+  if (!isRecord(stored) || typeof stored["vapidPrivateKey"] !== "string") return incoming;
+  return { ...incoming, push: { ...push, vapidPrivateKey: stored["vapidPrivateKey"] } };
+}
+
+/** Sets or clears the shared theme alone; every other key stays exactly as the file holds it. */export function saveSharedThemeConfig(theme: PiWebSharedThemeConfig | undefined, options: LoadOptions = {}): LoadedPiWebConfig {
   const env = options.env ?? process.env;
   const path = piWebConfigPath(env, options.cwd ?? process.cwd());
   const others = Object.fromEntries(Object.entries(readExistingConfigObject(path)).filter(([key]) => key !== "theme"));
@@ -368,6 +384,7 @@ export function parsePiWebConfig(value: Record<string, unknown>, path: string, a
     ...(value["extensionDialogsTimeoutMs"] !== undefined ? { extensionDialogsTimeoutMs: parseExtensionDialogsTimeoutMs(value["extensionDialogsTimeoutMs"], path) } : {}),
     ...(value["agent"] !== undefined ? { agent: parseAgentConfig(value["agent"], path, agentPathHost) } : {}),
     ...(value["translation"] !== undefined ? { translation: parseTranslationConfig(value["translation"], path) } : {}),
+    ...(value["push"] !== undefined ? { push: parsePushConfig(value["push"], path) } : {}),
     ...(value["updateCommand"] !== undefined ? { updateCommand: parseUpdateCommand(value["updateCommand"], path) } : {}),
   };
 }
@@ -443,6 +460,49 @@ function parseTranslationConfig(value: unknown, path: string): PiWebTranslationC
 
 /** Every key a translation block may carry, so a typo fails at startup instead of reading as a default. */
 const TRANSLATION_CONFIG_KEYS = ["provider", "baseUrl", "language", "timeoutMs"];
+
+/**
+ * The `push` section.
+ *
+ * A section that names nothing is accepted: the key pair is generated when it is absent, so an
+ * empty section means "push on, keys generated", which is what a reader who added the section to
+ * turn push on asked for. A key pair that is only half present is refused at startup, because a
+ * deployment that set one key expects both to be in use, and a silently missing private key reads as
+ * a notification system that works and does not.
+ */
+function parsePushConfig(value: unknown, path: string): PiWebPushConfig {
+  if (!isRecord(value)) throw new PiWebConfigError(`PI WEB config push must be an object: ${path}`);
+  for (const key of Object.keys(value)) {
+    if (PUSH_CONFIG_KEYS.includes(key)) continue;
+    throw new PiWebConfigError(`PI WEB config push has an unknown key "${key}": ${path}`);
+  }
+  const enabled = value["enabled"] === undefined ? undefined : parseBooleanKey(value["enabled"], "push.enabled", path);
+  const vapidPublicKey = value["vapidPublicKey"] === undefined ? undefined : parseString(value["vapidPublicKey"], "push.vapidPublicKey", path).trim();
+  const vapidPrivateKey = value["vapidPrivateKey"] === undefined ? undefined : parseString(value["vapidPrivateKey"], "push.vapidPrivateKey", path).trim();
+  if ((vapidPublicKey === undefined) !== (vapidPrivateKey === undefined)) {
+    throw new PiWebConfigError(`PI WEB config push needs both vapidPublicKey and vapidPrivateKey, or neither: ${path}`);
+  }
+  const subject = value["subject"] === undefined ? undefined : parseString(value["subject"], "push.subject", path).trim();
+  const ttlSeconds = value["ttlSeconds"] === undefined ? undefined : parseTtlSeconds(value["ttlSeconds"], path);
+  return {
+    ...(enabled === undefined ? {} : { enabled }),
+    ...(vapidPublicKey === undefined ? {} : { vapidPublicKey }),
+    ...(vapidPrivateKey === undefined ? {} : { vapidPrivateKey }),
+    ...(subject === undefined ? {} : { subject }),
+    ...(ttlSeconds === undefined ? {} : { ttlSeconds }),
+  };
+}
+
+/** Every key a push block may carry, so a typo fails at startup instead of reading as a default. */
+const PUSH_CONFIG_KEYS = ["enabled", "vapidPublicKey", "vapidPrivateKey", "subject", "ttlSeconds"];
+
+/** A week is the ceiling every push service honors; a message kept longer is kept by nobody. */
+function parseTtlSeconds(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 604_800) {
+    throw new PiWebConfigError(`PI WEB config push.ttlSeconds must be an integer between 0 and 604800: ${path}`);
+  }
+  return value;
+}
 
 /** An http(s) endpoint a translation request is sent to. */
 function parseHttpUrl(value: unknown, key: string, path: string): string {

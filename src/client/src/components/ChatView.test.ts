@@ -11,7 +11,7 @@ import {
   chatDeliveryMarkerVisible,
   chatDeliveryPresentation,
 } from "./ChatView";
-import { templateEventHandlerAfterMarker, templateEventHandlerNearMarker, templateText } from "../templateInspection.testSupport";
+import { templateEventHandlerAfterMarker, templateEventHandlerNearMarker, templateStrings, templateText, templateValues } from "../templateInspection.testSupport";
 import { groupEventKey, groupMarkerKey, groupRowKey } from "../rowIdentity";
 
 describe("chatDeliveryPresentation", () => {
@@ -414,9 +414,19 @@ describe("the way back to the newest message", () => {
   const isTemplate = (value: unknown): value is TemplateResult =>
     typeof value === "object" && value !== null && "strings" in value && "values" in value;
 
-  const jumpTemplate = (view: ChatView): TemplateResult | null => {
-    const render: unknown = Reflect.get(view, "renderJumpToBottom");
-    if (typeof render !== "function") throw new Error("expected a jump-to-bottom renderer");
+  /** The navigation renders its two controls as nested templates, so a marker is looked for there too. */
+  const withMarker = (template: TemplateResult, marker: string): TemplateResult => {
+    if (templateStrings(template).some((text) => text.includes(marker))) return template;
+    for (const value of templateValues(template)) {
+      if (!isTemplate(value)) continue;
+      return withMarker(value, marker);
+    }
+    throw new Error(`expected a template carrying ${marker}`);
+  };
+
+  const navigationTemplate = (view: ChatView): TemplateResult | null => {
+    const render: unknown = Reflect.get(view, "renderConversationNavigation");
+    if (typeof render !== "function") throw new Error("expected the conversation navigation renderer");
     const template: unknown = Reflect.apply(render, view, []);
     if (template === null) return null;
     if (!isTemplate(template)) throw new Error("expected a template");
@@ -430,9 +440,9 @@ describe("the way back to the newest message", () => {
     let scrolled = false;
     Reflect.set(view, "scrollToBottom", () => { scrolled = true; });
 
-    const template = jumpTemplate(view);
-    if (template === null) throw new Error("expected the button while the newest message is out of reach");
-    templateEventHandlerNearMarker(template, "jump-to-bottom")(new Event("click"));
+    const template = navigationTemplate(view);
+    if (template === null) throw new Error("expected the down control while the newest message is out of reach");
+    templateEventHandlerAfterMarker(withMarker(template, "jump-to-newest"), "@click")(new Event("click"));
 
     expect(scrolled).toBe(true);
     expect(Reflect.get(view, "pinnedToBottom")).toBe(true);
@@ -443,7 +453,7 @@ describe("the way back to the newest message", () => {
     const view = new ChatView();
     Reflect.set(view, "jumpToBottomVisible", false);
 
-    expect(jumpTemplate(view)).toBe(null);
+    expect(navigationTemplate(view)).toBe(null);
   });
 });
 

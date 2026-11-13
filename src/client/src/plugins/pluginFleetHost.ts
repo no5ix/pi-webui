@@ -1,6 +1,6 @@
 import type { Machine, SessionInfo } from "../api";
 import type { RealtimeEvent, SessionUiEvent } from "../../../shared/apiTypes";
-import type { FleetCoverage, FleetMachine, FleetMachineActionResult, FleetMachinesSnapshot, FleetOpenResult, FleetReachability, FleetSession, FleetSessionsSnapshot, PluginFleet, SessionFactScope, SessionRunAskedBy } from "../../../shared/pluginApiTypes";
+import type { FleetCoverage, FleetMachine, FleetMachineActionResult, FleetMachinesSnapshot, FleetOpenResult, FleetReachability, FleetSession, FleetSessionsSnapshot, PluginFleet, SessionFactScope, SessionRunAskedBy, SessionRunOutcome } from "../../../shared/pluginApiTypes";
 import type { SessionBoardController } from "../controllers/sessionBoardController";
 import type { MachineReachability, MachineReachabilityView } from "../machineReachability";
 import { machineSessionKey } from "../machineKeys";
@@ -10,7 +10,7 @@ import type { BoardAnswer, SessionBoard } from "../sync/sessionBoard";
 import type { ReadFact } from "../sync/readPhase";
 import { deepFrozen, type PluginFactBus } from "./pluginFacts";
 import type { RunStartTranscript } from "./runAskedBy";
-import { SessionRunWatch } from "./sessionRunFacts";
+import { SessionRunWatch, type SessionRunSpan } from "./sessionRunFacts";
 
 /** The roster as the app holds it. */
 export interface FleetRoster {
@@ -50,6 +50,17 @@ export interface PluginFleetHostDependencies {
   askedBy(machineId: string, sessionId: string, atStart: RunStartTranscript | undefined): SessionRunAskedBy;
   management: FleetMachineManagement;
   facts: Pick<PluginFactBus, "emit">;
+  /**
+   * A run the page watched ended, with the span it measured.
+   *
+   * The plugin facts are the published contract; this is the app's own listener on the same edge, so
+   * the status line and the device notification are driven by the page's one task lifecycle rather
+   * than by a second reading of the status frames. A session that only went quiet ends here as
+   * `unknown`, and its listener is expected to keep quiet about it.
+   */
+  runEnded?(machineId: string, sessionId: string, outcome: SessionRunOutcome, span: SessionRunSpan): void;
+  /** A run the page saw start. The finished run of that session stops being the answer to "how long did that take?". */
+  runStarted?(machineId: string, sessionId: string): void;
 }
 
 const FLEET_REACHABILITY: Readonly<Record<MachineReachability, FleetReachability>> = {
@@ -111,13 +122,15 @@ export class PluginFleetHost {
       started: (machineId, sessionId) => {
         this.runStarts.set(machineSessionKey(machineId, sessionId), deps.runStartTranscript(machineId, sessionId));
         deps.facts.emit("session.run-started", { session: this.sessionScope(machineId, sessionId) });
+        deps.runStarted?.(machineId, sessionId);
         this.changed();
       },
-      ended: (machineId, sessionId, outcome) => {
+      ended: (machineId, sessionId, outcome, span) => {
         const key = machineSessionKey(machineId, sessionId);
         const atStart = this.runStarts.get(key);
         this.runStarts.delete(key);
         deps.facts.emit("session.run-ended", { session: this.sessionScope(machineId, sessionId), outcome, askedBy: deps.askedBy(machineId, sessionId, atStart) });
+        deps.runEnded?.(machineId, sessionId, outcome, span);
         this.changed();
       },
     }, (machineId, sessionId) => deps.holdsStream(machineId, sessionId));

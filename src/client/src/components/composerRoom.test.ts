@@ -72,13 +72,21 @@ describe("the step footer of a question card", () => {
 
 describe("the button that returns you to the newest message", () => {
   /**
+   * The corner is the navigation container's: it holds the way down and the way back to the last
+   * prompt, so the two controls share one position and one measured dock reservation. The claims
+   * below are about where the reader sees the control, which is what the container decides; the
+   * button's own rule is about its shape.
+   */
+  const navigationRule = () => /\.conversation-navigation\s*\{([^}]*)\}/u.exec(sheets)?.[1] ?? "";
+
+  /**
    * It belongs in the corner a reader scrolling down is already watching. It
    * was moved to the top once because the bottom edge carried the composer
    * controls and a full-width activity dock; the dock is its own row now and
    * its quiet states hug their words, so that corner is free again.
    */
   it("sits at the bottom right, where the reader is heading", () => {
-    const rule = /\.jump-to-bottom\s*\{([^}]*)\}/u.exec(sheets)?.[1] ?? "";
+    const rule = navigationRule();
 
     expect(rule).toMatch(/bottom:/u);
     expect(rule).not.toMatch(/(^|;)\s*top:/u);
@@ -91,7 +99,7 @@ describe("the button that returns you to the newest message", () => {
    * is measured and spent as a length.
    */
   it("clears the activity dock by measuring it rather than guessing", () => {
-    const rule = /\.jump-to-bottom\s*\{([^}]*)\}/u.exec(sheets)?.[1] ?? "";
+    const rule = navigationRule();
     const bottom = /bottom:\s*calc\(([^;]*)\)/u.exec(rule)?.[1] ?? "";
 
     expect(bottom).toMatch(/--pi-chat-dock-room/u);
@@ -111,7 +119,7 @@ describe("the button that returns you to the newest message", () => {
    * that border, and the two lines read as one welded control.
    */
   it("is inset from the message's own border rather than sitting on it", () => {
-    const rule = /\.jump-to-bottom\s*\{([^}]*)\}/u.exec(sheets)?.[1] ?? "";
+    const rule = navigationRule();
     const right = /right:\s*calc\(([^;]*)\)/u.exec(rule)?.[1] ?? "";
 
     expect(right).toMatch(/--pi-chat-gutter/u);

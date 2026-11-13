@@ -19,6 +19,7 @@ import "./ModalSurface";
 import "./settings/SettingsAppearancePanel";
 import "./settings/SettingsNotificationsPanel";
 import type { NotificationAvailability } from "../notifications/taskNotifications";
+import type { PushActionOutcome, PushPanelState } from "../notifications/webPush";
 import "./settings/SettingsGeneralPanel";
 import "./settings/SettingsMachinesPanel";
 import "./settings/SettingsPackagesPanel";
@@ -78,6 +79,12 @@ export class SettingsDialog extends LitElement {
   @property({ attribute: false }) notificationsWanted = false;
   @property({ attribute: false }) onToggleNotifications?: (wanted: boolean) => Promise<NotificationAvailability>;
   @property({ attribute: false }) onTestNotification?: () => Promise<boolean>;
+  /** Push: this device's subscription, the devices this PI WEB sends to, and how to change them. */
+  @property({ attribute: false }) push: PushPanelState = { support: "unsupported", serverConfigured: false, serverDisabled: false, serverProblem: undefined, publicKey: undefined, devices: [], self: undefined, readFailure: undefined, devicesUnknown: undefined, keyChanged: false };
+  @property({ attribute: false }) onPushToggle?: (on: boolean) => Promise<PushActionOutcome>;
+  @property({ attribute: false }) onPushTest?: () => Promise<string>;
+  /** Register this device again, for a server that minted a new push key. */
+  @property({ attribute: false }) onPushReregister?: () => Promise<PushActionOutcome>;
   @property({ attribute: false }) fleetReport?: PiWebFleetReport;
   /** Each fleet machine's own PI WEB status read, by machine id. */
   @property({ attribute: false }) fleetStatuses: Readonly<Record<string, FleetStatusRead>> = {};
@@ -384,6 +391,9 @@ export class SettingsDialog extends LitElement {
           .wanted=${this.notificationsWanted}
           .onToggle=${(wanted: boolean) => this.onToggleNotifications?.(wanted) ?? Promise.resolve(this.notificationAvailability)}
           .onTest=${() => this.onTestNotification?.() ?? Promise.resolve(false)}
+          .push=${this.push}
+          .onPushToggle=${(on: boolean) => this.onPushToggle?.(on) ?? Promise.resolve({ ok: false, reason: "Push is not available here." })}
+          .onPushTest=${() => this.onPushTest?.() ?? Promise.resolve("Push is not available here.")} .onPushReregister=${() => this.onPushReregister?.() ?? Promise.resolve({ ok: false, reason: "Re-registering this device is not available here." })}
         ></settings-notifications-panel>
       `;
     }

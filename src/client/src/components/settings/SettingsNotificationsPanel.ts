@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { interactiveSurfaceStyles } from "../shared";
 import { settingsControlStyles } from "./settingsControlStyles.js";
 import type { NotificationAvailability } from "../../notifications/taskNotifications";
+import type { PushActionOutcome, PushPanelState } from "../../notifications/webPush";
+import { errorMessage } from "../../../../shared/unknownValues";
 
 /**
  * Device notifications, on this browser only.
@@ -27,27 +29,100 @@ export class SettingsNotificationsPanel extends LitElement {
   @property({ attribute: false }) onToggle?: (wanted: boolean) => Promise<NotificationAvailability>;
   /** Sends a notice now, so the reader can see the answer in the notification centre. */
   @property({ attribute: false }) onTest?: () => Promise<boolean>;
+  /**
+   * Push, for this device: what its browser can do, what the server can send, and which devices the
+   * server is sending to. Read from the server, because a device list assembled from what one browser
+   * remembers is not the list anything is delivered to.
+   */
+  @property({ attribute: false }) push: PushPanelState = { support: "unsupported", serverConfigured: false, serverDisabled: false, serverProblem: undefined, publicKey: undefined, devices: [], self: undefined, readFailure: undefined, devicesUnknown: undefined, keyChanged: false };
+  @property({ attribute: false }) onPushToggle?: (on: boolean) => Promise<PushActionOutcome>;
+  @property({ attribute: false }) onPushTest?: () => Promise<string>;
+  /** Register this device again at the push service, for a server that minted a new push key. */
+  @property({ attribute: false }) onPushReregister?: () => Promise<PushActionOutcome>;
   @state() private busy = false;
   @state() private answer: string | undefined;
+  @state() private pushBusy = false;
+  @state() private pushAnswer: string | undefined;
 
   private async toggle(wanted: boolean): Promise<void> {
     const onToggle = this.onToggle;
     if (onToggle === undefined || this.busy) return;
     this.busy = true;
-    const availability = await onToggle(wanted);
-    this.busy = false;
-    this.answer = AVAILABILITY_WORDS[availability];
-    this.requestUpdate();
+    try {
+      this.answer = AVAILABILITY_WORDS[await onToggle(wanted)];
+    } catch (error: unknown) {
+      this.answer = `The browser did not answer: ${errorMessage(error)}`;
+    } finally {
+      this.busy = false;
+      this.requestUpdate();
+    }
   }
 
   private async test(): Promise<void> {
     const onTest = this.onTest;
     if (onTest === undefined || this.busy) return;
     this.busy = true;
-    const posted = await onTest();
-    this.busy = false;
-    this.answer = posted ? "A notice went to the notification centre." : "Nothing was sent: this browser is not letting this page post notifications.";
+    try {
+      this.answer = (await onTest()) ? "A notice went to the notification centre." : "Nothing was sent: this browser is not letting this page post notifications.";
+    } catch (error: unknown) {
+      this.answer = `Nothing was sent: ${errorMessage(error)}`;
+    } finally {
+      this.busy = false;
+      this.requestUpdate();
+    }
+  }
+
+  private async pushToggle(on: boolean): Promise<void> {
+    const onPushToggle = this.onPushToggle;
+    if (onPushToggle === undefined || this.pushBusy) return;
+    this.pushBusy = true;
     this.requestUpdate();
+    try {
+      this.pushAnswer = (await onPushToggle(on)).reason;
+    } catch (error: unknown) {
+      this.pushAnswer = `Push was not turned ${on ? "on" : "off"}: ${errorMessage(error)}`;
+    } finally {
+      this.pushBusy = false;
+      this.requestUpdate();
+    }
+  }
+
+  /**
+   * Register this device again, at the push service as well as on the server.
+   *
+   * A browser gives back the subscription it already has, so a server that minted a new push key
+   * leaves this device registered with the old one and refused on every send. Only a new
+   * subscription can follow the server, and the switch cannot say that on its own.
+   */
+  private async pushReregister(): Promise<void> {
+    const onPushReregister = this.onPushReregister;
+    if (onPushReregister === undefined || this.pushBusy) return;
+    this.pushBusy = true;
+    this.requestUpdate();
+    try {
+      const outcome = await onPushReregister();
+      this.pushAnswer = outcome.reason;
+    } catch (error: unknown) {
+      this.pushAnswer = `Re-registering this device failed: ${errorMessage(error)}`;
+    } finally {
+      this.pushBusy = false;
+      this.requestUpdate();
+    }
+  }
+
+  private async pushTest(): Promise<void> {
+    const onPushTest = this.onPushTest;
+    if (onPushTest === undefined || this.pushBusy) return;
+    this.pushBusy = true;
+    this.requestUpdate();
+    try {
+      this.pushAnswer = await onPushTest();
+    } catch (error: unknown) {
+      this.pushAnswer = `The test push did not run: ${errorMessage(error)}`;
+    } finally {
+      this.pushBusy = false;
+      this.requestUpdate();
+    }
   }
 
   protected override render(): TemplateResult {
@@ -76,13 +151,77 @@ export class SettingsNotificationsPanel extends LitElement {
           <button type="button" @click=${() => { void this.test(); }} ?disabled=${this.busy || !granted}>Send a test notice</button>
         </div>
         ${isIOS() && !isInstalledApp() ? html`<p class="hint">On iPhone and iPad, Safari only shows these notices to the installed web app: use Add to Home Screen, then turn this on there.</p>` : null}
-        <p class="hint">The notice arrives while this browser is open, including in a background tab. A notice that arrives after the browser was quit has to be sent by the server through Apple's push service; PI WEB does not do that yet.</p>
+        <p class="hint">The notice arrives while this browser is open, including in a background tab. A notice that arrives after the browser was quit is sent by the server through the push services - register this device under "Reach this device when its browser is closed".</p>
       </div>
+      <div class="row">
+        <label class="field">
+          <span class="field-heading">Reach this device when its browser is closed</span>
+          <button
+            type="button"
+            role="switch"
+            class=${`switch ${this.push.self !== undefined ? "on" : ""}`}
+            aria-checked=${this.push.self !== undefined ? "true" : "false"}
+            aria-label="Reach this device with push notifications when its browser is closed"
+            ?disabled=${this.pushBusy || this.push.support === "unsupported" || this.push.support === "insecure" || this.push.serverDisabled || !this.push.serverConfigured}
+            @click=${() => { void this.pushToggle(this.push.self === undefined); }}
+          ><span class="switch-knob"></span></button>
+        </label>
+        <p class="state">${this.pushSentence()}</p>
+        ${this.pushAnswer === undefined ? null : html`<p class="state">${this.pushAnswer}</p>`}
+        <div class="actions">
+          <button type="button" @click=${() => { void this.pushTest(); }} ?disabled=${this.pushBusy || !this.push.serverConfigured || this.push.serverDisabled}>Send a test push</button>
+          ${this.push.keyChanged ? html`<button type="button" @click=${() => { void this.pushReregister(); }} ?disabled=${this.pushBusy}>Register this device again</button>` : null}
+        </div>
+        <ul class="devices">
+          ${this.renderDevices()}
+        </ul>
+        <p class="hint">Each device registers its own address, and every registered device is sent the events. A push service accepting a message is how the server knows a device was woken; it is not a claim that a person saw the notice.</p>
+        ${isIOS() && !isInstalledApp() ? html`<p class="hint">On iPhone and iPad, Safari gives push only to a web app added to the Home Screen, over HTTPS with a certificate the phone trusts: add PI WEB to the Home Screen first, then turn this on there.</p>` : null}
     `;
+  }
+
+  /**
+   * The devices this server can wake, each with what the server knows about the last time it tried.
+   *
+   * A device with no delivery has never been reached; a device with failures is a device whose
+   * messages the push service is refusing. Both are said, because a list of names that are not being
+   * reached is the most misleading kind of list.
+   */
+  private renderDevices() {
+    if (this.push.readFailure !== undefined) {
+      return html`<li class="hint">The device list did not answer (${this.push.readFailure}). This is not a list of no devices.</li>`;
+    }
+    if (this.push.devicesUnknown !== undefined) {
+      return html`<li class="hint">The server cannot read its push file (${this.push.devicesUnknown}), so a device that registered earlier is missing from what follows.</li>`;
+    }
+    if (this.push.devices.length === 0) {
+      return html`<li class="hint">No device is registered for push notifications on this PI WEB.</li>`;
+    }
+    return this.push.devices.map((device) => {
+      const isSelf = this.push.self?.id === device.id;
+      const delivered = device.lastDeliveredAt === undefined
+        ? " - not delivered to yet"
+        : ` - last delivered ${deviceDate(device.lastDeliveredAt)}`;
+      const failures = device.failures > 0 ? ` - ${String(device.failures)} failed send(s)` : "";
+      return html`<li class="hint">${deviceLabel(device.userAgent)}${isSelf ? html` <b>(this device</b>)` : null}${delivered}${failures}</li>`;
+    });
   }
 
   private availabilitySentence(): string {
     return AVAILABILITY_SENTENCES[this.availability];
+  }
+
+  /** What push can do for this device, said as the truth of it: browser, server, or both. */
+  private pushSentence(): string {
+    if (this.push.readFailure !== undefined) return `This PI WEB did not answer its push state: ${this.push.readFailure}`;
+    if (this.push.support === "unsupported") return "This browser has no push notifications. On iPhone and iPad Safari gives them only to a web app added to the Home Screen.";
+    if (this.push.support === "insecure") return "Push needs HTTPS: this page is served over a plain http address the browser will not subscribe from.";
+    if (this.push.serverDisabled) return "This PI WEB has push turned off in its config (push.enabled: false).";
+    if (!this.push.serverConfigured) return "This PI WEB cannot send push: " + (this.push.serverProblem ?? "no VAPID key pair is available.");
+    if (this.push.devicesUnknown !== undefined) return `The server cannot read its push file: ${this.push.devicesUnknown}`;
+    if (this.push.keyChanged) return "This device is registered with a push key this server no longer has, so its messages are refused. Register it again.";
+    if (this.push.self !== undefined) return "This device is registered for push notifications.";
+    return "Push is available. Turning this on registers this device's address with PI WEB.";
   }
 
   static override styles = [interactiveSurfaceStyles, settingsControlStyles, css`
@@ -100,6 +239,8 @@ export class SettingsNotificationsPanel extends LitElement {
     .switch.on .switch-knob { transform: translateX(18px); }
     .state { margin: 0; color: var(--pi-muted); font-size: var(--pi-text-sm); }
     .hint { margin: 0; color: var(--pi-muted); font-size: var(--pi-text-xs); }
+    .devices { margin: 0; padding: 0 0 0 var(--pi-space-5); list-style: none; display: grid; gap: var(--pi-space-2); }
+    .devices li { overflow-wrap: anywhere; }
     .actions { display: inline-flex; gap: var(--pi-space-4); }
     .actions button { box-sizing: border-box; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-sm); background: var(--pi-surface); color: var(--pi-text); padding: var(--pi-space-2) var(--pi-space-4); font: var(--pi-text-sm) var(--pi-font-ui); cursor: pointer; }
     @media (pointer: coarse) { .actions button { min-height: var(--pi-control-height-touch); } }
@@ -145,6 +286,55 @@ function isIOS(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
   return /iPad|iPhone|iPod/u.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * The order a user agent is read in: Edge and Opera before Chrome, Chrome on iOS before Chrome, and
+ * Safari last, because every one of them says "Safari".
+ */
+const DEVICE_OPERATING_SYSTEMS: readonly [RegExp, string][] = [
+  [/iPhone|iPad/iu, "iPhone or iPad"],
+  [/Android/iu, "Android"],
+  [/Mac OS X/iu, "Mac"],
+  [/Windows/iu, "Windows"],
+  [/Linux/iu, "Linux"],
+];
+
+const DEVICE_BROWSERS: readonly [RegExp, string][] = [
+  [/Edg\//u, "Edge"],
+  [/OPR\//u, "Opera"],
+  [/Firefox\//u, "Firefox"],
+  [/CriOS/iu, "Chrome on iOS"],
+  [/Chrome\//u, "Chrome"],
+  [/Safari\//u, "Safari"],
+];
+
+function firstLabel(patterns: readonly [RegExp, string][], userAgent: string): string | undefined {
+  for (const [pattern, label] of patterns) {
+    if (pattern.test(userAgent)) return label;
+  }
+  return undefined;
+}
+
+/**
+ * A device, in the few words a reader recognises in a list.
+ *
+ * The user agent is what the browser offered at registration; it is summarised rather than shown, so
+ * a phone in a list of four is findable, and it is never treated as a fact about the device beyond
+ * what the browser claimed.
+ */
+function deviceLabel(userAgent: string): string {
+  const os = firstLabel(DEVICE_OPERATING_SYSTEMS, userAgent);
+  const browser = firstLabel(DEVICE_BROWSERS, userAgent);
+  if (browser === undefined) return os ?? "A device";
+  return os === undefined ? browser : `${browser} on ${os}`;
+}
+
+/** The date a device was last woken, in the short form a settings list uses. */
+function deviceDate(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 declare global {

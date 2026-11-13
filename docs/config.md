@@ -64,6 +64,13 @@ Process restarts depend on the key:
   },
   "maxUploadBytes": 67108864,
   "extensionDialogsTimeoutMs": 0,
+  "push": {
+    "enabled": true,
+    "vapidPublicKey": "BKdf…",
+    "vapidPrivateKey": "{\"kty\":\"EC\",…}",
+    "subject": "mailto:you@example.com",
+    "ttlSeconds": 3600
+  },
   "plugins": {
     "updates": { "enabled": true },
     "info": { "enabled": false }
@@ -429,11 +436,28 @@ The `askUser` config key and `PI_WEB_ASK_USER` are retired. A config file that s
 
 ### Extension dialogs
 
-Pi extensions can ask the user questions from `ctx.ui.confirm()`, `ctx.ui.select()`, `ctx.ui.input()`, and `ctx.ui.editor()` — including from `session_start` hooks and in-flight `tool_call` hooks. PI WEB renders these dialogs inline in the session transcript and answers them through a dedicated session-daemon channel, never the prompt queue, so a dialog parked inside a `tool_call` hook cannot deadlock the run. Dialog support is always on; there is no enable flag. See [Pi extensions in PI WEB](pi-extensions.md) for behavior details and author guidance.
+Pi extensions can ask the user questions from `ctx.ui.confirm()`, `ctx.ui.select()`, `ctx.ui.input()`, and `ctx.ui.editor()` — including from `session_start` hooks and in-flight `tool_call` hooks. PI WEB renders these dialogs inline in the session transcript and answers them through a dedicated session-daemon channel, never the prompt queue, so a dialog parked inside a `tool_call` hook cannot deadlock the run. Dialog support is always on; there is no enable flag. See [Pi extensions in PI WEB](pi-extensions.md) for behavior details and author guidance. A dialog that opens is also sent to every device registered for push: the session's name and how many questions are waiting, and its tap opens the session. See [Notifications](notifications.md).
 
 `extensionDialogsTimeoutMs` is the unattended-dialog safety valve: how long the session daemon waits for an answer before settling the dialog with its kind's cancel value (`false` for confirm, `undefined` for select, input and editor). It defaults to `0`, which waits for an answer indefinitely; set a positive number of milliseconds to auto-cancel instead. A dialog that expires is settled with its cancel value, which the extension cannot tell apart from a deliberate dismissal, so a timeout short enough to fire while someone is still reading turns their reading time into a silent answer. An extension's own `timeout` option still applies, and the effective deadline is the sooner of the two.
 
 The key is edited directly in the global config file. [Restart the session daemon](install.md#restart-the-session-daemon) after changing it.
+
+### Mobile push notifications
+
+`push` controls the Web Push path that wakes devices the server has never met — a phone with PI WEB closed, a laptop with its lid open on another page. The feature is on when the key is absent; nothing has to be configured for it to work.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | `false` closes the feature: no message is sent, the registration endpoint refuses, and Settings → Notifications says the server has push off. |
+| `vapidPublicKey` / `vapidPrivateKey` | generated | The VAPID identity every push service accepts this server as. Set both halves, and the server uses them and writes no file. Set neither, and the session daemon generates one pair on first start. |
+| `subject` | `mailto:pi-web@localhost` | The contact a push service reaches when it rejects a server's identity. A reachable `mailto:` or `https:` URL is required by the push services; set it when the instance matters to someone. |
+| `ttlSeconds` | `3600` | How long a push service may hold a message for a device that is offline, in seconds (0–604800, seven days). |
+
+The generated pair is written to `$PI_WEB_DATA_DIR/push/vapid.json`. Keep that file with the data directory's backups, and do not delete it to rotate keys: the push services reject a new identity to devices registered under the old one, and every device has to register again. Set the pair in the config to give several instances one identity, or to keep the key material in your own store. A configured pair must be complete and usable: a half-configured pair, a public key that does not belong to the private one, or a private key that is not an EC P-256 key, are all refused, and Settings says so instead of sending. The private half is accepted as a JWK JSON string, as PEM, or as the raw 32-byte scalar.
+
+The private key is loaded by the session daemon alone. It is not in the browser-facing config, in a plugin's config, in a log line, in a response body, or in a URL; `push.vapidPublicKey` is the public half alone. The `push` key is global: a project-local config cannot set it, and the Settings screen never edits the config.
+
+The key is edited directly in the global config file. [Restart the session daemon](install.md#restart-the-session-daemon) after changing it; the registration endpoints and every send live in that process, and the browser reads the public half when the Settings screen opens. [Notifications](notifications.md) covers what is sent, to which devices, and how a device is registered.
 
 ### PI WEB plugin config and recovery
 

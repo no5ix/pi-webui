@@ -1,4 +1,3 @@
-import { runDuration } from "../runDuration";
 
 /**
  * When a finished task deserves a device notification, said once.
@@ -31,22 +30,4 @@ export function taskCompletionVerdict(facts: TaskCompletionFacts): TaskCompletio
   if (facts.stoppedByReader) return "stopped-by-reader";
   if (facts.readerWatching) return "reader-watching";
   return "notify";
-}
-
-export interface TaskFinishedNoticeContent {
-  readonly title: string;
-  readonly body: string;
-}
-
-/**
- * The notice's two lines: which session, and how long its task took. The duration is the number the
- * reader left the page to find out, and it comes from the clock in `turnRunClock.ts`; when this
- * device did not watch the task from its start, the body says the task ended and does not invent a time.
- */
-export function taskFinishedNoticeContent(sessionName: string, durationMs: number | undefined): TaskFinishedNoticeContent {
-  const name = sessionName.trim() === "" ? "A pi session" : sessionName.trim();
-  return {
-    title: `${name} finished`,
-    body: durationMs === undefined ? "The task is done. Open PI WEB to read the answer." : `Finished in ${runDuration(durationMs)}. Open PI WEB to read the answer.`,
-  };
 }
