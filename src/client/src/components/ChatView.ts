@@ -1540,7 +1540,7 @@ export class ChatView extends LitElement {
           ${this.renderQueuedMessages()}
           ${this.renderWaitingForYou()}
         </div>
-        ${this.renderPromptNavigation()}
+
         ${this.renderJumpToBottom()}
         ${this.renderActivityDock()}
       </div>
