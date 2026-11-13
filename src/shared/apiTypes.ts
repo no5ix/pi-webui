@@ -282,9 +282,11 @@ export interface PiWebConfigValues {
   ntfy?: NtfyConfig;
   /** Deprecated agent-configuration keys, still honored as aliases during the deprecation window and detected for the deprecation warning (see PiWebAgentConfig). */
   agent?: PiWebAgentConfig;
-  /**
-   * `maxFileMb` is moved to `<name>.1` and started again; `keepFiles` older copies are kept.
-   */
+}
+
+/**
+ * `maxFileMb` is moved to `<name>.1` and started again; `keepFiles` older copies are kept.
+ */
 export interface PiWebLoggingConfig {
   level?: "errors" | "requests" | "debug";
   maxFileMb?: number;
