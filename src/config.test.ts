@@ -370,9 +370,7 @@ describe("the push section", () => {
 
     savePiWebConfig({ port: 9001, push: { vapidPublicKey: publicKey } }, testOptions());
 
-    const written: { push?: { vapidPublicKey?: string; vapidPrivateKey?: string } } = JSON.parse(await readFile(configPath, "utf8"));
-    expect(written.push?.vapidPublicKey).toBe(publicKey);
-    expect(written.push?.vapidPrivateKey).toBe(privateKey);
+    expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({ port: 9001, push: { vapidPublicKey: publicKey, vapidPrivateKey: privateKey } });
   });
 
   it("keeps the VAPID private key out of the config a browser is shown", () => {

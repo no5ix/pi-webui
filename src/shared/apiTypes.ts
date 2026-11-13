@@ -301,10 +301,16 @@ export interface PiWebPushConfig {
   vapidPublicKey?: string;
   /** The VAPID signing key: an EC P-256 JWK as JSON, or a PEM private key. Never sent to a browser. */
   vapidPrivateKey?: string;
-  /** The contact the push services ask a sender to identify itself with: `mailto:` or an https URL. */
+  /** The contact the push services ask a sender to identify itself with: `mailto:` with a real domain, or an https URL. */
   subject?: string;
   /** How long a push service may hold a message for a device that is unreachable, in seconds. */
   ttlSeconds?: number;
+  /**
+   * The Tailscale logins allowed to register a device. Empty (the default) lets any request PI WEB is
+   * reachable on register, which is PI WEB's existing posture where the network is the boundary, and the
+   * login is still recorded per device. Naming logins restricts registration and delivery to them.
+   */
+  allowedTailnetLogins?: string[];
 }
 
 /**

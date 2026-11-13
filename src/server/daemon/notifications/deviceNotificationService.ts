@@ -1,4 +1,5 @@
 import { WebPushSender, DEFAULT_PUSH_TTL_SECONDS, type PushFetch } from "./webPushSender.js";
+import { tailnetLoginAllowed } from "../../../shared/deviceIdentity.js";
 import type { PushSubscriptionStore } from "./pushSubscriptionStore.js";
 import type { ResolvedVapidKeys } from "./vapidKeys.js";
 import { noticeTagFor, notificationSessionUrl, type DeviceNotificationEvent, type PushDeliveryResult, type PushServiceState } from "../../../shared/notificationEvents.js";
@@ -34,9 +35,16 @@ export interface DeviceNotificationServiceOptions {
   subscriptions: PushSubscriptionStore;
   keys: ResolvedVapidKeys;
   subject: string;
+  /** Why the configured contact will be refused by the push services; shown, because every device looks healthy when it is. */
+  subjectProblem?: string;
   ttlSeconds?: number;
   /** `push.enabled: false`. With push off the events still reach the page, which is the browser's own notice. */
   enabled?: boolean;
+  /**
+   * The tailnet logins allowed to keep a device. Empty - the default - leaves PI WEB's existing posture,
+   * where the network is the boundary, and the identity is only recorded.
+   */
+  allowedTailnetLogins?: readonly string[];
   logger?: DeviceNotificationLogger;
   fetch?: PushFetch;
   /** How long an event id is remembered as already sent. */
@@ -60,6 +68,7 @@ export class DeviceNotificationService {
   private readonly sender: WebPushSender | undefined;
   private readonly ttlSeconds: number;
   private readonly enabled: boolean;
+  private readonly allowedTailnetLogins: readonly string[];
   private readonly logger: DeviceNotificationLogger;
   private readonly dedupeWindowMs: number;
   private readonly dedupeLimit: number;
@@ -71,6 +80,7 @@ export class DeviceNotificationService {
   constructor(private readonly options: DeviceNotificationServiceOptions) {
     this.ttlSeconds = options.ttlSeconds ?? DEFAULT_PUSH_TTL_SECONDS;
     this.enabled = options.enabled !== false;
+    this.allowedTailnetLogins = options.allowedTailnetLogins ?? [];
     this.logger = options.logger ?? silentLogger;
     this.dedupeWindowMs = options.dedupeWindowMs ?? DEFAULT_DEDUPE_WINDOW_MS;
     this.dedupeLimit = options.dedupeLimit ?? DEFAULT_DEDUPE_LIMIT;
@@ -91,7 +101,21 @@ export class DeviceNotificationService {
       configured: this.sender !== undefined,
       source: this.keysSource(),
       subscriptions,
+      subject: this.options.subject,
+      ttlSeconds: this.ttlSeconds,
+      allowedTailnetLogins: this.allowedTailnetLogins,
     };
+  }
+
+  /**
+   * Whether a tailnet identity may register a device here.
+   *
+   * The route asks, so the answer a browser is refused and the answer a device is silently skipped by
+   * are the same decision in one place: a device registered before an allowlist was written is not sent
+   * to, and the device list says so rather than going quiet.
+   */
+  identityAllowed(login: string): boolean {
+    return tailnetLoginAllowed(login, this.allowedTailnetLogins);
   }
 
   keysSource(): PushServiceState["source"] {
@@ -102,7 +126,8 @@ export class DeviceNotificationService {
   /** Why push is not available, in the words the settings panel shows. Undefined when it is. */
   problem(): string | undefined {
     if (!this.enabled) return "Push is turned off in the PI WEB config (push.enabled: false).";
-    return this.options.keys.problem ?? (this.sender === undefined ? "No VAPID key pair is available." : undefined);
+    const keyProblem = this.options.keys.problem ?? (this.sender === undefined ? "No VAPID key pair is available." : undefined);
+    return keyProblem ?? this.options.subjectProblem;
   }
 
   publicKey(): string | undefined {
@@ -110,12 +135,16 @@ export class DeviceNotificationService {
   }
 
   /**
-   * Send one event to every registered device.
+   * Send one event to every registered device, or to one of them.
    *
    * Never throws: a notification is a convenience, and a push service that is down must not become a
    * failed prompt.
+   *
+   * `only` is the settings page's per-device test. A single device is the only way a reader can tell an
+   * iPhone that has gone quiet from a Chrome that answers, and a test sent to one device is a test that
+   * does not put four notifications on four screens.
    */
-  async notify(event: DeviceNotificationEvent): Promise<DeviceNotificationDelivery> {
+  async notify(event: DeviceNotificationEvent, options: { only?: string } = {}): Promise<DeviceNotificationDelivery> {
     if (this.isDeduped(event.id) || this.inFlight.has(event.id)) return { event, deduped: true, targets: 0, results: [] };
     const sender = this.sender;
     if (!this.enabled || sender === undefined) {
@@ -133,15 +162,28 @@ export class DeviceNotificationService {
     }
     this.inFlight.add(event.id);
     const results: PushDeliveryResult[] = [];
+    const sentTo = new Set<string>();
+    const recipients = options.only === undefined ? subscriptions : subscriptions.filter((subscription) => subscription.id === options.only);
     try {
-      for (const subscription of subscriptions) {
+      for (const subscription of recipients) {
+        if (!this.identityAllowed(subscription.tailnetLogin)) {
+          results.push({
+            subscriptionId: subscription.id,
+            outcome: "rejected",
+            status: undefined,
+            reason: `The tailnet login that registered this device (${subscription.tailnetLogin === "" ? "no identity" : subscription.tailnetLogin}) is not in push.allowedTailnetLogins`,
+          });
+          continue;
+        }
         const payload = JSON.stringify(pushPayload(fitEvent(event, subscription.appBaseUrl), subscription.appBaseUrl));
-        results.push(await sender.send(subscription, payload).catch((error: unknown): PushDeliveryResult => ({
+        const result = await sender.send(subscription, payload).catch((error: unknown): PushDeliveryResult => ({
           subscriptionId: subscription.id,
           outcome: "failed",
           status: undefined,
           reason: error instanceof Error ? error.message : String(error),
-        })));
+        }));
+        sentTo.add(subscription.id);
+        results.push(result);
       }
     } finally {
       this.inFlight.delete(event.id);
@@ -149,12 +191,16 @@ export class DeviceNotificationService {
     const expired = results.filter((result) => result.outcome === "expired").map((result) => result.subscriptionId);
     if (expired.length > 0) await this.options.subscriptions.removeMany(expired).catch(() => undefined);
     for (const result of results) {
-      const gone = result.outcome === "expired";
-      if (!gone) await this.options.subscriptions.recordDelivery(result.subscriptionId, result.outcome === "sent").catch(() => undefined);
+      // A device this server refused to write to is not a device a push service answered about, so its
+      // row keeps the answer that is true: an address that was never sent to records nothing.
+      if (!sentTo.has(result.subscriptionId)) continue;
+      await this.options.subscriptions.recordDelivery(result.subscriptionId, result).catch(() => undefined);
     }
     this.recordSent(event.id);
     const delivered = results.filter((result) => result.outcome === "sent").length;
-    const line = `[notifications] ${event.kind} for ${event.sessionId}: ${String(delivered)} of ${String(results.length)} device(s) woken`;
+    // The push service said yes. That is not the same sentence as "a person was notified": only the
+    // device knows whether it woke, showed the notice, or had the app's notifications switched off.
+    const line = `[notifications] ${event.kind} for ${event.sessionId}: ${String(delivered)} of ${String(results.length)} device(s) accepted by their push service`;
     if (delivered === results.length) this.logger.info(line);
     else this.logger.warn(`${line}; ${results.filter((result) => result.outcome !== "sent").map(describeResult).join("; ")}`);
     return { event, deduped: false, targets: results.length, results };

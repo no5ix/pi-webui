@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { piWebDataDir } from "../../../config.js";
-import { isAppBaseUrl, isPushEndpoint, type PushSubscriptionRecord, type PushSubscriptionRegistration } from "../../../shared/notificationEvents.js";
+import { isAppBaseUrl, isPushEndpoint, PUSH_DELIVERY_OUTCOMES, type PushDeliveryRecord, type PushDeliveryResult, type PushSubscriptionRecord, type PushSubscriptionRegistration } from "../../../shared/notificationEvents.js";
 import { errorMessage, isRecord } from "../../../shared/unknownValues.js";
 
 /**
@@ -44,6 +44,8 @@ export function defaultPushSubscriptionFilePath(env: NodeJS.ProcessEnv = process
 }
 
 export const PUSH_SUBSCRIPTION_LIMIT = 64;
+/** A tailnet login and a display name, bounded so a header cannot grow a stored file. */
+const TAILNET_LOGIN_MAX_LENGTH = 120;
 
 interface StoredFile {
   subscriptions: PushSubscriptionRecord[];
@@ -82,15 +84,21 @@ export class PushSubscriptionStore {
    * Register a device. An endpoint that is already known is refreshed in place, keeping its id, so a
    * browser that re-subscribes on every load does not accumulate a row per load.
    *
+   * `identity` is who Tailscale said made the request, empty when it said no one. It is stored with the
+   * address because the address outlives the moment: a device list a reader can revoke has to name the
+   * device and say who registered it.
+   *
    * Returns `undefined` when the file is at its limit: a device is told to ask its browser to
    * unsubscribe, which is the only party that can free an address.
    */
-  async register(registration: PushSubscriptionRegistration): Promise<{ record: PushSubscriptionRecord; created: boolean } | undefined> {
+  async register(registration: PushSubscriptionRegistration, identity: { login: string; name: string } = { login: "", name: "" }): Promise<{ record: PushSubscriptionRecord; created: boolean } | undefined> {
     const stored = await this.read();
     const endpoint = registration.endpoint.trim();
     const existing = stored.subscriptions.find((entry) => entry.endpoint === endpoint);
     const appBaseUrl = registration.appBaseUrl?.trim() ?? "";
     const userAgent = (registration.userAgent ?? "").trim().slice(0, 256);
+    const login = identity.login.trim().toLowerCase().slice(0, TAILNET_LOGIN_MAX_LENGTH);
+    const name = identity.name.trim().slice(0, TAILNET_LOGIN_MAX_LENGTH);
     if (existing !== undefined) {
       const refreshed: PushSubscriptionRecord = {
         ...existing,
@@ -98,6 +106,8 @@ export class PushSubscriptionStore {
         authToken: registration.keys.auth,
         appBaseUrl: appBaseUrl === "" ? existing.appBaseUrl : appBaseUrl,
         userAgent: userAgent === "" ? existing.userAgent : userAgent,
+        tailnetLogin: login === "" ? existing.tailnetLogin : login,
+        tailnetName: name === "" ? existing.tailnetName : name,
       };
       if (sameRecord(existing, refreshed)) return { record: existing, created: false };
       await this.write({ ...stored, subscriptions: stored.subscriptions.map((entry) => (entry.id === existing.id ? refreshed : entry)) });
@@ -111,8 +121,11 @@ export class PushSubscriptionStore {
       authToken: registration.keys.auth,
       appBaseUrl,
       userAgent,
+      tailnetLogin: login,
+      tailnetName: name,
       createdAt: this.now().toISOString(),
       lastDeliveredAt: undefined,
+      lastFailure: undefined,
       failures: 0,
     };
     await this.write({ subscriptions: [...stored.subscriptions, record] });
@@ -137,14 +150,26 @@ export class PushSubscriptionStore {
     return removed;
   }
 
-  /** Record a delivery, and count a failure so a permanently failing device can be reported. */
-  async recordDelivery(id: string, delivered: boolean): Promise<void> {
+  /**
+   * Remember what the push service answered about this device.
+   *
+   * An acceptance is a timestamp; a refusal keeps its status and the service's reason, because the
+   * question a reader is asking is "when did this device last answer, and what did it say". A success
+   * clears the failure count without erasing the last failure: the panel shows both, and a device that
+   * failed for a week and then answered is a device worth explaining.
+   */
+  async recordDelivery(id: string, result: PushDeliveryResult): Promise<void> {
     const stored = await this.read();
     if (!stored.subscriptions.some((entry) => entry.id === id)) return;
     const at = this.now().toISOString();
+    const accepted = result.outcome === "sent";
+    const failure: PushDeliveryRecord = { at, outcome: result.outcome, status: result.status, reason: result.reason };
     await this.write({
       subscriptions: stored.subscriptions.map((entry) => (entry.id === id
-        ? { ...entry, ...(delivered ? { lastDeliveredAt: at, failures: 0 } : { failures: entry.failures + 1 }) }
+        ? {
+          ...entry,
+          ...(accepted ? { lastDeliveredAt: at, failures: 0 } : { failures: entry.failures + 1, lastFailure: failure }),
+        }
         : entry)),
     });
   }
@@ -188,7 +213,8 @@ export class PushSubscriptionStore {
 }
 
 function sameRecord(a: PushSubscriptionRecord, b: PushSubscriptionRecord): boolean {
-  return a.publicKey === b.publicKey && a.authToken === b.authToken && a.appBaseUrl === b.appBaseUrl && a.userAgent === b.userAgent;
+  return a.publicKey === b.publicKey && a.authToken === b.authToken && a.appBaseUrl === b.appBaseUrl && a.userAgent === b.userAgent
+    && a.tailnetLogin === b.tailnetLogin && a.tailnetName === b.tailnetName;
 }
 
 type FileRead = { ok: true; value: unknown } | { ok: false; reason: string };
@@ -265,8 +291,33 @@ function toRecord(entry: Record<string, unknown>): PushSubscriptionRecord {
     authToken: text(entry["authToken"], 512),
     appBaseUrl: webBase(text(entry["appBaseUrl"], 512)),
     userAgent: text(entry["userAgent"], 256),
+    tailnetLogin: text(entry["tailnetLogin"], TAILNET_LOGIN_MAX_LENGTH).toLowerCase(),
+    tailnetName: text(entry["tailnetName"], TAILNET_LOGIN_MAX_LENGTH),
     createdAt: text(entry["createdAt"], 40),
     lastDeliveredAt: typeof entry["lastDeliveredAt"] === "string" ? text(entry["lastDeliveredAt"], 40) : undefined,
+    lastFailure: deliveryRecord(entry["lastFailure"]),
     failures: number(entry["failures"]),
   };
 }
+
+/**
+ * A stored failure, read defensively.
+ *
+ * A status of 0 means "the send never reached a service" (a connect failure), which is a real answer
+ * about a device; the record is kept for that case as much as for a 410.
+ */
+function deliveryRecord(value: unknown): PushDeliveryRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  const at = value["at"];
+  const reported = value["outcome"];
+  const outcome = typeof reported === "string" ? PUSH_DELIVERY_OUTCOMES.find((entry) => entry === reported) : undefined;
+  if (typeof at !== "string" || at === "" || outcome === undefined) return undefined;
+  const status = value["status"];
+  return {
+    at: at.slice(0, 40),
+    outcome,
+    ...(typeof status === "number" && Number.isFinite(status) ? { status } : { status: undefined }),
+    reason: typeof value["reason"] === "string" ? value["reason"].slice(0, 200) : undefined,
+  };
+}
+

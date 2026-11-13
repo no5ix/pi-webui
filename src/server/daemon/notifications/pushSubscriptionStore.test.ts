@@ -68,17 +68,39 @@ describe("PushSubscriptionStore", () => {
     expect((await store.list()).map((entry) => entry.endpoint)).toEqual(["https://push.example.com/b"]);
   });
 
-  it("counts a failed send and clears the count on a delivered one", async () => {
+  it("keeps what the push service answered: an accepted send as a time, a refused one as its status and reason", async () => {
     const store = new PushSubscriptionStore({ filePath });
     const registered = await store.register(registration("https://push.example.com/a"));
     const id = present(registered, "the registration").record.id;
-    await store.recordDelivery(id, false);
-    await store.recordDelivery(id, false);
-    expect((await store.list())[0]?.failures).toBe(2);
-    await store.recordDelivery(id, true);
+    await store.recordDelivery(id, { subscriptionId: id, outcome: "unauthorized", status: 403, reason: "BadJwtToken" });
+    await store.recordDelivery(id, { subscriptionId: id, outcome: "expired", status: 410, reason: "The push service says this subscription is gone" });
+    const refused = (await store.list())[0];
+    expect(refused?.failures).toBe(2);
+    expect(refused?.lastDeliveredAt).toBeUndefined();
+    const failure = present(refused?.lastFailure, "the last failure");
+    expect(failure).toMatchObject({ outcome: "expired", status: 410, reason: "The push service says this subscription is gone" });
+    expect(failure.at).toBeTypeOf("string");
+
+    await store.recordDelivery(id, { subscriptionId: id, outcome: "sent", status: 201, reason: undefined });
     const delivered = (await store.list())[0];
     expect(delivered?.failures).toBe(0);
     expect(delivered?.lastDeliveredAt).toBeTypeOf("string");
+    // The last refusal survives an acceptance: a device that was refused for a week and then answered
+    // is a device worth explaining, and the panel shows both rows of its history.
+    expect(delivered?.lastFailure?.status).toBe(410);
+  });
+
+  it("records the tailnet identity that registered a device, and keeps it across a refresh", async () => {
+    const store = new PushSubscriptionStore({ filePath });
+    const first = await store.register(registration("https://push.example.com/a"), { login: "User@GitHub", name: "A reader" });
+    expect(first?.record.tailnetLogin).toBe("user@github");
+    expect(first?.record.tailnetName).toBe("A reader");
+
+    const refreshed = await store.register(registration("https://push.example.com/a"), { login: "", name: "" });
+    expect(refreshed?.record.id).toBe(first?.record.id);
+    expect(refreshed?.record.tailnetLogin).toBe("user@github");
+    expect(refreshed?.record.tailnetName).toBe("A reader");
+    expect(await store.count()).toBe(1);
   });
 
   it("refuses to grow past its limit, so a device list stays a device list", async () => {

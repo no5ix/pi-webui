@@ -7,6 +7,7 @@ import {
 import { boundDaemonRequest, SESSION_PROXY_DEADLINE_MS } from "./boundedDaemonRequest.js";
 import { daemonTransport } from "../shared/transportFailure.js";
 import { bridgeSockets } from "./webSocketBridge.js";
+import { tailnetForwardHeaders, tailnetIdentityFromTailscale, type HeaderSource } from "../shared/tailscaleIdentity.js";
 
 interface DaemonAnswer { statusCode: number; headers: Record<string, string>; body: string }
 
@@ -35,16 +36,20 @@ const DEFERRED_IMAGE_ROUTES = ["/sessions/:sessionId/tool-results/:toolCallId/im
 const DELETING_ROUTES = ["/sessions/bulk/delete-archived", "/sessions/cleanup"] as const;
 
 export function registerSessionProxyRoutes(app: FastifyInstance, daemon: SessionProxyDaemon = new SessionDaemonClient(), prefix = "/api", hooks: SessionProxyHooks = {}): void {
-  const forward = async (reply: FastifyReply, method: string, url: string, body?: unknown): Promise<DaemonAnswer | undefined> => {
-    const outcome = await boundDaemonRequest(reply.raw, (signal) => daemon.request(method, stripPrefix(url, prefix), body, { signal }));
+  const forward = async (reply: FastifyReply, method: string, url: string, body?: unknown, headers?: HeaderSource): Promise<DaemonAnswer | undefined> => {
+    // The identity travels under PI WEB's own header names, which the daemon client never takes from
+    // the browser: this process is the only writer, so a request cannot claim a tailnet user.
+    const identity = tailnetIdentityFromTailscale(headers);
+    const forwardedHeaders = identity === undefined ? undefined : tailnetForwardHeaders(identity);
+    const outcome = await boundDaemonRequest(reply.raw, (signal) => daemon.request(method, stripPrefix(url, prefix), body, { signal, ...(forwardedHeaders === undefined ? {} : { headers: forwardedHeaders }) }));
     if (outcome.kind === "answered") return outcome.value;
     reply.code(504).send({ error: outcome.kind === "deadline" ? `Session daemon did not answer within ${String(SESSION_PROXY_DEADLINE_MS / 1000)}s` : "The browser closed the request" });
     return undefined;
   };
 
-  const proxy = async (request: { method: string; url: string; body?: unknown }, reply: FastifyReply) => {
+  const proxy = async (request: { method: string; url: string; body?: unknown; headers?: HeaderSource }, reply: FastifyReply) => {
     try {
-      const upstream = await forward(reply, request.method, request.url, request.body);
+      const upstream = await forward(reply, request.method, request.url, request.body, request.headers);
       if (upstream === undefined) return undefined;
       reply.code(upstream.statusCode);
       const contentType = upstream.headers["content-type"];
@@ -91,7 +96,7 @@ export function registerSessionProxyRoutes(app: FastifyInstance, daemon: Session
   for (const path of DEFERRED_IMAGE_ROUTES) {
     app.get(`${prefix}${path}`, async (request, reply) => {
       try {
-        const upstream = await forward(reply, "GET", request.url);
+        const upstream = await forward(reply, "GET", request.url, undefined, request.headers);
         if (upstream === undefined) return undefined;
         if (upstream.statusCode !== 200) {
           reply.code(upstream.statusCode);

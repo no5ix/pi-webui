@@ -36,7 +36,10 @@ import { sessionWorkSettled } from "../sessionWorkSettled";
 import type { SessionStateBadgeKind } from "./activityBadge";
 import { isSessionActive } from "../../../shared/activity";
 import { notifyTaskFinished, ensureNotificationRegistration, setTaskNotificationsWanted, taskNotificationsWanted, requestTaskNotificationPermission, notificationAvailability, type NotificationAvailability } from "../notifications/taskNotifications";
+import { disableDevicePush, emptyPushPanelState, enableDevicePush, pushPanelState, rereregisterDevicePush, revokePushDevice, sendPushTest, sendPushTestToDevice, type PushActionOutcome, type PushPanelState } from "../notifications/webPush";
 import { taskCompletionVerdict, taskFinishedNoticeContent } from "../notifications/taskCompletionNotice";
+import { isPageInFront, sessionNoticeUrl } from "../notifications/sessionNoticeTarget";
+import { noticeTagFor } from "../../../shared/notificationEvents";
 import { TurnRunClock, type FinishedTurn } from "../turnRunClock";
 import { canonicalJson } from "../../../shared/unknownValues";
 import { pageCommandOf, type PageCommandName } from "../../../shared/builtinSlashCommands";
@@ -444,6 +447,9 @@ import { rowedClientMessageIds } from "../messageDelivery";
 import { frontedPageShown } from "../frontedPage";
 import { directMachinesOf, setDirectMachines } from "../directMachineUrl";
 import { extensionWidgetPanels } from "./ExtensionWidgetPage";
+
+/** A test push is a real notice about a real session, so it needs one selected. */
+const NO_PUSH_TEST_SESSION = "Pick a session first: a test push is sent as a real notice, and it opens the session it speaks about when tapped.";
 
 /**
  * A visual viewport scale above this is a pinch zoom rather than rounding. `connectedCallback` reads it, and an element already
@@ -1296,12 +1302,15 @@ export class PiWebApp extends LitElement {
       wasWorking,
       isWorking: working,
       stoppedByReader,
-      readerWatching: typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus(),
+      readerWatching: isPageInFront(),
       enabled: taskNotificationsWanted(),
     });
     if (verdict !== "notify") return;
     const notice = taskFinishedNoticeContent(session.name ?? "", finishedTurn?.durationMs);
-    void notifyTaskFinished({ title: notice.title, body: notice.body, url: window.location.href }, `task-${session.id}`).then((posted) => {
+    // The tag is the shared event key - the session and the verdict - so a laptop that has this page
+    // open and is also registered for push shows one finished notice for a finished run, not two.
+    const tag = noticeTagFor({ kind: "task_completed", sessionId: session.id, outcome: "completed" });
+    void notifyTaskFinished({ title: notice.title, body: notice.body, url: sessionNoticeUrl(selectedMachineId(this.state), session.id) }, tag).then((posted) => {
       if (posted) this.setState(noticePatch(noticeForReader("PI WEB sent this task's finish to the device's notifications.")));
     });
   }
@@ -1347,6 +1356,69 @@ export class PiWebApp extends LitElement {
   private restoreTaskNotifications(): void {
     this.applyNotificationsState(notificationAvailability());
     if (taskNotificationsWanted()) void ensureNotificationRegistration();
+  }
+
+  /**
+   * Push, as the settings panel shows it.
+   *
+   * The device list is read from the server, because the list a browser remembers is not the list any
+   * sender delivers to. It is refreshed when the section opens and after every action, so a reader who
+   * turns a phone on at a cafe sees the row appear without reloading.
+   */
+  @state() private pushPanel: PushPanelState = emptyPushPanelState("unsupported");
+
+  private refreshPushPanel(): Promise<void> {
+    return pushPanelState().then((panel) => {
+      this.pushPanel = panel;
+    });
+  }
+
+  private async toggleDevicePush(on: boolean): Promise<PushActionOutcome> {
+    const outcome = on ? await enableDevicePush() : await disableDevicePush();
+    await this.refreshPushPanel();
+    return outcome;
+  }
+
+  private async reregisterDevicePush(): Promise<PushActionOutcome> {
+    const outcome = await rereregisterDevicePush();
+    await this.refreshPushPanel();
+    return outcome;
+  }
+
+  /**
+   * The session a test push speaks about.
+   *
+   * The push routes ask for a session because a notice is built the way a real one is - same title,
+   * same tag, same tap target - and a test that invented its own text would prove nothing about the
+   * notice a run produces, and would open a session that does not exist when tapped. With no session
+   * selected, the test says so and sends nothing.
+   */
+  private pushTestTarget(): { sessionId: string; sessionName: string; projectName: string } | undefined {
+    const session = this.state.selectedSession;
+    if (session === undefined) return undefined;
+    return { sessionId: session.id, sessionName: session.name ?? session.id, projectName: session.cwd };
+  }
+
+  private async testDevicePush(): Promise<string> {
+    const target = this.pushTestTarget();
+    if (target === undefined) return NO_PUSH_TEST_SESSION;
+    const answer = await sendPushTest(target.sessionId, target.sessionName, target.projectName);
+    await this.refreshPushPanel();
+    return answer.reason;
+  }
+
+  private async testPushDevice(id: string): Promise<string> {
+    const target = this.pushTestTarget();
+    if (target === undefined) return NO_PUSH_TEST_SESSION;
+    const answer = await sendPushTestToDevice(id, target.sessionId, target.sessionName, target.projectName);
+    await this.refreshPushPanel();
+    return answer.reason;
+  }
+
+  private async removePushDevice(id: string): Promise<PushActionOutcome> {
+    const outcome = await revokePushDevice(id);
+    await this.refreshPushPanel();
+    return outcome;
   }
 
   /**
@@ -2535,6 +2607,7 @@ export class PiWebApp extends LitElement {
     // Fire-and-forget like every surface: the element renders with its flag,
     // and the arriving module schedules the update that fills it in.
     this.openLazySurface("settings", "Settings");
+    void this.refreshPushPanel();
     this.settingsOpen = true;
     if (section === undefined) {
       this.settingsSection = undefined;
@@ -6910,7 +6983,7 @@ export class PiWebApp extends LitElement {
         ${this.renderSessionTreeNavigator(state)}
         ${this.sessionCleanupDialog !== undefined ? html`<session-cleanup-dialog .preview=${this.sessionCleanupDialog.preview} .previewRequest=${this.sessionCleanupDialog.previewRequest} .result=${this.sessionCleanupDialog.result} .loading=${this.sessionCleanupDialog.loading === true} .running=${this.sessionCleanupRunning()} .error=${this.sessionCleanupDialog.error ?? ""} .onPreview=${(request: SessionCleanupRequest) => { void this.previewSessionCleanup(request); }} .onRun=${(request: SessionCleanupRequest) => { this.runSessionCleanup(request); }} .onClose=${() => { this.closeSessionCleanupDialog(); }}></session-cleanup-dialog>` : null}
         ${state.themeDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} title=${state.themeDialog.title} .options=${state.themeDialog.options} .selectedValue=${state.themeDialog.selectedValue} .onPick=${(value: string) => { this.pickTheme(value); }} .onCancel=${() => { this.setState({ themeDialog: undefined }); }}></command-picker>` : null}
-        ${this.settingsOpen ? html`<settings-dialog .accessGate=${supportsPiWebCapability(state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)} .section=${this.settingsSection} .reveal=${this.settingsReveal} .onRevealed=${() => { this.settingsReveal = undefined; }} .machine=${state.selectedMachine} .machineRuntime=${this.selectedMachineRuntime()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onBackToList=${() => { this.backToSettingsList(); }} .pluginSections=${this.plugins.getSettingsSections(selectedMachineId(state))} .pluginRuntimeContext=${this.createPluginRuntimeContext()} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }} ?reloadOnClose=${this.reloadAfterSettings} .onPluginsChanged=${() => { if (!this.settingsMachineFollowsToggles()) this.reloadAfterSettings = true; }} .onRefreshMachineRuntime=${async (machineId: string) => { await this.machines.refreshMachineRuntime(machineId, { requireSelected: false }); }} .machines=${this.shownMachines()} .machineAvailability=${Object.fromEntries(state.machines.map((machine) => [machine.id, this.machineProbes.view(machine)]))} .machinesForeground=${this.foregroundMachineList() === "settings"} .onMachinesVisibilityChange=${(owner: HTMLElement, visible: boolean) => { this.machineProbes.setVisible(owner, visible); }} .onAddMachine=${() => { this.openMachineDialog(); }} .pluginLoadFailures=${this.pluginLoadFailures} .onRenameMachine=${async (machine: Machine, name: string) => { await this.renameMachine(machine, name); }} .onRemoveMachine=${(machine: Machine) => { this.removeMachine(machine); }} .fleetReport=${this.shownFleetReport()} .fleetStatuses=${this.fleetStatuses} .instantActions=${this.instantActions.list()} .onRemovePiPackage=${(target: SettingsMachineTarget, source: string, scope: PiPackageScope) => { this.removePiPackage(target, source, scope); }} .onForgetPageAccess=${(entry: ApprovedMachineOrigin) => { this.forgetPageAccess(entry); }} ?fleetLoading=${this.fleetLoading} .fleetError=${this.fleetError} .onRefreshFleet=${() => this.refreshFleet()} .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.runFleetOperation(operation, machineIds)} .themes=${selectableThemeContributions(this.plugins.getThemes())} .selectedThemeId=${this.selectedThemePreferenceId()} .activeThemeId=${this.activeThemeId} ?followSystemTheme=${this.themePreference.auto} .onSelectTheme=${(themeId: QualifiedContributionId) => { this.selectTheme(themeId); }} .onToggleFollowSystem=${(follow: boolean) => { this.setFollowSystemTheme(follow); }} .sharedTheme=${this.sharedTheme} .sharedThemeError=${this.sharedThemeError} .onToggleSharedTheme=${(share: boolean) => { this.setSharedTheme(share); }} .notificationAvailability=${this.notificationsState.availability} .notificationsWanted=${this.notificationsState.wanted} .onToggleNotifications=${(wanted: boolean) => this.setTaskNotifications(wanted)} .onTestNotification=${() => this.sendTestNotification()}></settings-dialog>` : null}
+        ${this.settingsOpen ? html`<settings-dialog .accessGate=${supportsPiWebCapability(state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)} .section=${this.settingsSection} .reveal=${this.settingsReveal} .onRevealed=${() => { this.settingsReveal = undefined; }} .machine=${state.selectedMachine} .machineRuntime=${this.selectedMachineRuntime()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onBackToList=${() => { this.backToSettingsList(); }} .pluginSections=${this.plugins.getSettingsSections(selectedMachineId(state))} .pluginRuntimeContext=${this.createPluginRuntimeContext()} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }} ?reloadOnClose=${this.reloadAfterSettings} .onPluginsChanged=${() => { if (!this.settingsMachineFollowsToggles()) this.reloadAfterSettings = true; }} .onRefreshMachineRuntime=${async (machineId: string) => { await this.machines.refreshMachineRuntime(machineId, { requireSelected: false }); }} .machines=${this.shownMachines()} .machineAvailability=${Object.fromEntries(state.machines.map((machine) => [machine.id, this.machineProbes.view(machine)]))} .machinesForeground=${this.foregroundMachineList() === "settings"} .onMachinesVisibilityChange=${(owner: HTMLElement, visible: boolean) => { this.machineProbes.setVisible(owner, visible); }} .onAddMachine=${() => { this.openMachineDialog(); }} .pluginLoadFailures=${this.pluginLoadFailures} .onRenameMachine=${async (machine: Machine, name: string) => { await this.renameMachine(machine, name); }} .onRemoveMachine=${(machine: Machine) => { this.removeMachine(machine); }} .fleetReport=${this.shownFleetReport()} .fleetStatuses=${this.fleetStatuses} .instantActions=${this.instantActions.list()} .onRemovePiPackage=${(target: SettingsMachineTarget, source: string, scope: PiPackageScope) => { this.removePiPackage(target, source, scope); }} .onForgetPageAccess=${(entry: ApprovedMachineOrigin) => { this.forgetPageAccess(entry); }} ?fleetLoading=${this.fleetLoading} .fleetError=${this.fleetError} .onRefreshFleet=${() => this.refreshFleet()} .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.runFleetOperation(operation, machineIds)} .themes=${selectableThemeContributions(this.plugins.getThemes())} .selectedThemeId=${this.selectedThemePreferenceId()} .activeThemeId=${this.activeThemeId} ?followSystemTheme=${this.themePreference.auto} .onSelectTheme=${(themeId: QualifiedContributionId) => { this.selectTheme(themeId); }} .onToggleFollowSystem=${(follow: boolean) => { this.setFollowSystemTheme(follow); }} .sharedTheme=${this.sharedTheme} .sharedThemeError=${this.sharedThemeError} .onToggleSharedTheme=${(share: boolean) => { this.setSharedTheme(share); }} .notificationAvailability=${this.notificationsState.availability} .notificationsWanted=${this.notificationsState.wanted} .onToggleNotifications=${(wanted: boolean) => this.setTaskNotifications(wanted)} .onTestNotification=${() => this.sendTestNotification()} .push=${this.pushPanel} .onPushToggle=${(on: boolean) => this.toggleDevicePush(on)} .onPushTest=${() => this.testDevicePush()} .onPushReregister=${() => this.reregisterDevicePush()} .onPushTestDevice=${(id: string) => this.testPushDevice(id)} .onPushRemoveDevice=${(id: string) => this.removePushDevice(id)}></settings-dialog>` : null}
         ${this.pluginDialogs.map((entry) => html`<div class=${PLUGIN_DIALOG_CLASS[entry.dialog.presentation ?? "overlay"]}><modal-surface .label=${entry.dialog.label} .onClose=${entry.close}>${entry.dialog.content}</modal-surface></div>`)}
       </div>
       ${this.renderNewSessionSheet()}

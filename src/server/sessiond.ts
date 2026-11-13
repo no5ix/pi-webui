@@ -39,6 +39,7 @@ import { PushSubscriptionStore, defaultPushSubscriptionFilePath } from "./daemon
 import { DeviceNotificationService } from "./daemon/notifications/deviceNotificationService.js";
 import { SessionNotices, projectScopeName } from "./daemon/notifications/sessionNotices.js";
 import { resolveVapidKeys, effectiveVapidSubject } from "./daemon/notifications/vapidKeys.js";
+import { vapidSubjectProblem } from "../shared/vapidSubject.js";
 import { registerPushRoutes } from "./daemon/notifications/pushRoutes.js";
 import { projectPluginRoots } from "./shared/plugins/projectPluginRoots.js";
 import { recordDeclaredAgentFacts } from "./daemon/sessions/declaredAgentFacts.js";
@@ -346,12 +347,16 @@ async function createSessionDaemonRuntime() {
       ...(config.push?.vapidPrivateKey === undefined ? {} : { privateKey: config.push.vapidPrivateKey }),
     });
     if (vapidKeys.problem !== undefined) app.log.warn(`[notifications] push is off: ${vapidKeys.problem}`);
+    const subjectProblem = vapidSubjectProblem(config.push?.subject);
+    if (subjectProblem !== undefined) app.log.warn(`[notifications] ${subjectProblem}`);
     const deviceNotifications = new DeviceNotificationService({
       subscriptions: pushSubscriptions,
       keys: vapidKeys,
       subject: effectiveVapidSubject(config.push?.subject),
+      ...(subjectProblem === undefined ? {} : { subjectProblem }),
       ...(config.push?.ttlSeconds === undefined ? {} : { ttlSeconds: config.push.ttlSeconds }),
       ...(config.push?.enabled === undefined ? {} : { enabled: config.push.enabled }),
+      ...(config.push?.allowedTailnetLogins === undefined ? {} : { allowedTailnetLogins: config.push.allowedTailnetLogins }),
       logger: app.log,
     });
     const taskNotices = new SessionNotices(deviceNotifications, {

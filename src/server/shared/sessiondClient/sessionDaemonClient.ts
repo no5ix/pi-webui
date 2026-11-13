@@ -14,6 +14,14 @@ export type SessionDaemonAgentProfileResult =
 
 export interface SessionDaemonRequestOptions {
   signal?: AbortSignal;
+  /**
+   * Headers this process is adding, not the browser's.
+   *
+   * The daemon is a separate process and the browser's headers never reach it; a header listed here is
+   * a fact the web process is asserting on the browser's behalf, such as the tailnet identity Tailscale
+   * vouched for. That asymmetry is the point: a browser cannot put a header on a daemon request.
+   */
+  headers?: Record<string, string>;
 }
 
 export interface SessionDaemonRequestClient {
@@ -37,9 +45,9 @@ export class SessionDaemonClient {
   ): Promise<{ statusCode: number; headers: Record<string, string>; body: string }> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     if (this.baseUrl !== undefined && this.baseUrl !== "") {
-      return this.requestUrl(method, path, payload, options.signal);
+      return this.requestUrl(method, path, payload, options.signal, options.headers);
     }
-    return this.requestSocket(method, path, payload, options.signal);
+    return this.requestSocket(method, path, payload, options.signal, options.headers);
   }
 
   getActiveAgentProfile(): Promise<SessionDaemonAgentProfileResult> {
@@ -61,12 +69,14 @@ export class SessionDaemonClient {
     return new WebSocket(new URL(path, "ws://localhost"), { createConnection: () => createConnection(socketPath) });
   }
 
-  private async requestUrl(method: string, path: string, payload?: string, signal?: AbortSignal) {
+  private async requestUrl(method: string, path: string, payload?: string, signal?: AbortSignal, headers?: Record<string, string>) {
     const init: RequestInit = { method, ...(signal === undefined ? {} : { signal }) };
+    const requestHeaders: Record<string, string> = { ...(headers ?? {}) };
     if (payload !== undefined && payload !== "") {
-      init.headers = { "content-type": "application/json" };
+      requestHeaders["content-type"] = "application/json";
       init.body = payload;
     }
+    if (Object.keys(requestHeaders).length > 0) init.headers = requestHeaders;
     const response = await fetch(new URL(path, this.baseUrl), init);
     return {
       statusCode: response.status,
@@ -75,17 +85,20 @@ export class SessionDaemonClient {
     };
   }
 
-  private requestSocket(method: string, path: string, payload?: string, signal?: AbortSignal): Promise<{ statusCode: number; headers: Record<string, string>; body: string }> {
+  private requestSocket(method: string, path: string, payload?: string, signal?: AbortSignal, headers?: Record<string, string>): Promise<{ statusCode: number; headers: Record<string, string>; body: string }> {
     return new Promise((resolve, reject) => {
+      const requestHeaders: Record<string, string | number> = { ...(headers ?? {}) };
+      if (payload !== undefined && payload !== "") {
+        requestHeaders["content-type"] = "application/json";
+        requestHeaders["content-length"] = Buffer.byteLength(payload);
+      }
       const request = http.request(
         {
           socketPath: this.socketPath,
           path,
           method,
           ...(signal === undefined ? {} : { signal }),
-          headers: payload !== undefined && payload !== ""
-            ? { "content-type": "application/json", "content-length": Buffer.byteLength(payload) }
-            : undefined,
+          ...(Object.keys(requestHeaders).length > 0 ? { headers: requestHeaders } : {}),
         },
         (response) => {
           response.on("error", reject);

@@ -1,6 +1,7 @@
 import { Agent, fetch as undiciFetch } from "undici";
 import { PUSH_PAYLOAD_LIMIT_BYTES, encryptPushPayload, vapidJwt, type VapidKeyPair } from "./webPushCrypto.js";
 import type { PushDeliveryResult, PushSubscriptionRecord } from "../../../shared/notificationEvents.js";
+import { getProperty, getString } from "../../../shared/unknownValues.js";
 
 /**
  * One push message, sent to one device.
@@ -135,7 +136,7 @@ function nodeFetch(connectTimeoutMs: number): PushFetch {
     let lastError: unknown;
     for (const family of families) {
       const controller = new AbortController();
-      const relay = () => controller.abort(signal.reason);
+      const relay = (): void => { controller.abort(signal.reason); };
       if (signal.aborted) relay();
       else signal.addEventListener("abort", relay, { once: true });
       try {
@@ -192,21 +193,17 @@ const CONNECT_FAILURE_CODES = new Set([
   "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET", "ECONNRESET",
 ]);
 
-export function isConnectFailure(error: unknown): boolean {
-  const codes: unknown[] = [
-    error instanceof Error ? Reflect.get(error, "code") : undefined,
-    error instanceof Error ? Reflect.get(error, "cause") : undefined,
-  ];
-  for (const entry of codes) {
-    if (typeof entry === "string" && CONNECT_FAILURE_CODES.has(entry)) return true;
-    if (typeof entry === "object" && entry !== null) {
-      const code = Reflect.get(entry, "code");
-      if (typeof code === "string" && CONNECT_FAILURE_CODES.has(code)) return true;
-      const errors = Reflect.get(entry, "errors");
-      if (Array.isArray(errors) && errors.some((nested: unknown) => isConnectFailure(nested))) return true;
-    }
-  }
-  return false;
+export function isConnectFailure(error: unknown, depth = 3): boolean {
+  if (depth <= 0) return false;
+  if (typeof error === "string") return CONNECT_FAILURE_CODES.has(error);
+  const code = getString(error, "code");
+  if (code !== undefined && CONNECT_FAILURE_CODES.has(code)) return true;
+  // undici wraps a connect failure in `cause`, and an AggregateError (every address family tried)
+  // keeps the attempts in `errors`.
+  return [getProperty(error, "cause"), getProperty(error, "errors")].some((entry) =>
+    Array.isArray(entry)
+      ? entry.some((nested) => isConnectFailure(nested, depth - 1))
+      : isConnectFailure(entry, depth - 1));
 }
 
 const agents = new Map<string, Agent>();
@@ -262,10 +259,7 @@ export function serviceReason(body: string | undefined): string | undefined {
 function describeError(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === "AbortError") return "The push service did not answer in time";
-    const code = Reflect.get(error, "code");
-    const cause = Reflect.get(error, "cause");
-    const causeCode = typeof cause === "object" && cause !== null ? Reflect.get(cause, "code") : undefined;
-    const detail = typeof code === "string" ? code : typeof causeCode === "string" ? causeCode : "";
+    const detail = getString(error, "code") ?? getString(getProperty(error, "cause"), "code") ?? "";
     return detail === "" ? error.message : `${error.message} (${detail})`;
   }
   return String(error);

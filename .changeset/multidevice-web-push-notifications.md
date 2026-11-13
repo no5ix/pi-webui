@@ -1,0 +1,5 @@
+---
+"@gang-of-beads/pi-web": patch
+---
+
+A task's finish, a failure, a stop, and a session waiting on an answer are now sent to every device that registered for push, by the session daemon, so no browser has to be open: no page, tab, websocket, or poll is in the delivery path. Settings › Notifications lists the devices by name ("Safari on iPhone"), with the push service carrying each one, when that service last accepted a message, and the last refusal with its status and reason. Each device has its own **Test** and **Remove**, so a phone that answers and a laptop that is refused are two facts, and revoking one device leaves the rest registered. Delivery is measured rather than assumed: messages go at high urgency with a one-day window (a low-urgency message to a sleeping phone is a message the phone defers), a push service's own reason is kept and shown, and unreachable push services are tried over IPv4 first, which is how desktop Chrome and Edge on a network with broken IPv6 get their notices. A push service accepting a message is what the server can know; the panel says that, and never claims a person was notified.

@@ -11,7 +11,7 @@ import {
   type PushHttpResponse,
 } from "./webPushSender.js";
 import { generateVapidKeyPair, base64UrlDecode, decryptPushPayload } from "./webPushCrypto.js";
-import { present } from "./notifications.testSupport.js";
+import { answered, present } from "./notifications.testSupport.js";
 import type { PushSubscriptionRecord } from "../../../shared/notificationEvents.js";
 
 /**
@@ -39,8 +39,11 @@ function subscription(): { record: PushSubscriptionRecord; privateKey: string; a
       authToken,
       appBaseUrl: "https://pi.example/",
       userAgent: "Mozilla/5.0 (iPhone)",
+      tailnetLogin: "",
+      tailnetName: "",
       createdAt: new Date(0).toISOString(),
       lastDeliveredAt: undefined,
+      lastFailure: undefined,
       failures: 0,
     },
     privateKey: ecdh.getPrivateKey("base64url"),
@@ -88,13 +91,13 @@ describe("WebPushSender.send", () => {
     const assertion = /^vapid t=([\w.-]+), k=([\w-]+)$/u.exec(authorization);
     expect(assertion).not.toBeNull();
     expect(assertion?.[2]).toBe(keys.publicKey);
-    const claims = present(assertion?.[1], "the assertion");
-    const [header, payload, signature] = present(claims, "the assertion").split(".");
-    expect(JSON.parse(String(Buffer.from(present(header, "the header"), "base64url")))).toEqual({ typ: "JWT", alg: "ES256" });
-    const parsed = JSON.parse(String(Buffer.from(present(payload, "the payload"), "base64url"))) as { aud: string; exp: number; sub: string };
-    expect(parsed.aud).toBe("https://push.example.com");
-    expect(parsed.sub).toBe("https://github.com/Gang-of-Beads/pi-web");
-    expect(parsed.exp - Math.floor(Date.now() / 1000)).toBeGreaterThan(0);
+    const [headerSegment, payloadSegment, signature] = present(assertion?.[1], "the assertion").split(".");
+    const header = answered(JSON.parse(Buffer.from(present(headerSegment, "the JWT header"), "base64url").toString("utf8")), "the JWT header");
+    expect(header).toEqual({ typ: "JWT", alg: "ES256" });
+    const claims = answered(JSON.parse(Buffer.from(present(payloadSegment, "the JWT payload"), "base64url").toString("utf8")), "the JWT payload");
+    expect(claims["aud"]).toBe("https://push.example.com");
+    expect(claims["sub"]).toBe("https://github.com/Gang-of-Beads/pi-web");
+    expect(Number(claims["exp"]) - Math.floor(Date.now() / 1000)).toBeGreaterThan(0);
     expect(signature).toBeTruthy();
 
     const decrypted = decryptPushPayload(device.privateKey, device.authToken, request.body);

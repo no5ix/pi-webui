@@ -67,9 +67,28 @@ export interface PushSubscriptionRecord {
   readonly appBaseUrl: string;
   /** The browser's own words about the device, for the settings panel's device list. */
   readonly userAgent: string;
+  /**
+   * The tailnet login that registered this device, when Tailscale vouched for the request; empty when
+   * it did not. A subscription outlives the browser that made it, so the list has to say who made it:
+   * that is what a reader revokes, and what an allowlist refuses.
+   */
+  readonly tailnetLogin: string;
+  /** The display name Tailscale reported with that login; empty when it reported none. */
+  readonly tailnetName: string;
   readonly createdAt: string;
+  /** The last send a push service accepted (2xx). Not a claim that a person saw a notification. */
   readonly lastDeliveredAt: string | undefined;
+  /** The last send a push service refused, with its status and the service's own reason. */
+  readonly lastFailure: PushDeliveryRecord | undefined;
   readonly failures: number;
+}
+
+/** One push service answer worth keeping about a device, for the panel's device table. */
+export interface PushDeliveryRecord {
+  readonly at: string;
+  readonly outcome: PushDeliveryOutcome;
+  readonly status: number | undefined;
+  readonly reason: string | undefined;
 }
 
 /** What a browser sends when it registers: the subscription a push manager produced. */
@@ -80,8 +99,112 @@ export interface PushSubscriptionRegistration {
   readonly userAgent?: string | undefined;
 }
 
+/**
+ * What the settings panel is shown about one device.
+ *
+ * A device's push endpoint carries a service-issued token and its keys carry the auth secret, so the
+ * endpoint is never part of this view: the panel gets the push service's *host*, which is the fact a
+ * reader needs ("Apple refused this"), and nothing that would let a page send to the device.
+ */
+export interface PushDeviceView {
+  readonly id: string;
+  /** The device in a reader's words: "Safari on iPhone", "Chrome on Windows". */
+  readonly label: string;
+  readonly userAgent: string;
+  /** The push service that holds this device's address, as a host: `web.push.apple.com`. */
+  readonly pushService: string;
+  readonly tailnetLogin: string;
+  readonly tailnetName: string;
+  readonly createdAt: string;
+  readonly lastDeliveredAt: string | undefined;
+  readonly lastFailure: PushDeliveryRecord | undefined;
+  readonly failures: number;
+}
+
+/** The push service's host, so a device can be named without publishing the token in its endpoint. */
+export function pushServiceHost(endpoint: string): string {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The row a device list shows, from a stored subscription.
+ *
+ * One function, called by the route, is what keeps the leak out: the endpoint and the keys stay in the
+ * daemon and this view is the only shape a browser is given.
+ */
+export function pushDeviceView(record: PushSubscriptionRecord): PushDeviceView {
+  return {
+    id: record.id,
+    label: pushDeviceLabel(record.userAgent),
+    userAgent: record.userAgent,
+    pushService: pushServiceHost(record.endpoint),
+    tailnetLogin: record.tailnetLogin,
+    tailnetName: record.tailnetName,
+    createdAt: record.createdAt,
+    lastDeliveredAt: record.lastDeliveredAt,
+    lastFailure: record.lastFailure,
+    failures: record.failures,
+  };
+}
+
+/**
+ * The device list entry a user-agent string allows.
+ *
+ * The user-agent is the only thing a device says about itself, and it says a browser and an operating
+ * system, not a serial number. A reader with four devices is choosing which row to revoke, so the row
+ * says Safari on iPhone and Chrome on Windows; an unrecognisable string is reported as itself rather
+ * than as a guess, because a wrong device name is worse than an unreadable one.
+ */
+export function pushDeviceLabel(userAgent: string): string {
+  const ua = userAgent.trim();
+  if (ua === "") return "An unlabelled device";
+  const browser = browserOf(ua);
+  const platform = platformOf(ua);
+  if (browser === "" && platform === "") return ua.length > 60 ? `${ua.slice(0, 59)}\u2026` : ua;
+  if (platform === "") return browser;
+  if (browser === "") return `A browser on ${platform}`;
+  return `${browser} on ${platform}`;
+}
+
+/**
+ * The browser tokens, most specific first. Edge, Opera, Firefox and Chrome on Android all advertise
+ * "Safari", so Safari is the last entry and a match is a product name, not a guess.
+ */
+const BROWSER_TOKENS: readonly [name: string, tokens: readonly string[]][] = [
+  ["Edge", ["Edg/", "EdgA/", "EdgiOS/"]],
+  ["Opera", ["OPR/", "Opera/"]],
+  ["Firefox", ["Firefox/", "FxiOS/"]],
+  ["Chrome", ["Chrome/", "CriOS/"]],
+  ["Safari", ["Safari/"]],
+];
+
+function browserOf(ua: string): string {
+  for (const [name, tokens] of BROWSER_TOKENS) {
+    if (tokens.some((token) => ua.includes(token))) return name;
+  }
+  return "";
+}
+
+function platformOf(ua: string): string {
+  if (/\biPhone\b|\biPod\b/u.test(ua)) return "iPhone";
+  if (/\biPad\b/u.test(ua)) return "iPad";
+  if (/\bAndroid\b/u.test(ua)) return "Android";
+  if (/\bCrOS\b/u.test(ua)) return "ChromeOS";
+  if (/\bWindows\b/u.test(ua)) return "Windows";
+  if (/\bMacintosh\b|\bMac OS X\b/u.test(ua)) return "Mac";
+  if (/\bLinux\b|\bX11\b/u.test(ua)) return "Linux";
+  return "";
+}
+
 /** One subscription's delivery answer. `expired` and `rejected` mean the subscription is gone. */
 export type PushDeliveryOutcome = "sent" | "expired" | "rejected" | "unauthorized" | "failed" | "unreachable";
+
+/** Every outcome a device's row can carry, so a stored file is checked against the list and not against a copy of it. */
+export const PUSH_DELIVERY_OUTCOMES: readonly PushDeliveryOutcome[] = ["sent", "expired", "rejected", "unauthorized", "failed", "unreachable"];
 
 export interface PushDeliveryResult {
   readonly subscriptionId: string;
@@ -100,6 +223,16 @@ export interface PushServiceState {
   readonly source: "config" | "generated" | "none";
   /** Devices registered with this PI WEB. */
   readonly subscriptions: number;
+  /**
+   * The contact this PI WEB identifies itself to the push services with (`sub`). It is shown because a
+   * contact a service refuses is invisible from a device: every send is refused and every device looks
+   * healthy.
+   */
+  readonly subject: string;
+  /** How long a push service may hold a message for a device that is unreachable, in seconds. */
+  readonly ttlSeconds: number;
+  /** The tailnet logins allowed to register. Empty means the deployment named no one. */
+  readonly allowedTailnetLogins: readonly string[];
 }
 
 /** The longest endpoint, key and label a subscription may carry. Status payloads are bounded everywhere. */

@@ -10,13 +10,15 @@ afterEach(() => { resetLazySurfaces(); });
  * the app still boots, and the dialog simply never appears.
  */
 describe("surfaces that load when they are opened", () => {
+  // Loading a surface pulls its real module graph, and the settings surface is the largest one it
+  // pulls. Under the full suite's parallel load the import needs more than the default 5s.
   it("loads a surface once, however many times it is opened", async () => {
     const first = loadSurface("settings");
     const second = loadSurface("settings");
     expect(second).toBe(first);
     await first;
     expect(lazySurfacesStarted()).toEqual(["settings"]);
-  });
+  }, 30_000);
 
   it("warms every surface on the schedule it is given", () => {
     const scheduled: (() => void)[] = [];
@@ -45,5 +47,5 @@ describe("surfaces that load when they are opened", () => {
   it("resolves each surface to a defined custom element", async () => {
     await Promise.all([loadSurface("settings"), loadSurface("quick-switcher"), loadSurface("session-tree")]);
     expect(lazySurfacesStarted()).toHaveLength(3);
-  });
+  }, 30_000);
 });

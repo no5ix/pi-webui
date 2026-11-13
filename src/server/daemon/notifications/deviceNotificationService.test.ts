@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createECDH } from "node:crypto";
 import { DeviceNotificationService, fitEvent, pushPayload, type DeviceNotificationLogger } from "./deviceNotificationService.js";
 import { PUSH_PAYLOAD_LIMIT_BYTES } from "./webPushCrypto.js";
+import { DEFAULT_PUSH_TTL_SECONDS } from "./webPushSender.js";
 import { PushSubscriptionStore } from "./pushSubscriptionStore.js";
 import { generateVapidKeyPair } from "./webPushCrypto.js";
 import type { PushHttpRequest, PushHttpResponse } from "./webPushSender.js";
@@ -47,12 +48,13 @@ class Harness {
     warn: (message) => { this.log.push(message); },
   };
 
-  constructor(options: { enabled?: boolean } = {}) {
+  constructor(options: { enabled?: boolean; allowedTailnetLogins?: readonly string[] } = {}) {
     this.service = new DeviceNotificationService({
       subscriptions: this.store,
       keys: { keys, source: "config", problem: undefined },
       subject: "mailto:reader@example.com",
       ...(options.enabled === undefined ? {} : { enabled: options.enabled }),
+      ...(options.allowedTailnetLogins === undefined ? {} : { allowedTailnetLogins: options.allowedTailnetLogins }),
       logger: this.logger,
       fetch: (request) => {
         this.sent.push(request);
@@ -71,6 +73,11 @@ class Harness {
       ids.push(present(registered, "the registration").record.id);
     }
     return ids;
+  }
+
+  async registerDeviceWithIdentity(login: string): Promise<string> {
+    const registered = await this.store.register(device(`https://push.example.com/${login}`), { login, name: "" });
+    return present(registered, "the registration").record.id;
   }
 
   cleanup(): void {
@@ -229,8 +236,58 @@ describe("DeviceNotificationService", () => {
     expect(empty["url"]).toBeUndefined();
   });
 
+  it("keeps a device whose tailnet login is not allowed off the send, and says why in the device list", async () => {
+    const gated = new Harness({ allowedTailnetLogins: ["reader@example.com"] });
+    const kept = await gated.registerDeviceWithIdentity("reader@example.com");
+    const refused = await gated.registerDeviceWithIdentity("friend@example.com");
+    const anonymous = await gated.registerDevices(1);
+
+    const delivery = await gated.service.notify(event("session-1:task:1:completed"));
+
+    expect(gated.sent.map((request) => request.url)).toHaveLength(1);
+    const byDevice = new Map(delivery.results.map((result) => [result.subscriptionId, result]));
+    expect(byDevice.get(kept)?.outcome).toBe("sent");
+    expect(byDevice.get(refused)?.outcome).toBe("rejected");
+    expect(byDevice.get(refused)?.reason).toContain("friend@example.com");
+    expect(byDevice.get(present(anonymous[0], "the anonymous device"))?.reason).toContain("no identity");
+    // The refused device is not written to, so its row keeps the last answer that is true about it.
+    const rows = new Map((await gated.store.list()).map((row) => [row.id, row]));
+    expect(present(rows.get(refused), "the refused device").lastFailure).toBeUndefined();
+    expect(present(rows.get(kept), "the allowed device").lastDeliveredAt).toBeTypeOf("string");
+    gated.cleanup();
+  });
+
+  it("sends a test to one device, and only to it", async () => {
+    const devices = await harness.registerDevices(2);
+    const delivery = await harness.service.notify(event("session-1:task:1:completed"), { only: present(devices[1], "the second device") });
+
+    expect(delivery.targets).toBe(1);
+    expect(harness.sent.map((request) => request.url)).toEqual(["https://push.example.com/1"]);
+  });
+
+  it("records a refused send as the device's last answer, with the status and the reason the service gave", async () => {
+    await harness.registerDevices(1);
+    harness.responses.set("https://push.example.com/0", { status: 403, statusText: "Forbidden", body: '{"reason":"BadJwtToken"}', header: () => undefined });
+
+    const delivery = await harness.service.notify(event("session-1:task:1:completed"));
+
+    expect(delivery.results[0]).toMatchObject({ outcome: "unauthorized", status: 403, reason: "BadJwtToken" });
+    const row = (await harness.store.list())[0];
+    expect(row?.failures).toBe(1);
+    expect(row?.lastFailure).toMatchObject({ outcome: "unauthorized", status: 403, reason: "BadJwtToken" });
+    expect(row?.lastDeliveredAt).toBeUndefined();
+  });
+
   it("reports its state for the settings panel", async () => {
     await harness.registerDevices(2);
-    expect(await harness.service.state()).toEqual({ disabled: false, configured: true, source: "config", subscriptions: 2 });
+    expect(await harness.service.state()).toEqual({
+      disabled: false,
+      configured: true,
+      source: "config",
+      subscriptions: 2,
+      subject: "mailto:reader@example.com",
+      ttlSeconds: DEFAULT_PUSH_TTL_SECONDS,
+      allowedTailnetLogins: [],
+    });
   });
 });

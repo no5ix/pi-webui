@@ -159,41 +159,10 @@ async function writeStoredKeys(filePath: string, keys: VapidKeyPair): Promise<bo
 }
 
 /**
- * The `sub` claim of a VAPID assertion: a contact URL for the application, per RFC 8292.
- *
- * The default is the project's public URL rather than a local mail address, because Apple's push
- * service refuses a contact it does not consider real: measured against `web.push.apple.com`, a
- * `mailto:pi-web@localhost` assertion is answered `403 {"reason":"BadJwtToken"}` while the same
- * request with `mailto:pi-web@example.com` - or with an https URL - gets past the assertion to the
- * token check (`400 {"reason":"BadWebPushRequest"}`). A default that every iPhone and iPad refuses
- * is worse than a generic contact that every service takes, so a contact that will not be accepted is
- * replaced by the default and the swap is visible in the settings panel, which shows the subject in
- * use. A deployment that names a real contact keeps exactly what it asked for.
+ * The `sub` claim of a VAPID assertion is a shared rule, not this module's: see
+ * `shared/vapidSubject.ts` for why a contact a push service refuses is replaced by the project's URL,
+ * and for the Apple measurement behind it. The config layer asks the same function what it will send,
+ * and the settings panel shows the contact in use, because a contact every service refuses looks healthy
+ * from every device.
  */
-export const DEFAULT_VAPID_SUBJECT = "https://github.com/Gang-of-Beads/pi-web";
-
-export function effectiveVapidSubject(subject: string | undefined): string {
-  const trimmed = (subject ?? "").trim();
-  if (trimmed === "") return DEFAULT_VAPID_SUBJECT;
-  if (/^https?:\/\//u.test(trimmed)) return trimmed;
-  const address = trimmed.startsWith("mailto:") ? trimmed.slice("mailto:".length).trim() : trimmed;
-  // A bare address becomes a mailto: URL; anything with the shape of a display name - a space, an
-  // angle bracket - is not a contact a push service will take, and a contact that is refused on
-  // every send is worse for a deployment than a generic one that is accepted.
-  if (isReachableMailAddress(address)) return `mailto:${address}`;
-  return DEFAULT_VAPID_SUBJECT;
-}
-
-/**
- * A mail address a push service will treat as a contact: a local part, a domain with a dot, and not
- * a machine name. `user@localhost` and `user@box` are the shapes Apple refuses, and an address with
- * no domain behind it identifies nothing to the service anyway.
- */
-export function isReachableMailAddress(value: string): boolean {
-  const match = /^([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+)$/u.exec(value);
-  if (match === null) return false;
-  const domain = match[2] ?? "";
-  if (!domain.includes(".")) return false;
-  const labels = domain.split(".");
-  return !labels.includes("localhost") && !/^[0-9]+$/u.test(labels[labels.length - 1] ?? "");
-}
+export { DEFAULT_VAPID_SUBJECT, effectiveVapidSubject, isReachableMailAddress, vapidSubjectProblem } from "../../../shared/vapidSubject.js";

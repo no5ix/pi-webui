@@ -8,7 +8,9 @@ import { registerPushRoutes } from "./pushRoutes.js";
 import { DeviceNotificationService } from "./deviceNotificationService.js";
 import { PushSubscriptionStore, PUSH_SUBSCRIPTION_LIMIT } from "./pushSubscriptionStore.js";
 import { generateVapidKeyPair } from "./webPushCrypto.js";
+import { DEFAULT_PUSH_TTL_SECONDS } from "./webPushSender.js";
 import { answered, present } from "./notifications.testSupport.js";
+import { PI_WEB_TAILNET_LOGIN_HEADER, PI_WEB_TAILNET_NAME_HEADER } from "../../shared/tailscaleIdentity.js";
 import type { PushHttpResponse } from "./webPushSender.js";
 
 /**
@@ -38,12 +40,13 @@ let service: DeviceNotificationService;
 let store: PushSubscriptionStore;
 let sent: number;
 
-function buildApp(sender: (url: string) => Promise<PushHttpResponse> = () => Promise.resolve({ status: 201, statusText: "Created", header: () => undefined })): FastifyInstance {
+function buildApp(sender: (url: string) => Promise<PushHttpResponse> = () => Promise.resolve({ status: 201, statusText: "Created", header: () => undefined }), allowedTailnetLogins: readonly string[] = []): FastifyInstance {
   const instance = Fastify({ logger: false });
   service = new DeviceNotificationService({
     subscriptions: store,
     keys: { keys, source: "config", problem: undefined },
     subject: "mailto:reader@example.com",
+    ...(allowedTailnetLogins.length === 0 ? {} : { allowedTailnetLogins }),
     logger: quiet,
     fetch: async (request) => { sent += 1; return sender(request.url); },
   });
@@ -154,11 +157,38 @@ describe("GET /push/state", () => {
     expect(response.statusCode).toBe(200);
     const registered = await store.list();
     expect(response.json()).toEqual({
-      state: { disabled: false, configured: true, source: "config", subscriptions: 1 },
+      state: { disabled: false, configured: true, source: "config", subscriptions: 1, subject: "mailto:reader@example.com", ttlSeconds: DEFAULT_PUSH_TTL_SECONDS, allowedTailnetLogins: [] },
       publicKey: keys.publicKey,
       problem: undefined,
-      devices: [{ id: registered[0]?.id, userAgent: "Mozilla/5.0 (iPhone)", createdAt: registered[0]?.createdAt, lastDeliveredAt: undefined, failures: 0 }],
+      devices: [{
+        id: registered[0]?.id,
+        label: "A browser on iPhone",
+        userAgent: "Mozilla/5.0 (iPhone)",
+        pushService: "push.example.com",
+        tailnetLogin: "",
+        tailnetName: "",
+        createdAt: registered[0]?.createdAt,
+        lastDeliveredAt: undefined,
+        lastFailure: undefined,
+        failures: 0,
+      }],
     });
+  });
+
+  it("keeps a device's push address and keys inside the server", async () => {
+    // A device's endpoint carries the token its push service issued and its keys carry the auth
+    // secret: a page that held either could send to that device itself, so the state answer is checked
+    // for the strings rather than trusted to a view function.
+    const registered = await store.register(device(), { login: "reader@example.com", name: "A reader" });
+    const stored = (await store.list())[0];
+    const response = await app.inject({ method: "GET", url: "/push/state" });
+    const body = response.body;
+    expect(body).toContain("push.example.com");
+    expect(body).not.toContain(present(stored?.endpoint, "the endpoint").slice("https://push.example.com/".length));
+    expect(body).not.toContain(present(stored?.publicKey, "the public key"));
+    expect(body).not.toContain(present(stored?.authToken, "the auth secret"));
+    expect(response.json()).toMatchObject({ devices: [{ tailnetLogin: "reader@example.com", tailnetName: "A reader" }] });
+    expect(registered?.record.tailnetLogin).toBe("reader@example.com");
   });
 
   it("says when the device file did not answer, instead of answering with no devices", async () => {
@@ -181,7 +211,7 @@ describe("GET /push/state", () => {
     await unconfigured.ready();
     const unconfiguredState: unknown = (await unconfigured.inject({ method: "GET", url: "/push/state" })).json();
     expect(unconfiguredState).toEqual({
-      state: { disabled: false, configured: false, source: "none", subscriptions: 0 },
+      state: { disabled: false, configured: false, source: "none", subscriptions: 0, subject: "mailto:reader@example.com", ttlSeconds: DEFAULT_PUSH_TTL_SECONDS, allowedTailnetLogins: [] },
       publicKey: undefined,
       problem: "No VAPID key pair is available.",
       devices: [],
@@ -235,5 +265,93 @@ describe("POST /push/test", () => {
     const refused = body["results"];
     expect(Array.isArray(refused)).toBe(true);
     expect(answered(Array.isArray(refused) ? refused[0] : undefined, "the refused send")).toMatchObject({ outcome: "failed", status: 500 });
+  });
+});
+
+
+// The three paths a device list is managed through: who registered a row, how to send one device a
+// test, and how to revoke a single row. These are the routes the settings panel drives, and the ones
+// a reader reaches for when a phone stopped answering.
+
+describe("POST /push/subscriptions - who registered the device", () => {
+  it("records the tailnet identity the web process forwarded, and shows it in the device list", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/push/subscriptions",
+      payload: device(),
+      headers: { [PI_WEB_TAILNET_LOGIN_HEADER]: "reader@github", [PI_WEB_TAILNET_NAME_HEADER]: "A Reader" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ created: true });
+    expect((await store.list())[0]?.tailnetLogin).toBe("reader@github");
+    expect((await app.inject({ method: "GET", url: "/push/state" })).json()).toMatchObject({
+      devices: [{ tailnetLogin: "reader@github", tailnetName: "A Reader" }],
+    });
+  });
+
+  it("refuses a subscription from a tailnet login the deployment did not name, and says the allowlist is the reason", async () => {
+    const gated = buildApp(undefined, ["reader@example.com"]);
+    await gated.ready();
+
+    const stranger = await gated.inject({ method: "POST", url: "/push/subscriptions", payload: device(), headers: { [PI_WEB_TAILNET_LOGIN_HEADER]: "friend@example.com" } });
+    expect(stranger.statusCode).toBe(403);
+    expect(stranger.json()).toEqual({ error: "The Tailscale login friend@example.com is not in push.allowedTailnetLogins, so this PI WEB will not register its device." });
+
+    // A request with no tailnet identity is refused by the same rule: an allowlist that named people
+    // cannot be satisfied by a device that arrived with no name.
+    const anonymous = await gated.inject({ method: "POST", url: "/push/subscriptions", payload: device() });
+    expect(anonymous.statusCode).toBe(403);
+    expect(anonymous.json()).toEqual({ error: "This PI WEB only registers devices that come through Tailscale with an allowed login (push.allowedTailnetLogins)." });
+    expect(await store.count()).toBe(0);
+
+    const named = await gated.inject({ method: "POST", url: "/push/subscriptions", payload: device(), headers: { [PI_WEB_TAILNET_LOGIN_HEADER]: "Reader@Example.com" } });
+    expect(named.statusCode).toBe(200);
+    expect(named.json()).toMatchObject({ created: true });
+    expect((await store.list()).map((row) => row.tailnetLogin)).toEqual(["reader@example.com"]);
+    // The state the panel shows carries the same gate, so the reader is not told a device is registered.
+    expect((await gated.inject({ method: "GET", url: "/push/state" })).json()).toMatchObject({
+      state: { subscriptions: 1, allowedTailnetLogins: ["reader@example.com"] },
+      devices: [{ tailnetLogin: "reader@example.com" }],
+    });
+    await gated.close();
+  });
+});
+
+describe("POST /push/subscriptions/:id/test", () => {
+  it("sends a test to the device named in the route, and to no other", async () => {
+    const first = await app.inject({ method: "POST", url: "/push/subscriptions", payload: device("https://push.example.com/first") });
+    const second = await app.inject({ method: "POST", url: "/push/subscriptions", payload: device("https://push.example.com/second") });
+    const id = String(answered(second.json(), "the second registration")["id"]);
+
+    const response = await app.inject({ method: "POST", url: `/push/subscriptions/${id}/test`, payload: { sessionId: "session-1", sessionName: "Refactor the parser", projectName: "pi-webui" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ targets: 1, results: [{ deviceId: id, label: "A browser on iPhone", outcome: "sent", status: 201 }] });
+    expect(sent).toBe(1);
+    const firstId = String(answered(first.json(), "the first registration")["id"]);
+    const rows = new Map((await store.list()).map((row) => [row.id, row]));
+    expect(present(rows.get(id), "the tested device").lastDeliveredAt).toBeTypeOf("string");
+    expect(present(rows.get(firstId), "the device left alone").lastDeliveredAt).toBeUndefined();
+  });
+
+  it("answers a per-device test for an unknown device with the 404 it says", async () => {
+    const response = await app.inject({ method: "POST", url: "/push/subscriptions/nope/test", payload: { sessionId: "session-1", sessionName: "Refactor the parser", projectName: "pi-webui" } });
+    expect(response.statusCode).toBe(404);
+    expect(sent).toBe(0);
+  });
+});
+
+describe("DELETE /push/subscriptions/:id", () => {
+  it("revokes one device by id, and leaves the rest registered", async () => {
+    const first = await app.inject({ method: "POST", url: "/push/subscriptions", payload: device("https://push.example.com/first") });
+    await app.inject({ method: "POST", url: "/push/subscriptions", payload: device("https://push.example.com/second") });
+    const id = String(answered(first.json(), "the first registration")["id"]);
+
+    const response = await app.inject({ method: "DELETE", url: `/push/subscriptions/${id}` });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ removed: true });
+    expect((await store.list()).map((row) => row.endpoint)).toEqual(["https://push.example.com/second"]);
+    expect((await app.inject({ method: "DELETE", url: `/push/subscriptions/${id}` })).statusCode).toBe(404);
   });
 });

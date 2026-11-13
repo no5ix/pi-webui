@@ -155,6 +155,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | Dev-server allowed hosts: `true` or an array of hostnames (env: `true` or a comma-separated list); used only by the Vite dev server (`pnpm run dev:client`), not by `pi-web-server` | `allowedHosts` | `PI_WEB_ALLOWED_HOSTS` | Global | Not supported locally | Restart dev web/UI |
 | External filesystem roots | `pathAccess.allowedPaths` | — | Global + project | **Merges**: global roots first, then project roots; duplicates removed | Next file request; refresh existing views if needed |
 | Manual file upload default folder | `uploads.defaultFolder` | — | Global + project | **Overrides**: project value wins for workspaces in that project; otherwise global/default applies | New Upload dialogs and direct drag/drop batches after config/workspace refresh |
+| Device push notifications: `enabled` (default on), one VAPID key pair for this server, the contact push services see in the signed assertion, how long a push service may hold a message for an offline device, and the tailnet logins whose devices may register | `push.enabled`, `push.vapidPublicKey`, `push.vapidPrivateKey`, `push.subject`, `push.ttlSeconds`, `push.allowedTailnetLogins` | — | Global (session daemon) | Not supported locally | Restart session daemon ([Mobile push notifications](#mobile-push-notifications)) |
 | Log level and retention | `logging.level`, `logging.maxFileMb`, `logging.keepFiles` | — | Global (web/API and session daemon) | Not supported locally | Within a minute, no restart |
 | Update command for the Updates page | `updateCommand` | `PI_WEB_UPDATE_COMMAND` (the saved value wins) | Global | Not supported locally | Next status check, no restart |
 | Tiles per row in the Navigate lists | `listTiles.phone`, `listTiles.desktop` | — | Global (the gateway's browser UI) | Not supported locally | At once from Settings; browser reload after a hand edit |
@@ -562,6 +563,53 @@ Shortcut values are keyed by action id. Values are shortcut strings such as `mod
 ```
 
 Prefer Settings → Keyboard for editing shortcuts interactively.
+
+### Mobile push notifications
+
+The session daemon sends a device notification through the Web Push services when a run ends, when a
+questionnaire is parked on an answer, and when a run is cancelled. Each device registers itself from its
+own browser; a device that has never registered receives nothing, and a Mac that is powered off sends
+nothing. Behaviour, the device list and the privacy rules are in [Notifications](notifications.md).
+
+`push` needs no configuration to work:
+
+```json
+{
+  "push": {
+    "enabled": true,
+    "vapidPublicKey": "BKdf…",
+    "vapidPrivateKey": "{\"kty\":\"EC\",…}",
+    "subject": "mailto:you@example.com",
+    "ttlSeconds": 86400,
+    "allowedTailnetLogins": ["you@example.com", "partner@github"]
+  }
+}
+```
+
+- `enabled: false` closes the feature: nothing is sent, and no device address is stored.
+- `vapidPublicKey` and `vapidPrivateKey` give this server one push identity. With neither set, the
+  session daemon mints a pair into `$PI_WEB_DATA_DIR/push/vapid.json` on first start. A minted pair
+  belongs to one data directory: a server that mints a new pair refuses every device registered with
+  the old one, and the settings section says so and offers **Register this device again**. The private
+  half is never part of the config a browser, a plugin, a log line or a URL is shown; a config file
+  that holds it is readable only by its owner, and it is a secret.
+- `subject` is the contact the push services see in the signed assertion. Apple refuses a contact it
+  cannot resolve, so a `localhost` address, an address with no domain, or a URL carrying credentials is
+  replaced by the default (`https://github.com/Gang-of-Beads/pi-web`) and the refusal is said in the
+  session daemon's log and in the settings section. Set it to an address you own.
+- `ttlSeconds` bounds how long a push service may hold a message for a device that is offline: an
+  integer from 0 to 604800 seconds, 86400 (a day) by default. Messages are sent at high urgency,
+  because a low-urgency message to a phone that is asleep is a message the phone may defer past the
+  point where it is worth reading.
+- `allowedTailnetLogins` names the Tailscale identities whose devices may register. With the list
+  empty - the default - the network is the boundary and every device that reaches the server registers.
+  Once logins are named, a registration from any other Tailscale identity, and one that arrives with no
+  identity at all, is refused. The identity is the `Tailscale-User-Login` header that
+  `tailscale serve` adds ([Remote access](install.md#remote-access)); a browser that sends that header
+  itself is ignored, because only the web/API process - the process Tailscale faces - writes the
+  identity the session daemon is shown.
+
+These keys are read by the session daemon, so a change needs the session daemon restarted.
 
 ## Prompt completions
 

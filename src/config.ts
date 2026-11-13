@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import type { PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebPushConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig, PiWebTranslationConfig } from "./shared/apiTypes.js";
 import { isPiWebPluginId, piWebPluginIdPattern } from "./shared/pluginIds.js";
 import { isRecord } from "./shared/unknownValues.js";
+import { isTailnetLogin } from "./shared/deviceIdentity.js";
 import { isPluginModelGrant } from "./shared/pluginModelGrant.js";
 import { hasServerSettings, isPluginServerSettings, parseServerSettingsUpdates, preservePluginServerSettings } from "./shared/pluginConfigPrivacy.js";
 
@@ -484,17 +485,38 @@ function parsePushConfig(value: unknown, path: string): PiWebPushConfig {
   }
   const subject = value["subject"] === undefined ? undefined : parseString(value["subject"], "push.subject", path).trim();
   const ttlSeconds = value["ttlSeconds"] === undefined ? undefined : parseTtlSeconds(value["ttlSeconds"], path);
+  const allowedTailnetLogins = value["allowedTailnetLogins"] === undefined ? undefined : parseTailnetLogins(value["allowedTailnetLogins"], path);
   return {
     ...(enabled === undefined ? {} : { enabled }),
     ...(vapidPublicKey === undefined ? {} : { vapidPublicKey }),
     ...(vapidPrivateKey === undefined ? {} : { vapidPrivateKey }),
     ...(subject === undefined ? {} : { subject }),
     ...(ttlSeconds === undefined ? {} : { ttlSeconds }),
+    ...(allowedTailnetLogins === undefined ? {} : { allowedTailnetLogins }),
   };
 }
 
+/**
+ * The Tailscale logins allowed to register a device.
+ *
+ * An empty list is a meaningful value ("anyone this PI WEB is reachable on"), so it is kept as an empty
+ * list, not dropped. An entry that is not an address-shaped login is refused at startup: a login typed
+ * with a space, or a whole name where a login belongs, would quietly match no device at all.
+ */
+function parseTailnetLogins(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) throw new PiWebConfigError(`PI WEB config push.allowedTailnetLogins must be an array of Tailscale logins: ${path}`);
+  const logins: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") throw new PiWebConfigError(`PI WEB config push.allowedTailnetLogins must hold Tailscale logins such as "user@example.com": ${path}`);
+    const login = entry.trim().toLowerCase();
+    if (!isTailnetLogin(login)) throw new PiWebConfigError(`PI WEB config push.allowedTailnetLogins holds "${entry}", which is not a Tailscale login (an address such as "user@example.com" or "user@github"): ${path}`);
+    logins.push(login);
+  }
+  return logins;
+}
+
 /** Every key a push block may carry, so a typo fails at startup instead of reading as a default. */
-const PUSH_CONFIG_KEYS = ["enabled", "vapidPublicKey", "vapidPrivateKey", "subject", "ttlSeconds"];
+const PUSH_CONFIG_KEYS = ["enabled", "vapidPublicKey", "vapidPrivateKey", "subject", "ttlSeconds", "allowedTailnetLogins"];
 
 /** A week is the ceiling every push service honors; a message kept longer is kept by nobody. */
 function parseTtlSeconds(value: unknown, path: string): number {
