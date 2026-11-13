@@ -51,6 +51,9 @@ describe("the notification edge", () => {
 
   it("invents nothing where it has not seen the session before", () => {
     expect(edge(undefined, "idle")).toBe("none");
+    expect(edge(undefined, "asking")).toBe("none");
+    expect(edge(undefined, "error")).toBe("none");
+    expect(edge(undefined, "working")).toBe("none");
     expect(edge("idle", undefined)).toBe("none");
   });
 
