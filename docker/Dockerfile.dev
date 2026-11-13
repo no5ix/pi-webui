@@ -34,7 +34,6 @@ RUN chmod 0755 /usr/local/sbin/install-pi-web-opensuse-base \
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY scripts/install-git-hooks.mjs scripts/install-git-hooks.mjs
 # Keep an immutable dependency seed outside /workspace, which is hidden by the
 # checkout bind mount at runtime. A cached generation is added after custom
 # image hooks so it identifies the final dependency tree.

@@ -5,7 +5,7 @@ description: "Repository-specific testing guide. Use for any test work: planning
 
 # Testing guide
 
-**Maintainer agents do not write new unit tests unless asked (maintainer rule, 2026-10-03).** This is an internal working rule for the maintainers' own agents; outside contributors may, and should, add tests with their change (see CONTRIBUTING.md). The Vitest suite runs in `pnpm run verify`, locally (the pre-push hook runs it for a push to main) and in CI on every pull request, every push to main and every release tag. Keep it green when a change breaks an existing test: fix the code, or update or delete the test that pinned old behavior. There are no committed Playwright probe scripts or e2e suite; verify live in a real browser instead, for example on the isolated dev stack `scripts/stack-8505.sh` starts. The rest of this guide applies to the suite and to any test a change adds.
+**Maintainer agents do not write new unit tests unless asked (maintainer rule, 2026-10-03).** This is an internal working rule for the maintainers' own agents; outside contributors may, and should, add tests with their change (see CONTRIBUTING.md). The Vitest suite runs in `pnpm run verify`, which the contributor runs locally before a change reaches main, and in CI on every pull request, every push to main and every release tag (the repository installs no git hooks). Keep it green when a change breaks an existing test: fix the code, or update or delete the test that pinned old behavior. There are no committed Playwright probe scripts or e2e suite; verify live in a real browser instead, for example on the isolated dev stack `scripts/stack-8505.sh` starts. The rest of this guide applies to the suite and to any test a change adds.
 
 Use this skill for test-specific decisions in this repository. The goal is useful regression coverage without letting test helpers, mocks, or component harnesses become a second application that is harder to maintain than the code under test.
 
@@ -106,6 +106,6 @@ Run the narrowest meaningful check first:
 - Changed test file: `pnpm exec vitest run <test-file>`.
 - Source or exported type changes: also run `pnpm run typecheck`.
 - Non-trivial test helper, component, or lint-sensitive changes: run `pnpm exec eslint <changed-file>` or `pnpm run lint` when broader lint coverage is needed.
-- Before a change is merged to main: `pnpm run verify` (the pre-push hook runs it for a push to main, and CI runs it on the pull request).
+- Before a change is merged to main: `pnpm run verify` (CI runs it on the pull request; the repository installs no git hooks, so it is the contributor's own step).
 
 Record exact commands and results when working under relay/audit workflows or when handing work to another agent.

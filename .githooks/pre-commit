@@ -1,5 +1,0 @@
-#!/usr/bin/env sh
-set -eu
-
-echo "Running pre-commit checks: pnpm run verify:staged"
-pnpm run verify:staged

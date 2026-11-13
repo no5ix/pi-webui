@@ -34,7 +34,7 @@ Use `.agents/skills/documentation-guide/SKILL.md` whenever writing, modifying, r
 
 ## Testing guidance
 
-`pnpm run verify` (typecheck, lint, Knip and the Vitest suite) runs locally before a change reaches main (the pre-push hook runs it for a push to main) and in CI on every pull request, every push to main and every release tag. The pre-commit hook runs static checks only. There is no committed Playwright probe or e2e suite.
+`pnpm run verify` (typecheck, lint, Knip and the Vitest suite) runs locally before a change reaches main and in CI on every pull request, every push to main and every release tag. The repository installs no git hooks, so running it is the contributor's own step. There is no committed Playwright probe or e2e suite.
 
 Maintainer agents do not write new unit tests unless asked (maintainer rule, 2026-10-03); they keep the suite green by fixing the code, or by updating or deleting a test that pinned removed behavior. Outside contributors may, and should, add tests with their change.
 

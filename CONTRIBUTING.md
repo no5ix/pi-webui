@@ -22,7 +22,7 @@ cd pi-web
 pnpm install --frozen-lockfile
 ```
 
-Installing runs the `pnpm:devPreinstall` script, which points git at the repository's hooks (`git config core.hooksPath .githooks`).
+Installing installs dependencies only: it runs no git-hook setup, and the repository ships no hooks.
 
 ## Running it
 
@@ -62,8 +62,9 @@ A green suite does not show that a person can use the change. For anything that 
 
 ## Git hooks
 
-- **pre-commit** runs `pnpm run verify:staged`: the typecheck, Knip, and ESLint on the staged files.
-- **pre-push** refuses a push while tracked files under `src/`, `extensions/` or `pi-web-plugins/` have uncommitted changes, and runs the full `pnpm run verify` when the push targets `main`.
+The repository installs no git hooks and configures none: `pnpm install` leaves your git configuration
+alone, and commits and pushes run whatever hooks your own machine has. Run the checks yourself —
+`pnpm run verify` before a change reaches `main`, as CI does on every pull request.
 
 ## Changesets
 
