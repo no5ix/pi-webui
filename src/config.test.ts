@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_EXTENSION_DIALOGS_TIMEOUT_MS, DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_UPLOADS_FOLDER, AGENT_SESSION_DIR_ENV_KEYS, agentSessionDirEnvOverride, detectDeprecatedAgentInputs, effectiveAgentConfig, environmentFactsEnabled, effectivePiWebConfig, loadPiWebConfig, maxUploadBytes, offlineModeEnabled, savePiWebConfig } from "./config.js";
+import { publicPiWebConfig } from "./shared/pluginConfigPrivacy.js";
 
 let tempDir: string;
 let configPath: string;
@@ -324,5 +325,59 @@ describe("a plugin's own settings survive a round trip", () => {
 
     expect(saved.config.plugins).toEqual(requestedConfig.plugins);
     expect(loadPiWebConfig(testOptions()).config.plugins).toEqual(requestedConfig.plugins);
+  });
+});
+
+describe("the push section", () => {
+  const publicKey = "BFimTfWRcGJiyMOeHRC9k7FMCiLrxBMNwBCA4HqmSBMF6BQFEKBDWZSgRZYGbTGqRPXnQwLSNfeL4Z7T7X0aY0E";
+  const privateKey = "{\"kty\":\"EC\",\"crv\":\"P-256\",\"d\":\"Mg3XlmS0ZTOwTQKxbTiIhCkAOcVdESAAZQeLcjQdKz\",\"x\":\"pemTfWRcGJiyMOeHRC9k7FMCiLrxBMNwBCA4HqmSBMF\",\"y\":\"1CgQoUNgJpZpRKBhmAV1p6dKapNKFNw2Hk3g0s2gXBA\"}";
+
+  it("takes an empty section as push on with a key pair the daemon mints", async () => {
+    await writeFile(configPath, `${JSON.stringify({ push: {} }, null, 2)}\n`, "utf8");
+
+    expect(loadPiWebConfig(testOptions()).config.push).toEqual({});
+  });
+
+  it("keeps a key pair, a contact and a TTL a push service honors", async () => {
+    const requestedConfig = { push: { enabled: true, vapidPublicKey: publicKey, vapidPrivateKey: privateKey, subject: "mailto:reader@example.com", ttlSeconds: 86400 } };
+    await writeFile(configPath, `${JSON.stringify(requestedConfig, null, 2)}\n`, "utf8");
+
+    expect(loadPiWebConfig(testOptions()).config.push).toEqual(requestedConfig.push);
+  });
+
+  it("refuses a key pair that is only half present, so a missing private key is not read as a sender that works", async () => {
+    await writeFile(configPath, `${JSON.stringify({ push: { vapidPublicKey: publicKey } }, null, 2)}\n`, "utf8");
+
+    expect(() => loadPiWebConfig(testOptions())).toThrow("PI WEB config push needs both vapidPublicKey and vapidPrivateKey, or neither");
+  });
+
+  it("refuses a key it does not know, so a typo is not a silent default", async () => {
+    await writeFile(configPath, `${JSON.stringify({ push: { vapidPublickey: publicKey } }, null, 2)}\n`, "utf8");
+
+    expect(() => loadPiWebConfig(testOptions())).toThrow('PI WEB config push has an unknown key "vapidPublickey"');
+  });
+
+  it("refuses a TTL no push service honors", async () => {
+    await writeFile(configPath, `${JSON.stringify({ push: { ttlSeconds: 604801 } }, null, 2)}\n`, "utf8");
+
+    expect(() => loadPiWebConfig(testOptions())).toThrow("PI WEB config push.ttlSeconds must be an integer between 0 and 604800");
+  });
+
+  it("keeps the private key when a browser saves the config it was shown", async () => {
+    // The settings page is given the config with the private key removed, and a save writes what the
+    // page holds. Without this, turning a plugin on or off would delete the key that signs every push.
+    await writeFile(configPath, `${JSON.stringify({ push: { vapidPublicKey: publicKey, vapidPrivateKey: privateKey }, port: 9000 }, null, 2)}\n`, "utf8");
+
+    savePiWebConfig({ port: 9001, push: { vapidPublicKey: publicKey } }, testOptions());
+
+    const written: { push?: { vapidPublicKey?: string; vapidPrivateKey?: string } } = JSON.parse(await readFile(configPath, "utf8"));
+    expect(written.push?.vapidPublicKey).toBe(publicKey);
+    expect(written.push?.vapidPrivateKey).toBe(privateKey);
+  });
+
+  it("keeps the VAPID private key out of the config a browser is shown", () => {
+    const shown = publicPiWebConfig({ push: { vapidPublicKey: publicKey, vapidPrivateKey: privateKey, subject: "mailto:reader@example.com" } });
+
+    expect(shown.push).toEqual({ vapidPublicKey: publicKey, subject: "mailto:reader@example.com" });
   });
 });

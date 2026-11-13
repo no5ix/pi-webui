@@ -34,6 +34,8 @@ export interface SessionServiceDependencyInput {
   pluginBackgroundWork?: NonNullable<PiSessionServiceDependencies["pluginBackgroundWork"]>;
   /** Where the facts the session service decides go to the server plugins; omitted in tests that hear none. */
   serverFacts?: NonNullable<PiSessionServiceDependencies["serverFacts"]>;
+  /** The device notices a run's confirmed end and a waiting questionnaire produce; omitted in tests that notify nobody. */
+  taskNotices?: NonNullable<PiSessionServiceDependencies["taskNotices"]>;
   /** The folders a project rename is moving, shared with the terminals; omitted in tests that rename nothing. */
   folderHolds?: NonNullable<PiSessionServiceDependencies["folderHolds"]>;
 }
@@ -56,6 +58,7 @@ export function sessionServiceDependencies(input: SessionServiceDependencyInput)
     archiveStore: input.archiveStore,
     workspaceActivity: input.workspaceActivity,
     logger: input.logger,
+    ...(input.taskNotices === undefined ? {} : { taskNotices: input.taskNotices }),
     ...(input.spawnTargets === undefined ? {} : { spawnTargets: input.spawnTargets }),
     hostContributions: input.hostContributions,
     extensionDialogsTimeoutMs: input.extensionDialogsTimeoutMs,

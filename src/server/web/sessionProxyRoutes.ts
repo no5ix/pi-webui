@@ -80,6 +80,11 @@ export function registerSessionProxyRoutes(app: FastifyInstance, daemon: Session
   });
 
   app.all(`${prefix}/status`, (request, reply) => proxy(request, reply));
+  // Device push subscriptions and the test send, answered by the session daemon: the events, the
+  // subscription store and the VAPID key pair are the daemon's, so a web/API restart must not stop a
+  // phone being told. The routes are forwarded whole and validated at the daemon.
+  app.all(`${prefix}/push`, (request, reply) => proxy(request, reply));
+  app.all(`${prefix}/push/*`, (request, reply) => proxy(request, reply));
   app.all(`${prefix}/auth`, (request, reply) => proxy(request, reply));
   app.all(`${prefix}/auth/*`, (request, reply) => proxy(request, reply));
   app.all(`${prefix}/sessions`, (request, reply) => proxy(request, reply));
