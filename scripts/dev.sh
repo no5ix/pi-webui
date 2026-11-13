@@ -259,7 +259,14 @@ wait_for_sessiond() {
     socket_path="${PI_WEB_SESSIOND_SOCKET:-${PI_WEB_DATA_DIR:-$HOME/.pi-web}/sessiond.sock}"
     case "$socket_path" in /*) : ;; *) socket_path="$PWD/$socket_path" ;; esac
     while [ "$waited" -lt "$timeout" ]; do
-      if nc -U -z "$socket_path" 2>/dev/null; then return 0; fi
+      if node -e '
+const net = require("node:net");
+const socket = net.createConnection(process.argv[1]);
+socket.setTimeout(1000);
+socket.once("connect", () => { socket.destroy(); process.exit(0); });
+socket.once("error", () => process.exit(1));
+socket.once("timeout", () => { socket.destroy(); process.exit(1); });
+' "$socket_path" >/dev/null 2>&1; then return 0; fi
       if ! children_alive; then trouble "the session daemon exited before creating its socket"; return 1; fi
       sleep 1; waited=$((waited + 1))
     done
