@@ -1,4 +1,5 @@
 import type { NtfyConfig, NtfyDelivery, NotificationEvent } from "../../../shared/ntfy.js";
+import { ntfyFetch } from "../../notifications/ntfyFetch.js";
 import { ntfyReadiness, ntfyWantsEvent, sendNtfyNotice } from "../../../shared/ntfy.js";
 
 /**
@@ -97,7 +98,7 @@ export function createNtfyNotifier(dependencies: NtfyNotifierDependencies): Ntfy
       return;
     }
     void sendNtfyNotice(request, config, {
-      ...(dependencies.fetchImpl === undefined ? {} : { fetchImpl: dependencies.fetchImpl }),
+      fetchImpl: dependencies.fetchImpl ?? ntfyFetch,
       now,
       ...(dependencies.log === undefined ? {} : { log: dependencies.log }),
     }).then((delivery: NtfyDelivery) => {

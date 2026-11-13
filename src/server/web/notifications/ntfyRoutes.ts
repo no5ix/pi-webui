@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { ntfyFetch } from "../../notifications/ntfyFetch.js";
 import type { NtfyConfig } from "../../../shared/apiTypes.js";
 import {
   ntfyReadiness,
@@ -49,7 +50,7 @@ export function registerNtfyRoutes(app: FastifyInstance, options: NtfyRoutesOpti
         tags: ["white_check_mark"],
       },
       config,
-      { ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }) },
+      { fetchImpl: options.fetchImpl ?? ntfyFetch },
     );
     return {
       delivered: delivery.delivered,
