@@ -20,9 +20,12 @@ import { formatCost } from "../utils/format";
  * owner laid out (2026-10-07) and is preserved on every width.
  */
 const statusBarStyles = css`${unsafeCSS(uiIconStyle)}
-  :host { display: block; color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono); line-height: 1.3; }
+  :host { display: block; color: var(--pi-muted); font: var(--pi-text-2xs) var(--pi-font-ui); font-variant-numeric: tabular-nums; line-height: 1.3; }
   :host, :host * { -webkit-user-select: none; user-select: none; }
-  .bar { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--pi-space-6); row-gap: var(--pi-space-1); justify-content: flex-start; min-width: 0; min-height: calc(var(--pi-panel-header-height) * 4 / 9); padding: var(--pi-space-1) var(--pi-chat-gutter); border-top: 1px solid var(--pi-border); background: var(--pi-bg); }
+  .bar { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--pi-space-3); row-gap: var(--pi-space-2); justify-content: flex-start; min-width: 0; min-height: calc(var(--pi-panel-header-height) * 4 / 9); padding: var(--pi-space-2) var(--pi-chat-gutter); border-top: 1px solid var(--pi-divider); background: var(--pi-bg); }
+  /* Each number is its own quiet fact, so it is its own chip: small, hairline,
+     the same height, and never the loudest thing under the composer. */
+  .bar > span, .bar .statuses > span { box-sizing: border-box; padding: 0 var(--pi-space-3); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-pill); background: var(--pi-chip-bg); }
   /* Every value keeps its own words: no ellipsis, no clipping, no shrinking into a fragment. A span
      that does not fit starts a line of its own, and a single token longer than the window - a branch
      name - breaks inside itself rather than pushing the bar out of the page. */
@@ -39,7 +42,8 @@ const statusBarStyles = css`${unsafeCSS(uiIconStyle)}
      from "262k" leaves the reader with a percentage of nothing (owner, 2026-10-07; measured at 360px
      with a long branch name, 2026-11-13). */
   .context { flex: 0 0 auto; white-space: nowrap; }
-  @media (max-width: 30rem) { .bar { column-gap: var(--pi-space-4); } .cost { margin-inline-start: 0; } }
+  .context.filling, .context.full, .bar .statuses > span { border-color: color-mix(in srgb, currentColor 42%, transparent); }
+  @media (max-width: 30rem) { .bar { column-gap: var(--pi-space-2); row-gap: var(--pi-space-2); } .cost { margin-inline-start: 0; } }
 `;
 
 @customElement("status-bar")

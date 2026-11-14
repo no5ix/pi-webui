@@ -232,13 +232,15 @@ describe("where the activity marker lives", () => {
 
 describe("the size of a target on a touch screen", () => {
   /**
-   * The drawn control is one bordered 22px box like every other control;
-   * only what a finger can hit grows, via the reach pseudo-element.
+   * The drawn control is one bordered 24px box like every other control - the
+   * smallest size a non-text target may be and still meet the platform's
+   * accessibility floor; only what a finger can hit grows, via the reach
+   * pseudo-element, and the drawn box is never redrawn larger.
    */
   it("gives message actions a finger-sized reach without redrawing them", () => {
     const rules = allRulesFor(".msg-action");
 
-    expect(rules.some((rule) => /width:\s*22px/u.test(rule))).toBe(true);
+    expect(rules.some((rule) => /width:\s*24px/u.test(rule))).toBe(true);
     expect(rules.some((rule) => /border:\s*1px solid/u.test(rule))).toBe(true);
     expect(sheets).toMatch(/\.msg-action::after\s*\{[^}]*inset:\s*calc\(-1 \* var\(--pi-space-5\)\) calc\(-1 \* var\(--pi-space-1\)\)/u);
         expect(sheets).toMatch(/pointer: coarse[\s\S]*?\.msg-action::after \{ inset: calc\(-1 \* var\(--pi-space-3\)\) calc\(-1 \* var\(--pi-space-1\)\)/u)

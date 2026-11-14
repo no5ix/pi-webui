@@ -49,7 +49,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
      nothing is lost for keyboard users. */
   button, [role="button"], a, summary, label, input, select { font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; -webkit-tap-highlight-color: transparent; }
   /* Follows the control's own shape rather than boxing a circle. */
-  button:focus-visible, [role="button"]:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); }
+  button:focus-visible, [role="button"]:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
   /* Motion is a preference, not a decoration: a user who asks for less of it
      gets none. Kept to a blanket rule because every animation here is
      ornamental — progress bars, pulses, fades — so there is no reduced variant
@@ -73,7 +73,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
      10px inset made the box edge jump 6px one way on desktop and the other
      way on the phone when the composer collapsed. */
   .expand-composer { box-sizing: border-box; display: flex; align-items: center; gap: var(--pi-space-4); width: 100%; min-height: var(--pi-control-height-touch); padding: var(--pi-space-2) var(--pi-space-5); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-muted); font: inherit; font-size: var(--pi-text-sm); text-align: start; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .expand-composer:focus-visible { border-color: var(--pi-accent); color: var(--pi-text-bright); outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset-tight); }
+  .expand-composer:focus-visible { border-color: var(--pi-accent); color: var(--pi-text-bright); outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-tight); }
   @media (hover: hover) { .expand-composer:hover { border-color: var(--pi-accent); color: var(--pi-text-bright); } }
   .expand-composer-label { flex: 0 0 auto; }
   .expand-composer-hint { display: inline-flex; flex: 0 0 auto; margin-inline-start: auto; color: var(--pi-muted); }
@@ -98,7 +98,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .actions button { box-sizing: border-box; height: var(--pi-control-height-comfort); min-height: var(--pi-control-height-comfort); }
   .actions { display: flex; gap: var(--pi-space-4); align-items: center; justify-content: flex-end; flex-wrap: nowrap; white-space: nowrap; }
   .actions button { line-height: var(--pi-panel-header-control-height); }
-  .compact-status { display: flex; min-width: 0; align-items: center; gap: var(--pi-space-3); color: var(--pi-muted); font-size: var(--pi-text-xs); flex: 1 1 0; }
+  .compact-status { display: flex; min-width: 0; align-items: center; gap: var(--pi-space-3); color: var(--pi-muted); font-size: var(--pi-text-2xs); flex: 1 1 0; }
   .compact-status > button { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .status-loading > button:disabled { opacity: 1; cursor: progress; }
   .select-model-missing { gap: var(--pi-space-3); }
@@ -108,8 +108,9 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .select-model-missing .opening-spinner { width: 12px; height: 12px; }
   .status-loading .select-thinking .opening-spinner { width: 16px; height: 16px; }
   @media (prefers-reduced-motion: reduce) { .status-loading .opening-spinner { border-color: currentColor; } }
-  .select-model { max-width: min(42vw, 320px); min-height: var(--pi-control-height-comfort); display: inline-flex; align-items: center; box-sizing: border-box; }
-  .select-model-not-configured { border-color: var(--pi-warning-border); color: var(--pi-warning); }
+  .select-model { max-width: min(42vw, 320px); min-height: var(--pi-control-height-comfort); display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); padding: 0 var(--pi-space-4); }
+  @media (hover: hover) { .select-model:hover:not(:disabled) { background: var(--pi-row-hover); } }
+  .select-model-not-configured { border-color: var(--pi-warning-border); background: var(--pi-warning-surface); color: var(--pi-warning); }
   .select-model-label { position: relative; flex: 1 1 auto; min-width: 0; display: inline-grid; grid-template-columns: minmax(0, 1fr); align-items: center; overflow: hidden; }
   .select-model-natural, .select-model-visible-label { grid-area: 1 / 1; min-width: 0; }
   .select-model-natural, .select-model-minimum-label, .select-model-visible-label { display: inline-flex; align-items: center; white-space: nowrap; }
@@ -124,15 +125,22 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .icon-button { position: relative; flex: 0 0 auto; display: inline-grid; place-items: center; width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); box-sizing: border-box; padding: 0; }
   .icon-button .prompt-action-icon, .icon-button .prompt-thinking-gauge { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
   .icon-button .prompt-action-icon-filled { fill: currentColor; stroke: none; }
-  .icon-button[aria-pressed="true"] { background: var(--pi-selection-bg); color: var(--pi-text); }
-  .send-button:not(:disabled) { color: var(--pi-accent, var(--pi-text)); }
+  .icon-button[aria-pressed="true"] { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); border-color: var(--pi-accent-border); }
+  @media (hover: hover) { .icon-button:hover:not(:disabled) { background: var(--pi-row-hover); color: var(--pi-text); } }
+  /* The region's one primary control: the accent fill and the label colour the
+     theme chose for it, so "send" is the loudest thing in the composer row. */
+  .send-button:not(:disabled) { border-color: var(--pi-accent); background: var(--pi-accent); color: var(--pi-on-accent); font-weight: var(--pi-weight-strong); }
+  @media (hover: hover) { .send-button:hover:not(:disabled) { border-color: var(--pi-accent); background: color-mix(in srgb, var(--pi-accent) 88%, var(--pi-text)); color: var(--pi-on-accent); } }
   /* The button names its own press. An icon that means "send" at one moment and "steer" at the next is
      a meaning the reader has to hover for; the word is the control. On a phone the row has no room for
      the word, so the icon carries it and the accessible name and tooltip keep saying the same thing. */
   .send-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); width: auto; min-width: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); }
   .send-label { font: var(--pi-text-sm) var(--pi-font-ui); white-space: nowrap; }
   @media (max-width: 30rem) { .send-button { width: var(--pi-control-height-comfort); padding: 0; } .send-label { display: none; } }
-  .stop-button:not(:disabled) { color: var(--pi-danger); }
+  /* A stop is not a second primary: it names itself with the danger colour on the
+     neutral surface, so one action per row stays true. */
+  .stop-button:not(:disabled) { border-color: color-mix(in srgb, var(--pi-danger) 55%, transparent); background: color-mix(in srgb, var(--pi-danger) 12%, transparent); color: var(--pi-danger); }
+  @media (hover: hover) { .stop-button:hover:not(:disabled) { background: color-mix(in srgb, var(--pi-danger) 20%, transparent); color: var(--pi-danger); } }
   .select-thinking .prompt-thinking-gauge .gauge-bar { fill: currentColor; stroke: none; opacity: .28; }
   .select-thinking .prompt-thinking-gauge .gauge-bar-active { opacity: 1; }
   /* Inside the field, not over its edge: on a phone the field is 40px tall at
@@ -145,8 +153,14 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
      overflow reported twice now. It shrinks with the box instead. */
   button.editor-attach { position: absolute; right: var(--pi-space-3); bottom: var(--pi-space-3); z-index: 2; box-sizing: border-box; width: min(var(--pi-control-height), calc(100% - 2 * var(--pi-space-3))); height: min(var(--pi-control-height), calc(100% - 2 * var(--pi-space-3))); aspect-ratio: 1; }
   .editor-attach .prompt-action-icon { width: 18px; height: 18px; }
-  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-md); border: 1px solid var(--pi-border); background: var(--pi-bg); color: var(--pi-text); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
-  textarea { overflow-y: auto; padding: var(--pi-space-4); padding-right: calc(var(--pi-space-3) + var(--pi-control-height) + var(--pi-space-3)); }
+  /* The one surface on the screen that asks to be typed in, so it is the one
+     surface that is lifted: the content surface under the ink, a hairline that is
+     not an accent, and the app's lowest elevation. Focus is a ring, never a
+     permanent accent border - an accent outline that is always on reads as
+     "already focused" and stops being a signal. */
+  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 1px solid var(--pi-chip-border); background: var(--pi-surface); color: var(--pi-text); box-shadow: var(--pi-elevation-1); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
+  textarea:focus-visible, .markdown-editor .cm-editor.cm-focused { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
+  textarea { overflow-y: auto; padding: var(--pi-space-5); padding-right: calc(var(--pi-space-3) + var(--pi-control-height) + var(--pi-space-3)); }
   /* A phone with the keyboard open leaves roughly 400px of viewport, and a
      composer sized for a full screen took 119px of it - the transcript was
      left with about two lines. The composer keeps a floor so it stays usable
@@ -225,7 +239,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .pending-prompt button { box-sizing: border-box; flex: 0 0 auto; min-height: var(--pi-control-height); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); font: inherit; cursor: pointer; }
   @media (pointer: coarse) { .pending-prompt button { min-height: var(--pi-control-height-touch); } }
   .attachments { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pi-space-4); margin: 0; padding: 0 0 var(--pi-space-1); }
-  .attachment-chip { box-sizing: border-box; position: relative; width: 56px; height: 56px; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); overflow: hidden; background: var(--pi-bg); }
+  .attachment-chip { box-sizing: border-box; position: relative; width: 56px; height: 56px; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); overflow: hidden; background: var(--pi-chip-bg); }
   .attachment-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .attachment-chip-file { display: grid; place-items: center; }
   .attachment-file-preview { box-sizing: border-box; display: grid; place-items: center; width: var(--pi-control-height-comfort); height: 26px; border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-xs); background: var(--pi-surface); color: var(--pi-muted); font: var(--pi-weight-bold) var(--pi-text-2xs)/1 var(--pi-font-ui, system-ui, sans-serif); line-height: inherit; letter-spacing: normal; }
@@ -233,7 +247,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   /* A square badge in the corner, not a circle over the picture: the round
      44px control covered the thumbnail it was meant to remove (owner). The
      drawn box stays small and the thumb reaches it through a pseudo-element. */
-  .attachment-remove { box-sizing: border-box; position: absolute; top: 0; right: 0; display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; line-height: 1; border-radius: 0 var(--pi-radius-md) 0 var(--pi-radius-md); border: 1px solid var(--pi-border); background: var(--pi-surface); color: var(--pi-text); font-size: var(--pi-text-2xs); cursor: pointer; }
+  .attachment-remove { box-sizing: border-box; position: absolute; top: 0; right: 0; display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; line-height: 1; border-radius: 0 var(--pi-radius-md) 0 var(--pi-radius-md); border: 1px solid var(--pi-chip-border); background: var(--pi-surface); color: var(--pi-text); font-size: var(--pi-text-2xs); cursor: pointer; }
   .attachment-remove::after { content: ""; position: absolute; inset: calc(-1 * var(--pi-space-6)); }
   /* A thumb is about 9mm wide. An 18px remove badge on a 56px thumbnail means
      the tap lands on the image instead, so on touch the badge grows and the
