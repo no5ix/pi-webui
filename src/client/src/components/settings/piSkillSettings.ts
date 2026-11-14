@@ -142,12 +142,14 @@ export function piSkillToggleRequest(
   info: Pick<PiSkillInfo, "name" | "scope">,
   enabled: boolean,
   scopes: readonly PiSkillsScopeInfo[],
+  selectedProjectId?: string,
 ): PiSkillSetEnabledRequest {
-  const scopeInfo = scopes.find((entry) => entry.scope === info.scope);
-  const projectId = scopeInfo?.projectId;
+  const preferenceScope: PiSkillScope = selectedProjectId === undefined ? info.scope : "project";
+  const projectScope = scopes.find((entry) => entry.scope === "project");
+  const projectId = preferenceScope === "project" ? selectedProjectId ?? projectScope?.projectId : undefined;
   return {
     name: info.name,
-    scope: info.scope,
+    scope: preferenceScope,
     enabled,
     ...(projectId === undefined || projectId === "" ? {} : { projectId }),
   };
@@ -161,5 +163,6 @@ export function isPiSkillTogglePending(operation: PiSkillOperationState | undefi
 export function piSkillMutationMessage(scope: PiSkillScope, name: string, enabled: boolean, target: SettingsMachineTarget): string {
   const targetSuffix = target.kind === "local" ? "" : ` on ${target.name}`;
   const sessionScope = target.kind === "local" ? "each idle PI WEB session" : `each idle PI WEB session on ${target.name}`;
-  return `Skill ${name} ${enabled ? "turned on" : "turned off"}${targetSuffix}. Type /reload in ${sessionScope} to load the new skill list.`;
+  const preferenceTarget = scope === "project" ? " for this project" : " globally";
+  return `Skill ${name} ${enabled ? "turned on" : "turned off"}${preferenceTarget}${targetSuffix}. Type /reload in ${sessionScope} to load the new skill list.`;
 }
