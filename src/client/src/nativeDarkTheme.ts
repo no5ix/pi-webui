@@ -23,7 +23,7 @@ export const CORE_MATERIAL_DARK_TOKENS = {
   "--pi-text-secondary": "#cac4d0",
   "--pi-text-bright": "#f5eef7",
   "--pi-muted": "#938f99",
-  "--pi-dim": "#79747e",
+  "--pi-dim": "#847f88",
   "--pi-accent": "#d0bcff",
   "--pi-on-accent": "#381e72",
   "--pi-accent-border": "#65558f",

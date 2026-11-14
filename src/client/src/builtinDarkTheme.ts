@@ -30,7 +30,7 @@ export const CORE_BUILTIN_DARK_TOKENS = {
   "--pi-text-secondary": "#c8c2d1",
   "--pi-text-bright": "#fffaff",
   "--pi-muted": "#a39bad",
-  "--pi-dim": "#81798d",
+  "--pi-dim": "#878093",
   "--pi-accent": "#b28cff",
   "--pi-on-accent": "#21152f",
   "--pi-accent-border": "#7256a3",
