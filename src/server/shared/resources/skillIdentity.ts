@@ -143,9 +143,8 @@ export type SkillOwnership =
  * those locations first prevents a user skill from acquiring the identity of whichever repository
  * happened to discover it.
  *
- * A skill configured by absolute path answers `location-only`: the file's location says nothing about
- * projects. A session, which knows its own working directory, can treat such a file as its own when it
- * lies inside it; a panel that is not looking at a session cannot, and leaves it machine-wide.
+ * A skill configured by absolute path answers `location-only`: its project is determined by the
+ * selected project/session cwd when its canonical path lies inside that project; outside paths stay global.
  */
 export function skillOwnership(filePath: string, agentDir: string): SkillOwnership {
   const fileKey = canonicalPathKey(filePath);
@@ -160,21 +159,19 @@ export function skillOwnership(filePath: string, agentDir: string): SkillOwnersh
 }
 
 /**
- * The identity of one skill file, from the file's location and the scope the caller is reading for.
+ * The identity of one skill file, from its location and the project context shared by the panel and session.
  *
- * `sessionCwd` is known to a session and unknown to a panel that is not looking at one, and it is the
- * only thing that can place a skill configured by absolute path into a project. Passing it on the
- * session side and omitting it on the panel side is the one accepted identity asymmetry: both sides
- * agree on every skill Pi discovers from a Pi skill folder, and a panel cannot claim a preference for
- * a project it is not showing.
+ * A path inside a known Pi skill directory keeps the owner encoded by that directory. A configured
+ * absolute path has no such marker, so the selected project/session cwd is used only when the path is
+ * within that project. Canonical path comparison keeps symlinked and differently-spelled paths consistent.
  */
-export function skillPreferenceIdentityFor(agentDir: string, sessionCwd?: string): (filePath: string) => SkillIdentity {
+export function skillPreferenceIdentityFor(agentDir: string, projectPath?: string): (filePath: string) => SkillIdentity {
   return (filePath) => {
     const owner = skillOwnership(filePath, agentDir);
     if (owner.kind === "project") return skillIdentity(filePath, { projectPath: owner.projectPath });
     if (owner.kind === "global") return skillIdentity(filePath, {});
-    if (sessionCwd !== undefined && (filePath === sessionCwd || filePath.startsWith(`${sessionCwd.replace(/\/+$/, "")}/`))) {
-      return skillIdentity(filePath, { projectPath: sessionCwd });
+    if (projectPath !== undefined && isPathWithinKey(canonicalPathKey(projectPath), canonicalPathKey(filePath))) {
+      return skillIdentity(filePath, { projectPath });
     }
     return skillIdentity(filePath, {});
   };

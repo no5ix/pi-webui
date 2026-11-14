@@ -175,6 +175,27 @@ describe("what a session is given", () => {
     expect(forB.some((skill) => skill.name === AUDIT)).toBe(false);
   });
 
+  it("filters an absolute configured skill path using the project identity", async () => {
+    const configuredPath = join(projectA, "custom-skills", "absolute-helper", "SKILL.md");
+    mkdirSync(join(projectA, "custom-skills", "absolute-helper"), { recursive: true });
+    writeFileSync(configuredPath, `---\\nname: absolute-helper\\ndescription: A skill.\\n---\\nRead the body.\\n`, "utf8");
+    const id = skillIdentity(configuredPath, { projectPath: projectA }).id;
+    const base = [{
+      name: "absolute-helper",
+      description: "A skill.",
+      filePath: configuredPath,
+      baseDir: join(projectA, "custom-skills", "absolute-helper"),
+      sourceInfo: { source: "path" },
+      disableModelInvocation: false,
+    }] as unknown as Skill[];
+    const filter = piWebSkillsOverride(agentDir, projectA, { info: () => undefined, warn: () => undefined }, {
+      readGlobal: () => ({}),
+      readProject: () => ({ version: 2, disabled: [{ id, name: "absolute-helper" }] }),
+    }, new Map());
+
+    expect(filter({ skills: base, diagnostics: [] }).skills).toEqual([]);
+  });
+
   it("applies the preferences saved between two session creations", async () => {
     const saved: { config: PiSkillPreferenceConfig } = { config: {} };
 

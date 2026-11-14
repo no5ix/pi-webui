@@ -105,17 +105,12 @@ export class PiSkillNotFoundError extends Error {
  * The skills of one discovery, as preference subjects: each with the identity the session runtime will
  * name it by.
  *
- * The identity is computed from the skill file and the project the file belongs to, which is exactly
- * what the session knows when it filters skills, so the row the panel shows and the skill the session
- * is given are the same skill. The project comes from where the file is - a skill under
- * `<root>/.pi/skills` or `<root>/.agents/skills` belongs to `<root>` - and not from the panel's current
- * selection, because answering for a project skill with the identity of whatever project is selected
- * would write a preference for one project while the reader means another, and in the no-project view
- * it would write a global answer no session can ever read. The display name is carried beside it for
- * the legacy name spelling and for the words the panel shows, and it decides nothing.
+ * Folder-owned skills retain the owner encoded by their `.pi/skills` or `.agents/skills` path.
+ * Configured absolute paths inside the selected project use that project's context, matching the
+ * session cwd. Disabled-package rows are informational only and are excluded from preference planning.
  */
-export function skillPreferenceSubjects(skills: readonly DiscoveredSkill[], agentDir: string): SkillPreferenceSubject[] {
-  const identityFor = skillPreferenceIdentityFor(agentDir);
+export function skillPreferenceSubjects(skills: readonly DiscoveredSkill[], agentDir: string, projectPath?: string): SkillPreferenceSubject[] {
+  const identityFor = skillPreferenceIdentityFor(agentDir, projectPath);
   return skills.map((skill) => ({
     identity: identityFor(skill.filePath),
     name: skill.name,
@@ -167,7 +162,7 @@ export class DefaultPiSkillsService implements PiSkillsService {
     return await this.enqueueMutation(async () => {
       const projectPath = scope.projectPath;
       const discovered = await this.discovery.discover(projectPath);
-      const subjects = skillPreferenceSubjects(discovered.skills, this.agentDir);
+      const subjects = skillPreferenceSubjects(discovered.skills, this.agentDir, projectPath);
       const subject = findPreferenceSubject(subjects, request);
       if (request.scope === "global" && subject.identity.scope !== "global") {
         throw new PiSkillsRequestError("A global skill preference cannot name a project's own skill: turn it off for that project instead.");
@@ -201,12 +196,9 @@ export class DefaultPiSkillsService implements PiSkillsService {
   private response(found: SkillDiscovery, scope: ReadScope): PiSkillsResponse {
     const global = this.preferences.readGlobal();
     const project = scope.projectPath === undefined ? undefined : this.preferences.readProject(scope.projectPath);
-    const subjects = skillPreferenceSubjects(found.skills, this.agentDir);
-    const plan = planSkillRuntime(
-      subjects.filter((_, index) => found.skills[index]?.source !== "package"),
-      global.config,
-      project?.config,
-    );
+    const subjects = skillPreferenceSubjects(found.skills, this.agentDir, scope.projectPath);
+    const runtimeSubjects = subjects.filter((_, index) => found.skills[index]?.ownerPackageDisabled !== true);
+    const plan = planSkillRuntime(runtimeSubjects, global.config, project?.config);
     const skills = found.skills.flatMap((skill, index) => {
       const subject = subjects[index];
       if (subject === undefined) return [];

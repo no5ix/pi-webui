@@ -162,6 +162,19 @@ describe("listing skills", () => {
     expect(listed.skills[0]).toMatchObject({ scope: "global", origin: "path", name: "shared-helper" });
   });
 
+  it("uses the selected project's identity for a configured absolute path inside that project", async () => {
+    const configured = skill("absolute-helper", {
+      source: "path",
+      piScope: undefined,
+      filePath: "/work/project/custom-skills/absolute-helper/SKILL.md",
+      baseDir: "/work/project/custom-skills/absolute-helper",
+    });
+    const id = skillIdentity(configured.filePath, { projectPath: "/work/project" }).id;
+    const listed = await service(discovery([configured]), preferences({}, { version: 2, disabled: [{ id, name: "absolute-helper" }] }).store).list({ projectId: "p-1" });
+
+    expect(listed.skills[0]).toMatchObject({ id, scope: "project", enabled: false, preference: "disabled", answeredBy: "project" });
+  });
+
   it("lets a project's preference answer for that project, and only for it", async () => {
     const store = preferences({ version: 1, disabled: ["pdf"] }, { version: 1, disabled: ["release"], enabled: ["pdf"] }).store;
 
@@ -187,6 +200,20 @@ describe("listing skills", () => {
 
     expect(listed.skills[0]).toMatchObject({ name: "charts", origin: "package", packageSource: "npm:@acme/skills", enabled: true });
     expect(listed.skills[1]).toMatchObject({ name: "legacy", origin: "package", packageSource: "npm:@acme/old", ownerPackageDisabled: true, enabled: false });
+  });
+
+  it("does not let a disabled package's display-only skill make a legacy name ambiguous", async () => {
+    const active = skill("audit");
+    const disabled = skill("audit", {
+      source: "npm:@acme/disabled",
+      packageSource: "npm:@acme/disabled",
+      ownerPackageDisabled: true,
+    });
+    const listed = await service(discovery([active, disabled]), preferences({ version: 1, disabled: ["audit"] }).store).list({});
+
+    expect(listed.skills[0]).toMatchObject({ name: "audit", enabled: false, preference: "disabled", answeredBy: "global" });
+    expect(listed.skills[1]).toMatchObject({ name: "audit", ownerPackageDisabled: true, enabled: false, preference: "default" });
+    expect(listed.diagnostics.some((entry) => entry.message.includes('skill preference "audit" names 2 skills'))).toBe(false);
   });
 
   it("carries the diagnostics pi reported, including a skill path it could not read", async () => {
