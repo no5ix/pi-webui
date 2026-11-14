@@ -93,11 +93,15 @@ describe("the built-in themes' text contrast", () => {
   it("keeps the dim ink quieter than the muted ink it sits under", () => {
     const offenders: string[] = [];
     for (const [themeId, tokens] of themes) {
-      const muted = luminance(tokens["--pi-muted"] as string);
-      const dim = luminance(tokens["--pi-dim"] as string);
-      const canvas = luminance(tokens["--pi-bg"] as string);
-      const darkerThanCanvas = canvas < 0.5 ? dim < muted : dim > muted;
-      if (!darkerThanCanvas) offenders.push(`${themeId}: --pi-dim does not read as quieter than --pi-muted`);
+      const muted = tokens["--pi-muted"];
+      const dim = tokens["--pi-dim"];
+      const canvas = tokens["--pi-bg"];
+      if (muted === undefined || dim === undefined || canvas === undefined) {
+        offenders.push(`${themeId}: a secondary ink is not declared`);
+        continue;
+      }
+      const quieter = luminance(canvas) < 0.5 ? luminance(dim) < luminance(muted) : luminance(dim) > luminance(muted);
+      if (!quieter) offenders.push(`${themeId}: --pi-dim does not read as quieter than --pi-muted`);
     }
 
     expect(offenders).toEqual([]);
