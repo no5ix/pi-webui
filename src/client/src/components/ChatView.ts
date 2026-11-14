@@ -79,7 +79,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      nothing is lost for keyboard users. */
   button, [role="button"], a, summary, label, input, select { font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; -webkit-tap-highlight-color: transparent; }
   /* Follows the control's own shape rather than boxing a circle. */
-  button:focus-visible, [role="button"]:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); }
+  button:focus-visible, [role="button"]:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
   /* Motion is a preference, not a decoration: a user who asks for less of it
      gets none. Kept to a blanket rule because every animation here is
      ornamental — progress bars, pulses, fades — so there is no reduced variant
@@ -233,25 +233,32 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      (the five reports of broken corners) is wrong at some device pixel ratio
      no matter which radius it picks, because two rasterizations of "the same"
      arc need not agree. The parent clips; children paint square. */
-  .msg { max-width: var(--pi-chat-measure); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); padding: var(--pi-row-gutter); border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-lg); background: var(--pi-surface-card); overflow: hidden; overflow: clip; }
+  /* A turn is not a box. The transcript is a column of writing, and the only role
+     that gets a container is the reader’s own, because a reply and a question are
+     the two things a reader tells apart at a glance. The border stays, transparent,
+     so every role keeps the same measure and the same text edge. */
+  .msg { max-width: var(--pi-chat-measure); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); padding: var(--pi-row-gutter); border: 1px solid transparent; border-radius: var(--pi-radius-lg); background: transparent; overflow: hidden; overflow: clip; }
   /* The assistant is the reading surface, not a separate panel. A quiet edge and
      a small surface lift preserve grouping without repeating a heavy card for
      every turn. User/tool/system rows keep their stronger semantic treatment. */
   .msg.assistant:not(.tool-image-output) { border-color: transparent; background: transparent; box-shadow: none; }
   .msg.assistant > .msg-header { background: transparent; box-shadow: none; }
   .msg.assistant .msg-body { line-height: 1.62; }
-  .msg.user { box-shadow: 0 1px 2px var(--pi-shadow-soft); }
+  .msg.user { box-shadow: none; }
   .msg.system { box-shadow: none; }
   /* The phone was already right: its rows sit on their own insets, so the aligning
      inset is a desktop-only addition rather than a loosening of the phone. */
   @media (max-width: 640px) { .chat { --pi-row-gutter: var(--pi-space-5); --pi-row-inset: var(--pi-space-5); --pi-row-rhythm: var(--pi-space-5); } }
-  .msg.assistant, .msg.tool-image-output { border-color: var(--pi-msg-assistant-border); background: var(--pi-msg-assistant-bg); }
-  .custom-card { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); padding: var(--pi-space-5); background: var(--pi-surface); overflow: hidden; overflow: clip; display: grid; gap: var(--pi-space-3); }
+  .msg.assistant, .msg.tool-image-output { border-color: transparent; background: transparent; }
+  .custom-card { border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); padding: var(--pi-space-5); background: var(--pi-chip-bg); overflow: hidden; overflow: clip; display: grid; gap: var(--pi-space-3); }
   .custom-type { color: var(--pi-muted); font-family: var(--pi-font-mono); font-size: var(--pi-text-xs); }
   .custom-waiting, .part > small { color: var(--pi-muted); font-size: var(--pi-text-2xs); }
   .custom-drawn pre { margin: 0; overflow-x: auto; color: var(--pi-text); font: var(--pi-text-xs) var(--pi-font-mono); line-height: 1.45; white-space: pre; }
   .msg.user { border-color: var(--pi-msg-user-border); background: var(--pi-msg-user-bg); }
-  .msg.tool { border-color: var(--pi-warning-border); background: var(--pi-warning-surface); color: var(--pi-warning); }
+  /* Machinery is not a warning. A tool run is the least interesting thing on the
+     screen while it is read, so it wears the neutral chip surface; the tool row
+     itself carries success, warning and danger where they are true. */
+  .msg.tool { border-color: var(--pi-chip-border); background: var(--pi-chip-bg); color: var(--pi-text-secondary); }
   .msg.tool-execution-shell, .msg.ask-user-record-shell { padding: 0; border: 0; background: transparent; color: var(--pi-text); }
   /* An extension's notify (extensionNotices.ts): a line, not a card, as pi's terminal draws it.
      Three lines at most until tapped, since a phone has no hover title. The row keeps the
@@ -270,35 +277,35 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   /* A system line reports whatever the runtime has to say - a background task
      that finished with exit 0 as often as a failure - so it is not coloured as
      a fault. A genuine error arrives as an error line and keeps the red. */
-  .msg.system { border-color: var(--pi-msg-system-border); background: var(--pi-msg-system-bg); color: var(--pi-text-secondary); }
-  .msg.system > .msg-header { background: var(--pi-msg-system-header-bg); box-shadow: none; }
+  .msg.system { border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-purple-border); border-radius: var(--pi-radius-md); background: var(--pi-msg-system-bg); color: var(--pi-text-secondary); }
+  .msg.system > .msg-header { background: transparent; border: 0; box-shadow: none; }
   .msg.system > .msg-header .label { color: var(--pi-text-secondary); }
-  .msg.bash { border-color: var(--pi-success); background: var(--pi-success-bg); }
-  .msg.skill { border-color: var(--pi-purple-border); background: var(--pi-purple-surface); }
+  .msg.bash { border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-success); border-radius: var(--pi-radius-md); background: var(--pi-success-bg); }
+  .msg.skill { border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-purple-border); border-radius: var(--pi-radius-md); background: var(--pi-purple-surface); }
   /* Its own summary carries the inset, so the row itself must not double it - but the
      summary's inset is the same gutter, or this row's text sat 12px left of every
      other row on the screen. */
-  .msg.event-group { padding: 0; border-color: var(--pi-border); background: var(--pi-bg); color: var(--pi-muted); }
+  .msg.event-group { padding: 0; border-color: var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text-secondary); }
   .msg.event-group.live { border-color: var(--pi-success-border); background: var(--pi-success-bg); }
-  .msg.event-group > summary { position: sticky; top: var(--pi-chat-sticky-top); z-index: 5; display: flex; align-items: center; gap: var(--pi-space-4); padding-block: var(--pi-space-4); border-bottom: 1px solid var(--pi-border-muted); background: var(--pi-bg); color: var(--pi-muted); }
-  .msg.event-group.live > summary { border-bottom-color: var(--pi-success-border); background: var(--pi-success-bg); color: var(--pi-success); }
+  .msg.event-group > summary { position: sticky; top: var(--pi-chat-sticky-top); z-index: 5; display: flex; align-items: center; gap: var(--pi-space-4); padding-block: var(--pi-space-4); border-bottom: 0; background: var(--pi-chip-bg); color: var(--pi-text-secondary); }
+  .msg.event-group.live > summary { border-bottom: 0; background: var(--pi-success-bg); color: var(--pi-success); }
   .msg.event-group > summary .label { margin: 0; }
   .group-body { padding: 0 var(--pi-space-6) var(--pi-space-6); }
-  .chat-image { display: block; max-width: 100%; max-height: 320px; margin: var(--pi-space-4) 0 0; border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-md); object-fit: contain; cursor: zoom-in; }
+  .chat-image { display: block; max-width: 100%; max-height: 320px; margin: var(--pi-space-4) 0 0; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); object-fit: contain; cursor: zoom-in; }
   /* A deferred image has no bytes until it scrolls into view, and an image
      with no bytes has no box - which is exactly what keeps it from ever
      scrolling into view. The placeholder box breaks that deadlock and holds
      the transcript's layout while the bytes arrive. */
   .chat-image.deferred { min-width: 120px; min-height: 90px; background: var(--pi-surface); }
-  .chat-image-frame { box-sizing: border-box; position: relative; display: flex; width: 120px; height: 90px; margin: var(--pi-space-4) 0 0; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); }
+  .chat-image-frame { box-sizing: border-box; position: relative; display: flex; width: 120px; height: 90px; margin: var(--pi-space-4) 0 0; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); }
   .part.chat-image-frame { overflow: hidden; }
   .chat-image-frame.loaded { display: contents; }
   .part + .chat-image-frame.loaded > .chat-image { margin-top: var(--pi-space-5); }
   .chat-image-frame:not(.loaded) > .chat-image { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; margin: 0; border: 0; opacity: 0; pointer-events: none; }
   .chat-image-state { box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; margin: 0; padding: var(--pi-space-3); border: 0; border-radius: inherit; background: transparent; color: var(--pi-muted); font: inherit; font-size: var(--pi-text-xs); line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
   .chat-image-state[aria-disabled="false"] { cursor: pointer; }
-  .chat-image-state:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent, var(--pi-success-border)); outline-offset: var(--pi-focus-ring-offset-inset); }
-  .chat-image:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent, var(--pi-success-border)); outline-offset: var(--pi-focus-ring-offset); }
+  .chat-image-state:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+  .chat-image:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
   dialog.image-zoom { box-sizing: border-box; position: fixed; ${visibleViewportDialogBox} margin: auto; width: fit-content; height: fit-content; padding: 0; border: none; background: transparent; overflow: visible; }
   dialog.image-zoom[open] { display: flex; }
   dialog.image-zoom::backdrop { background: rgba(0, 0, 0, 0.8); }
@@ -327,7 +334,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .msg.command.failed .command-result { color: var(--pi-danger); }
   .msg.command .command-result.markdown { display: block; white-space: normal; }
   .msg.command .command-result.folded { display: grid; gap: var(--pi-space-2); white-space: normal; }
-  .command-fold > summary { display: flex; align-items: center; gap: var(--pi-space-4); min-height: var(--pi-control-height-compact, 24px); color: var(--pi-text); font-weight: var(--pi-weight-semibold); }
+  .command-fold > summary { display: flex; align-items: center; gap: var(--pi-space-4); min-height: var(--pi-control-height-compact, 24px); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text-secondary); font-weight: var(--pi-weight-medium); }
   .command-fold > summary .disclosure-icon { margin-inline-start: auto; color: var(--pi-muted); }
   @media (pointer: coarse) { .command-fold > summary { min-height: var(--pi-control-height-touch); } }
   .command-fold > formatted-text { display: block; }
@@ -351,8 +358,8 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .delivery-mark.pending .delivery-glyph { animation: pulse 1.4s ease-in-out infinite; }
   .delivery-mark.delivered { color: var(--pi-success); }
   .delivery-mark.failed { color: var(--pi-danger); font-weight: var(--pi-weight-semibold); }
-  .session-activity { max-width: 100%; min-width: 0; box-sizing: border-box; display: grid; gap: var(--pi-space-2); margin: 0 auto var(--pi-space-7); padding-block: var(--pi-space-6); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); color: var(--pi-text); overflow: hidden; }
-  .session-activity.compacting { border-color: var(--pi-purple-border); background: var(--pi-purple-surface); }
+  .session-activity { max-width: 100%; min-width: 0; box-sizing: border-box; display: grid; gap: var(--pi-space-2); margin: 0 auto var(--pi-space-7); padding: var(--pi-space-4) var(--pi-space-6); border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-purple-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); overflow: hidden; }
+  .session-activity.compacting { border-inline-start-color: var(--pi-purple); background: var(--pi-purple-surface); }
   .session-activity strong { color: var(--pi-purple); }
   .session-activity span, .session-activity small { color: var(--pi-muted); }
   .history-boundary small { font-size: inherit; color: var(--pi-muted); }
@@ -360,17 +367,17 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      the reader is already looking rather than clinging to the top edge. */
   .empty-session { display: grid; box-sizing: border-box; justify-items: center; align-content: center; gap: var(--pi-space-5); margin: auto; min-height: 100%; max-width: var(--pi-chat-measure); padding: var(--pi-space-7); color: var(--pi-muted); text-align: center; }
   .empty-session p { margin: 0; }
-  .empty-session button { box-sizing: border-box; min-height: var(--pi-control-height-touch); padding: var(--pi-space-3) var(--pi-space-6); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); cursor: pointer; }
+  .empty-session button { box-sizing: border-box; min-height: var(--pi-control-height-touch); padding: var(--pi-space-3) var(--pi-space-6); border: 1px solid var(--pi-accent); border-radius: var(--pi-radius-md); background: var(--pi-accent); color: var(--pi-on-accent); font-weight: var(--pi-weight-strong); cursor: pointer; }
   .empty-session.transcript-failed .failure-detail { color: var(--pi-muted); font-size: var(--pi-text-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .empty-session button:focus-visible { border-color: var(--pi-accent); }
-  @media (hover: hover) { .empty-session button:hover { border-color: var(--pi-accent); } }
+  .empty-session button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
+  @media (hover: hover) { .empty-session button:hover { background: color-mix(in srgb, var(--pi-accent) 88%, var(--pi-text)); border-color: var(--pi-accent); } }
   @media (pointer: coarse) { .empty-session button { min-height: var(--pi-control-height-touch); } }
   .msg-header { display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-5); min-height: 22px; margin-bottom: var(--pi-space-3); }
   /* Square by design: the card's overflow: clip rounds this against the same
      arc the border uses, in one rasterization. Every previous fix had this
      element guess the card's inner curve, and the guess broke at the phone's
      fractional device pixel ratio - five reports of the same corners. */
-  .msg > .msg-header { position: sticky; top: calc(var(--pi-chat-sticky-top) + 6px); z-index: 4; margin: calc(-1 * var(--pi-space-6)) calc(-1 * var(--pi-space-6)) var(--pi-space-3); padding: 1px var(--pi-space-4); border-bottom: 1px solid var(--pi-border-muted); background: var(--pi-surface-card); box-shadow: var(--pi-elevation-2); }
+  .msg > .msg-header { position: sticky; top: var(--pi-chat-sticky-top); z-index: 4; margin: calc(-1 * var(--pi-row-gutter)) 0 var(--pi-space-2); padding: var(--pi-space-1) 0; border: 0; background: var(--pi-bg); box-shadow: none; }
   /* Colour marks what is rare, not what is constant (owner). The reader's own
      messages are the landmarks in a transcript, so they keep the accent tint;
      the assistant answers on almost every turn, so its card is the ordinary
@@ -382,22 +389,22 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      the light side, and mixing it into white gave a grey khaki that read like the
      assistant's card (owner, 2026-10-09). On the dark side this lands within a shade of
      the old accent-over-surface tint (rgb 76,64,45 -> 75,65,45), which the owner keeps. */
-  .msg.user > .msg-header { border-bottom-color: var(--pi-border-muted); background: var(--pi-msg-user-header-bg); box-shadow: none; }
+  .msg.user > .msg-header { border: 0; background: var(--pi-msg-user-bg); box-shadow: none; }
   /* The sticky header rides above the card's border while the message scrolls
      under it; without an opaque fill the scrolled text shows through the gap
      (the clipped "…dden." line the owner screenshotted). Same fill as the
      card so the header reads as the card's own top strip. */
-  .msg.assistant > .msg-header, .msg.tool-image-output > .msg-header { background: var(--pi-msg-assistant-header-bg); box-shadow: none; }
+  .msg.assistant > .msg-header, .msg.tool-image-output > .msg-header { background: var(--pi-bg); border: 0; box-shadow: none; }
   /* Inside a group the row is not a card of its own: the header inherits the group's fill
      so it reads as the group's top strip instead of an opaque band in its middle. */
   .msg.event-group .msg-header { background: inherit; box-shadow: none; }
   .msg.assistant > .msg-header .label, .msg.tool-image-output > .msg-header .label { color: var(--pi-text-secondary); }
   /* The role label sits on the selection fill; accent-on-selection measured
      3.93:1, the weakest of the three roles, on the one that says "you". */
-  .msg.user > .msg-header .label { color: var(--pi-text); font-weight: var(--pi-weight-semibold); }
-  .msg.tool > .msg-header { border-bottom-color: var(--pi-border-muted); background: var(--pi-warning-surface); }
-  .msg.bash > .msg-header { border-bottom-color: var(--pi-border-muted); background: var(--pi-success-bg); }
-  .msg.skill > .msg-header { border-bottom-color: var(--pi-border-muted); background: var(--pi-purple-surface); }
+  .msg.user > .msg-header .label { color: var(--pi-text-secondary); font-weight: var(--pi-weight-medium); }
+  .msg.tool > .msg-header { border: 0; background: var(--pi-chip-bg); }
+  .msg.bash > .msg-header { border: 0; background: var(--pi-bg); }
+  .msg.skill > .msg-header { border: 0; background: var(--pi-bg); }
   .group-msg > .msg-header { position: sticky; top: var(--pi-chat-sticky-top); z-index: 4; margin: calc(-1 * var(--pi-space-5)) 0 var(--pi-space-4); padding: var(--pi-space-4) 0 var(--pi-space-3); border-bottom: 1px solid var(--pi-border-muted); background: var(--pi-bg); }
   /* The last control used to end on the card's inner edge, which reads as
      stuck to the border on a phone where the card is the screen. */
@@ -406,11 +413,11 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   /* One bordered box per control, every control the same box: the ghost
      glyphs read as stray marks and sat at different heights between the
      role headers (owner). */
-  .msg-action { position: relative; display: inline-grid; place-items: center; width: 22px; height: 22px; box-sizing: border-box; border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-sm); background: var(--pi-surface); color: var(--pi-muted); padding: 0; line-height: 1; cursor: pointer; }
+  .msg-action { position: relative; display: inline-grid; place-items: center; width: 24px; height: 24px; box-sizing: border-box; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-sm); background: var(--pi-chip-bg); color: var(--pi-muted); padding: 0; line-height: 1; cursor: pointer; }
   .msg-action .ui-icon { width: 14px; height: 14px; }
   .msg-action-icon { display: inline-grid; place-items: center; width: 14px; height: 14px; overflow: hidden; }
   .msg-action-icon > svg { width: 14px; height: 14px; }
-  .msg-action[aria-pressed="true"] { background: var(--pi-selection-bg); color: var(--pi-text); border-color: var(--pi-accent); }
+  .msg-action[aria-pressed="true"] { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); border-color: var(--pi-accent-border); }
   /* A fingertip is wider than the drawn button, so the reach grows, not the
      icon - but only as far as the gap allows: a symmetric 10px expansion over
      a 6px gap made each button's right edge belong to its neighbour. */
@@ -426,9 +433,9 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
     .msg-actions { gap: var(--pi-space-4); opacity: 1; }
     .msg-action::after { inset: calc(-1 * var(--pi-space-3)) calc(-1 * var(--pi-space-1)); }
   }
-  .msg-action:focus { color: var(--pi-text); border-color: var(--pi-accent); }
+  .msg-action:focus { color: var(--pi-text); border-color: var(--pi-accent); background: var(--pi-row-hover); }
   @media (pointer: coarse) { .msg-action:active, .activity-dock button:active { background: var(--pi-surface-hover); } }
-  @media (hover: hover) { .msg-action:hover { color: var(--pi-text); border-color: var(--pi-accent); } }
+  @media (hover: hover) { .msg-action:hover { color: var(--pi-text); border-color: var(--pi-accent); background: var(--pi-row-hover); } }
   /* A card reveals its bottom row's controls when the card has focus, and on hover. The strip at the
      top of the card does not play that game: its one job is to be where a reader looks first on a card
      that can be many screens tall, and a control held at zero opacity there is a keyboard stop with no
@@ -439,7 +446,9 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   @media (hover: hover) { .msg:hover .msg-meta-row .msg-actions, .group-msg:hover .msg-meta-row .msg-actions { opacity: 1; } }
   .msg-actions:has(.msg-action[data-action="retry"]), .msg-actions:has(.msg-action[data-action="discard"]) { opacity: 1; }
   .msg.user .msg-action[data-action="retry"] { color: var(--pi-accent); border-color: var(--pi-accent); }
-  .label { display: block; color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono); line-height: inherit; }
+  /* Who spoke is metadata, so it is set as metadata: the smallest legal size, the
+     tracking that makes a short word read as a label, and the muted colour. */
+  .label { display: block; min-width: 0; overflow: hidden; color: var(--pi-muted); font: var(--pi-text-2xs) var(--pi-font-mono); letter-spacing: var(--pi-tracking-label); text-transform: uppercase; line-height: inherit; white-space: nowrap; text-overflow: ellipsis; }
   .msg-header .label { margin: 0; }
   /* The row under a response: who is not repeated here, this row answers when and what the reader
      can do with it. It is never sticky - the header strip above already pins the card's identity,
@@ -452,7 +461,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .msg:focus-within .msg-meta-row .msg-meta, .group-msg:focus-within .msg-meta-row .msg-meta, .msg-meta:focus, .msg-meta.expanded { opacity: 1; }
   @media (hover: hover) { .msg:hover .msg-meta-row .msg-meta, .group-msg:hover .msg-meta-row .msg-meta { opacity: 1; } }
   .msg-meta.expanded { flex: 1 1 auto; max-width: 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
-  .msg-meta:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); border-radius: var(--pi-radius-xs); }
+  .msg-meta:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); border-radius: var(--pi-radius-xs); }
   @media (hover: none) {
     .msg-actions { opacity: 1; }
     .msg-meta { opacity: 1; color: var(--pi-muted); max-width: var(--pi-space-9); }

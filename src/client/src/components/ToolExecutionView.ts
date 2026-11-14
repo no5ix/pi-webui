@@ -146,11 +146,15 @@ export class ToolExecutionView extends LitElement {
 
   static override styles = [interactiveSurfaceStyles, css`${unsafeCSS(uiIconStyle)}
     :host { display: block; width: 100%; max-width: 100%; min-width: 0; color: var(--pi-text); }
-    .tool-card { display: grid; gap: var(--pi-space-4); width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-bg); padding: var(--pi-space-5); color: var(--pi-text); }
-    .tool-card.running { border-color: var(--pi-warning-border); background: var(--pi-warning-surface); }
-    .tool-card.interrupted { border-color: var(--pi-border); background: var(--pi-surface); }
-    .tool-card.success { border-color: var(--pi-success-border); background: var(--pi-success-bg); }
-    .tool-card.error { border-color: var(--pi-danger); background: color-mix(in srgb, var(--pi-danger) 10%, var(--pi-bg)); }
+    /* A tool run is a row of the machinery, not a card: it sits on the divider its
+       group draws, and its state is a rail and a mark, never a wall of tint. A
+       transcript of twenty tool calls must read calmer than the answer under it. */
+    .tool-card { display: grid; gap: var(--pi-space-4); width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; border: 0; border-bottom: 1px solid var(--pi-divider); border-radius: 0; background: transparent; padding: var(--pi-space-4) 0; color: var(--pi-text); }
+    .tool-card:last-child { border-bottom: 0; padding-bottom: 0; }
+    .tool-card.running { border-inline-start: var(--pi-rail-width) solid var(--pi-warning); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); padding-inline-start: var(--pi-space-4); }
+    .tool-card.interrupted { border-inline-start: var(--pi-rail-width) solid var(--pi-border); border-radius: var(--pi-radius-md); padding-inline-start: var(--pi-space-4); }
+    .tool-card.success { border-inline-start: var(--pi-rail-width) solid var(--pi-success); border-radius: var(--pi-radius-md); padding-inline-start: var(--pi-space-4); }
+    .tool-card.error { border-inline-start: var(--pi-rail-width) solid var(--pi-danger); border-radius: var(--pi-radius-md); background: color-mix(in srgb, var(--pi-danger) 8%, transparent); padding-inline-start: var(--pi-space-4); }
     .tool-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--pi-space-6); min-width: 0; }
     .tool-title { flex: 1 1 auto; display: inline-flex; align-items: baseline; gap: var(--pi-space-4); min-width: 0; }
     .status-icon { flex: 0 0 auto; color: var(--pi-muted); }
@@ -168,14 +172,14 @@ export class ToolExecutionView extends LitElement {
     .notice { margin: 0; color: var(--pi-warning); }
     .muted { margin: 0; color: var(--pi-muted); }
     .took { margin: 0; color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono); line-height: inherit; }
-    .error-text { margin: 0; border: 1px solid var(--pi-danger); border-radius: var(--pi-radius-md); background: color-mix(in srgb, var(--pi-danger) 10%, var(--pi-bg)); color: var(--pi-danger); padding: var(--pi-space-4); white-space: pre-wrap; overflow-wrap: anywhere; font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: inherit; }
-    .text-body { border-top: 1px solid var(--pi-border-muted); padding-top: var(--pi-space-3); }
+    .error-text { margin: 0; border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-danger); border-radius: var(--pi-radius-md); background: color-mix(in srgb, var(--pi-danger) 8%, var(--pi-bg)); color: var(--pi-danger); padding: var(--pi-space-4); white-space: pre-wrap; overflow-wrap: anywhere; font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: inherit; }
+    .text-body { border-top: 1px solid var(--pi-divider); padding-top: var(--pi-space-3); }
     .detail-target, .detail-result { display: grid; gap: var(--pi-space-2); margin-top: var(--pi-space-4); min-width: 0; }
     .detail-label { color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono); line-height: inherit; }
     .text-body pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: inherit; color: var(--pi-text); }
     .detail-result pre { box-sizing: border-box; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-md); background: var(--pi-bg); padding: var(--pi-space-4); white-space: pre; overflow-wrap: normal; direction: ltr; text-align: left; unicode-bidi: isolate; }
     .detail-target-value { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--pi-accent); font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: inherit; direction: ltr; text-align: left; unicode-bidi: isolate; }
-    .diff-details { min-width: 0; max-width: 100%; border-top: 1px solid var(--pi-border-muted); padding-top: var(--pi-space-3); }
+    .diff-details { min-width: 0; max-width: 100%; border-top: 1px solid var(--pi-divider); padding-top: var(--pi-space-3); }
     .diff-details > summary { display: flex; align-items: baseline; justify-content: space-between; gap: var(--pi-space-4); min-width: 0; color: var(--pi-muted); cursor: pointer; }
     .diff-details > summary span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .diff-details > summary small { flex: 0 0 auto; color: var(--pi-dim); }
@@ -184,7 +188,7 @@ export class ToolExecutionView extends LitElement {
     button { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-sm); background: var(--pi-surface); color: var(--pi-text); padding: var(--pi-space-2) var(--pi-space-4); font: var(--pi-text-xs) var(--pi-font-ui, system-ui, sans-serif); line-height: inherit; cursor: pointer; }
     button:focus { border-color: var(--pi-accent); }
     @media (hover: hover) { button:hover { border-color: var(--pi-accent); } }
-    .diff { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-md); background: var(--pi-bg); padding: var(--pi-space-4) 0; color: var(--pi-muted); font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: 1.45; }
+    .diff { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; border: 1px solid var(--pi-code-border); border-radius: var(--pi-radius-md); background: var(--pi-code-bg); padding: var(--pi-space-4) 0; color: var(--pi-text-secondary); font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: var(--pi-leading-normal); }
     .diff-content { display: block; width: max-content; min-width: 100%; }
     .diff span { display: block; min-height: 1.45em; padding: 0 var(--pi-space-4); white-space: pre; }
     .diff .context { color: var(--pi-muted); }
