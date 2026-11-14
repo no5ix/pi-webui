@@ -1,0 +1,12 @@
+{
+  "skills": {
+    "version": 1,
+    "enabled": [
+      "code-quality-architecture",
+      "testing-guide",
+      "documentation-guide",
+      "changeset-changelog",
+      "npm-release-via-github-actions"
+    ]
+  }
+}
