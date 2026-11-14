@@ -202,7 +202,10 @@ export class DefaultPiSkillsService implements PiSkillsService {
     const skills = found.skills.flatMap((skill, index) => {
       const subject = subjects[index];
       if (subject === undefined) return [];
-      return [describeSkill(skill, plan.rowFor(subject.identity.id) ?? unreachableRow(subject), scope.projectPath, this.agentDir)];
+      const row = skill.ownerPackageDisabled === true
+        ? unreachableRow(subject)
+        : plan.rowFor(subject.identity.id) ?? unreachableRow(subject);
+      return [describeSkill(skill, row, scope.projectPath, this.agentDir)];
     });
     return {
       skills,
