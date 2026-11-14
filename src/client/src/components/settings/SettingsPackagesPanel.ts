@@ -213,7 +213,8 @@ export class SettingsPackagesPanel extends LitElement {
     label { font-weight: var(--pi-weight-bold); }
     .secondary { flex: 0 0 auto; }
     .danger { border-color: color-mix(in srgb, var(--pi-danger) 55%, var(--pi-border)); color: var(--pi-danger); }
-    .loading-card, .install-card, .package-card { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); padding: var(--pi-space-6); }
+    .loading-card, .install-card { border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-lg); background: var(--pi-surface); padding: var(--pi-space-6); }
+    .package-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pi-space-6); align-items: center; padding: var(--pi-space-5) 0; border: 0; border-bottom: 1px solid var(--pi-border-muted); border-radius: 0; background: transparent; }
     .field-error { color: var(--pi-danger); font-size: var(--pi-text-xs); }
     .install-card { display: grid; gap: var(--pi-space-4); }
     .install-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pi-space-4); align-items: center; }
@@ -221,7 +222,8 @@ export class SettingsPackagesPanel extends LitElement {
     .loading-card, .action-note { color: var(--pi-muted); }
     .action-note { margin-bottom: var(--pi-space-5); font-size: var(--pi-text-xs); }
     .package-list { display: grid; gap: var(--pi-space-5); }
-    .package-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pi-space-6); align-items: center; }
+    .package-card:last-child { border-bottom: 0; }
+    .package-card.filtered { opacity: .72; }
     .package-card.filtered { opacity: .82; }
     .package-main strong, .package-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .package-actions { display: flex; align-items: center; gap: var(--pi-space-4); }
