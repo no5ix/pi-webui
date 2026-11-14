@@ -175,25 +175,22 @@ describe("what a session is given", () => {
     expect(forB.some((skill) => skill.name === AUDIT)).toBe(false);
   });
 
-  it("filters an absolute configured skill path using the project identity", async () => {
-    const configuredPath = join(projectA, "custom-skills", "absolute-helper", "SKILL.md");
-    mkdirSync(join(projectA, "custom-skills", "absolute-helper"), { recursive: true });
-    writeFileSync(configuredPath, `---\nname: absolute-helper\ndescription: A skill.\n---\nRead the body.\n`, "utf8");
+  it("filters an absolute configured skill path using the project identity", () => {
+    const configuredPath = writeSkill(join(projectA, "custom-skills", "absolute-helper"), "absolute-helper");
     const id = skillIdentity(configuredPath, { projectPath: projectA }).id;
-    const base = [{
-      name: "absolute-helper",
-      description: "A skill.",
-      filePath: configuredPath,
-      baseDir: join(projectA, "custom-skills", "absolute-helper"),
-      sourceInfo: { source: "path" },
-      disableModelInvocation: false,
-    }] as unknown as Skill[];
+    const base = loadSkills({
+      cwd: projectA,
+      agentDir,
+      skillPaths: [join(projectA, "custom-skills")],
+      includeDefaults: false,
+    });
     const filter = piWebSkillsOverride(agentDir, projectA, { info: () => undefined, warn: () => undefined }, {
       readGlobal: () => ({}),
       readProject: () => ({ version: 2, disabled: [{ id, name: "absolute-helper" }] }),
     }, new Map());
 
-    expect(filter({ skills: base, diagnostics: [] }).skills).toEqual([]);
+    expect(base.skills).toHaveLength(1);
+    expect(filter(base).skills).toEqual([]);
   });
 
   it("applies the preferences saved between two session creations", async () => {
