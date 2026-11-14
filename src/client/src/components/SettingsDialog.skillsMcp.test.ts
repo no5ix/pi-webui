@@ -147,7 +147,7 @@ describe("the Skills and MCP sections", () => {
         { scope: "project", skillsDir: "/work/project/.pi/skills", configPath: "/work/project/.pi-web/config.json", projectId: "p-1", projectPath: "/work/project", projectTrusted: true },
       ],
     );
-    vi.mocked(piSkillsApi.list).mockImplementation(async (projectId) => projectId === "p-1" ? projectSkills : skillsResponse([skillInfo("pdf")]));
+    vi.mocked(piSkillsApi.list).mockImplementation((projectId) => Promise.resolve(projectId === "p-1" ? projectSkills : skillsResponse([skillInfo("pdf")])));
     vi.mocked(piSkillsApi.setEnabled).mockResolvedValue({ ...projectSkills, requiresReload: true });
     const dialog = await open("skills", labMac);
     const panel = skillsPanel(dialog);
@@ -165,8 +165,15 @@ describe("the Skills and MCP sections", () => {
   });
 
   it("switches a skill through the machine that is selected, and redraws from that machine's answer", async () => {
-    const disabled = skillsResponse([skillInfo("pdf", { enabled: false, preference: "disabled" })]);
-    vi.mocked(piSkillsApi.setEnabled).mockResolvedValue({ ...disabled, requiresReload: true });
+    // A machine answers its own list from the file the write just changed, and the dialog verifies the
+    // switch through that read. The stub carries the state the write produced, so the redraw assertion
+    // measures the panel redrawing from the machine rather than from the write's own echo.
+    const machine: { skills: PiSkillInfo[] } = { skills: [skillInfo("pdf")] };
+    vi.mocked(piSkillsApi.list).mockImplementation(() => Promise.resolve(skillsResponse(machine.skills)));
+    vi.mocked(piSkillsApi.setEnabled).mockImplementation((request) => {
+      machine.skills = [skillInfo(request.name, { enabled: request.enabled, preference: request.enabled ? "enabled" : "disabled" })];
+      return Promise.resolve({ ...skillsResponse(machine.skills), requiresReload: true });
+    });
     const dialog = await open("skills", labMac);
     const panel = skillsPanel(dialog);
     if (panel.onToggleSkill === undefined) throw new Error("Expected the skills panel to be wired to the dialog");
