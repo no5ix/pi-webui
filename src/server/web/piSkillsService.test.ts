@@ -165,7 +165,6 @@ describe("listing skills", () => {
   it("uses the selected project's identity for a configured absolute path inside that project", async () => {
     const configured = skill("absolute-helper", {
       source: "path",
-      piScope: undefined,
       filePath: "/work/project/custom-skills/absolute-helper/SKILL.md",
       baseDir: "/work/project/custom-skills/absolute-helper",
     });

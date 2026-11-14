@@ -178,7 +178,7 @@ describe("what a session is given", () => {
   it("filters an absolute configured skill path using the project identity", async () => {
     const configuredPath = join(projectA, "custom-skills", "absolute-helper", "SKILL.md");
     mkdirSync(join(projectA, "custom-skills", "absolute-helper"), { recursive: true });
-    writeFileSync(configuredPath, `---\\nname: absolute-helper\\ndescription: A skill.\\n---\\nRead the body.\\n`, "utf8");
+    writeFileSync(configuredPath, `---\nname: absolute-helper\ndescription: A skill.\n---\nRead the body.\n`, "utf8");
     const id = skillIdentity(configuredPath, { projectPath: projectA }).id;
     const base = [{
       name: "absolute-helper",
