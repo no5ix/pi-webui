@@ -68,7 +68,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
     /* Control chrome, not content: buttons and labels here are not copy targets. (T1/T3) */
     :host, :host * { -webkit-user-select: none; user-select: none; }
     :host textarea, :host input, :host [contenteditable], :host .attachment-error { -webkit-user-select: text; user-select: text; }
-  footer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pi-space-4); padding: var(--pi-space-6) var(--pi-chat-gutter); border-top: 1px solid var(--pi-border); max-width: var(--pi-chat-measure, 100%); margin-inline: auto; }
+  footer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pi-space-4); padding: var(--pi-space-6) var(--pi-chat-gutter); border-top: 1px solid var(--pi-border); max-width: var(--pi-chat-measure, var(--pi-measure-reading, 100%)); margin-inline: auto; }
   /* Same column as the expanded composer and the transcript: the private
      10px inset made the box edge jump 6px one way on desktop and the other
      way on the phone when the composer collapsed. */

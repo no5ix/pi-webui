@@ -237,7 +237,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      that gets a container is the reader’s own, because a reply and a question are
      the two things a reader tells apart at a glance. The border stays, transparent,
      so every role keeps the same measure and the same text edge. */
-  .msg { max-width: var(--pi-chat-measure); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); padding: var(--pi-row-gutter); border: 1px solid transparent; border-radius: var(--pi-radius-lg); background: transparent; overflow: hidden; overflow: clip; }
+  .msg { max-width: var(--pi-chat-measure, var(--pi-measure-reading, 100%)); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); padding: var(--pi-row-gutter); border: 1px solid transparent; border-radius: var(--pi-radius-lg); background: transparent; overflow: hidden; overflow: clip; }
   /* The assistant is the reading surface, not a separate panel. A quiet edge and
      a small surface lift preserve grouping without repeating a heavy card for
      every turn. User/tool/system rows keep their stronger semantic treatment. */
@@ -264,7 +264,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      Three lines at most until tapped, since a phone has no hover title. The row keeps the
      conversation's measure, rhythm and inset (the bare row group above), and the cards' 1px border as a
      transparent one, so its text starts where theirs does; the line pads nothing itself. */
-  .msg-notice { max-width: var(--pi-chat-measure); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); border-inline: 1px solid transparent; }
+  .msg-notice { max-width: var(--pi-chat-measure, var(--pi-measure-reading, 100%)); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); border-inline: 1px solid transparent; }
   .extension-notice { box-sizing: border-box; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; width: 100%; min-height: var(--pi-control-height-compact, 24px); margin: 0; padding: 0; color: var(--pi-muted); font-size: var(--pi-text-xs); line-height: 1.45; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
   .extension-notice a { color: var(--pi-accent); text-decoration: underline; text-underline-offset: 2px; }
   .notice-toggle { box-sizing: border-box; margin: 0; padding: 0; border: 0; background: none; color: var(--pi-accent); font: inherit; font-size: var(--pi-text-xs); line-height: 1.45; cursor: pointer; }
@@ -365,7 +365,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .history-boundary small { font-size: inherit; color: var(--pi-muted); }
   /* Centred in the room the transcript is not using, so the words land where
      the reader is already looking rather than clinging to the top edge. */
-  .empty-session { display: grid; box-sizing: border-box; justify-items: center; align-content: center; gap: var(--pi-space-5); margin: auto; min-height: 100%; max-width: var(--pi-chat-measure); padding: var(--pi-space-7); color: var(--pi-muted); text-align: center; }
+  .empty-session { display: grid; box-sizing: border-box; justify-items: center; align-content: center; gap: var(--pi-space-5); margin: auto; min-height: 100%; max-width: var(--pi-chat-measure, var(--pi-measure-reading, 100%)); padding: var(--pi-space-7); color: var(--pi-muted); text-align: center; }
   .empty-session p { margin: 0; }
   .empty-session button { box-sizing: border-box; min-height: var(--pi-control-height-touch); padding: var(--pi-space-3) var(--pi-space-6); border: 1px solid var(--pi-accent); border-radius: var(--pi-radius-md); background: var(--pi-accent); color: var(--pi-on-accent); font-weight: var(--pi-weight-strong); cursor: pointer; }
   .empty-session.transcript-failed .failure-detail { color: var(--pi-muted); font-size: var(--pi-text-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
