@@ -328,7 +328,10 @@ function describeSkill(skill: DiscoveredSkill, row: SkillRuntimeRow, projectPath
   const resolvedFile = resolve(skill.filePath);
   const resolvedProject = projectPath === undefined ? undefined : resolve(projectPath);
   const owner = skillOwnership(skill.filePath, agentDir);
-  const isProjectOwnedPath = owner.kind === "project" || (owner.kind === "location-only" && resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`)));
+  const isProjectOwnedPath = owner.kind === "project" || (owner.kind !== "global" && (
+    skill.piScope === "project"
+    || (resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`)))
+  ));
   const scope: PiSkillScope = isProjectOwnedPath ? "project" : "global";
   const fromAgentDir = isGlobalAgentSkillPath(skill.filePath, agentDir);
   const origin: PiSkillOrigin = skill.packageSource !== undefined || skill.source === "package"
