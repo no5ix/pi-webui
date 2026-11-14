@@ -35,15 +35,77 @@ A skill's switch is a **PI WEB preference**, not a file edit:
 - a project's list is the `skills` key of `<project>/.pi-web/config.json`, so a project can turn a
   skill off for itself and commit that;
 - a project's entry answers for that project alone and never rewrites the global entry;
-- a preference names a skill, so a project can take a machine-wide skill out for itself, and a
-  machine-wide answer can name a skill that project's directory supplies;
 - a skill nobody has written anything about keeps Pi's default, which is on.
+
+**A preference is saved against a skill, not against a skill name.** Two skills can carry the same
+name — a machine-wide one and a project's own one, two projects' own ones, a Pi package's one and the
+agent folder's one — and they are separate rows with separate switches. A row shows its scope
+(**Global** or **Project**), where it came from, and its skill file, and two rows of one name each say
+that the other exists. Writing a preference for one never writes the other.
+
+**A skill's identity comes from where its file is.** A file under the agent directory is a machine-wide
+skill; a file under `<root>/.pi/skills` or a `<root>/.agents/skills` folder on the way up belongs to
+`<root>`, so every session opened in that repository names it the same way. The panel and the session
+run the same rule, which is the only reason a row and a session can mean the same skill: in the
+no-project view a project's own skill is shown as that project's skill, and a machine-wide switch for
+it is refused rather than written where no session will read it. A skill configured by **absolute
+path** has no project in its location: the panel keeps it machine-wide, and a session can treat such a
+file as its own when it lies inside the directory the session was opened in. That is the one case where
+the two views are allowed to differ, and it is reachable only for configured paths inside a repository.
+
+With no project selected, PI WEB reads no project at all: the repository the web process happens to run
+in is not a project the reader opened, and Pi's own project-trust gate keeps its `.pi/skills` and
+ancestor `.agents/skills` out of the list.
+
+The precedence is short and the panel says which scope answered on each row:
+
+| Global | Project | A session gets |
+| --- | --- | --- |
+| off | — | off |
+| off | on | on, for that project |
+| on | off | off, for that project |
+| on | — | on |
+| — | — | on (Pi's default) |
 
 Nothing is deleted and no skill file is edited: the preference takes the skill out of the list Pi is
 given, so a disabled skill reaches neither the system prompt nor a `/skill:<name>` command. Turning
 it back on restores both. Skills a Pi package supplies follow the package: when the package is
 configured off, its skills are listed as off and say why, and switching an individual skill does not
 turn the package back on.
+
+**Pi keeps one skill per name.** Its loader takes the first it reads and reports the rest, so a name
+names one skill in a session, and which file wins is a fact about the loader: a project's own skills are
+read before the machine's. The Skills panel asks the loader that question rather than answering it from
+the files on disk, so a row that says a skill is in the list is saying what a session is given. A row
+that Pi shadowed is listed as not in the list, with the reason, even when its switch is on. Turning the
+loaded skill off is the one case that reaches a shadowed skill: if the reader turned a specific shadowed
+skill on, that skill takes the name's place in the list, and the row says it is in the list in place of
+the skill that was turned off. Nothing is loaded that nobody asked for.
+
+### Existing preferences are migrated by name, and an ambiguous name is never guessed
+
+Preferences written before skills had identities listed skill **names**. Those files keep working, and
+the migration is done in memory while the panel reads, so opening **Settings → Skills** never rewrites
+a config file:
+
+- a saved name that exactly one discovered skill carries becomes that skill's entry, and keeps answering
+  for it. It is written to the file the next time a switch is saved for that scope;
+- a saved name that two discovered skills carry is kept **as it is** and answers for **neither** of
+  them. The panel says so in a notice, naming the skills, rather than spreading one reader's switch
+  over every skill of that name. Switching the skill you mean saves the answer against that skill and
+  retires the old name entry;
+- a saved name that matches no skill Pi discovers is kept and answers for nothing, in case the skill
+  comes back. The panel says that too.
+
+One scope can also name the **same skill in both lists** — only by hand-editing or merging a config,
+since the panel's own writes never do it. The identity entry settles a legacy name for that skill, and
+where two identity entries contradict each other the skill stays out; either way the panel says the file
+names the skill in both lists, because a switch that quietly disagrees with the file is worse than a
+notice.
+
+Migration is one pass, is not repeated once the entries are identities, and never drops an entry it
+cannot place. Unrelated keys in the same file — `pathAccess`, `uploads`, a plugin's settings — are
+left exactly as they were.
 
 ## MCP servers
 

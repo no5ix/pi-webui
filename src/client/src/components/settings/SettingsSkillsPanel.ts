@@ -7,12 +7,17 @@ import "./SettingsPanelFrame";
 import type { SettingsNotice } from "./SettingsPanelFrame";
 import {
   isPiSkillTogglePending,
+  piSkillDuplicateNameNote,
+  piSkillDuplicateNames,
   piSkillEffectiveLabel,
   piSkillEmptyScopeNote,
   piSkillOffReasonNote,
   piSkillOriginLabel,
-  piSkillPreferenceLabel,
+  piSkillOverrideNote,
+  piSkillPreferenceNote,
   piSkillProjectScopeNote,
+  piSkillPromotionNote,
+  piSkillRowLabel,
   piSkillScopeGroups,
   piSkillScopeLabel,
   piSkillShadowedNote,
@@ -72,7 +77,7 @@ export class SettingsSkillsPanel extends LitElement {
     if (this.skillsResponse !== undefined) {
       notices.push({
         type: "info",
-        content: "A switch saves PI WEB's preference for one skill name and rewrites the list Pi is given. A running session keeps the skills it loaded: type /reload to load the new list.",
+        content: "A switch saves PI WEB's preference for one skill - that skill file, not every skill that shares its name - and rewrites the list Pi is given. A running session keeps the skills it loaded: type /reload to load the new list.",
       });
     }
     for (const diagnostic of this.skillsResponse?.diagnostics ?? []) {
@@ -90,9 +95,10 @@ export class SettingsSkillsPanel extends LitElement {
       return html`<div class="loading-card">${this.loading ? `Loading skills from ${targetLabel}…` : `Skill list not loaded yet for ${targetLabel} · trying again…`}</div>`;
     }
     const groups = piSkillScopeGroups(response.skills, response.scopes);
+    const duplicates = piSkillDuplicateNames(response.skills);
     return html`
       <div class="scope-note">${piSkillProjectScopeNote(response.scopes)}</div>
-      ${groups.map((group) => this.renderScopeGroup(group, targetLabel))}
+      ${groups.map((group) => this.renderScopeGroup(group, targetLabel, duplicates))}
     `;
   }
 
@@ -118,7 +124,7 @@ export class SettingsSkillsPanel extends LitElement {
     `;
   }
 
-  private renderScopeGroup(group: ReturnType<typeof piSkillScopeGroups>[number], targetLabel: string): TemplateResult {
+  private renderScopeGroup(group: ReturnType<typeof piSkillScopeGroups>[number], targetLabel: string, duplicates: ReadonlySet<string>): TemplateResult {
     const scopeInfo = group.scopeInfo;
     return html`
       <section class="section-card scope-section" aria-label=${`${piSkillScopeLabel(group.scope)} skills`}>
@@ -132,12 +138,12 @@ export class SettingsSkillsPanel extends LitElement {
                 <small>Saved preference: <code>${scopeInfo.configPath}</code></small>
               `}
         </div>
-        ${this.renderScopeRows(group)}
+        ${this.renderScopeRows(group, duplicates)}
       </section>
     `;
   }
 
-  private renderScopeRows(group: ReturnType<typeof piSkillScopeGroups>[number]): TemplateResult {
+  private renderScopeRows(group: ReturnType<typeof piSkillScopeGroups>[number], duplicates: ReadonlySet<string>): TemplateResult {
     const scopeInfo = group.scopeInfo;
     if (scopeInfo?.projectTrusted === false) {
       return html`<p class="section-note">Project skills are not read: ${scopeInfo.projectPath ?? "this project"} is not trusted, so Pi loads none of them.</p>`;
@@ -147,14 +153,17 @@ export class SettingsSkillsPanel extends LitElement {
     }
     return html`
       <div class="skill-list">
-        ${group.skills.map((skill) => this.renderSkill(skill))}
+        ${group.skills.map((skill) => this.renderSkill(skill, duplicates))}
       </div>
     `;
   }
 
-  private renderSkill(skill: PiSkillInfo): TemplateResult {
+  private renderSkill(skill: PiSkillInfo, duplicates: ReadonlySet<string>): TemplateResult {
     const offReason = piSkillOffReasonNote(skill);
     const shadowed = piSkillShadowedNote(skill);
+    const promotion = piSkillPromotionNote(skill);
+    const duplicate = piSkillDuplicateNameNote(skill, duplicates);
+    const override = piSkillOverrideNote(skill);
     const validation = piSkillValidationNote(skill);
     const pending = isPiSkillTogglePending(this.operation, skill, this.projectSelection !== undefined);
     return html`
@@ -165,9 +174,12 @@ export class SettingsSkillsPanel extends LitElement {
           <small>${piSkillOriginLabel(skill.origin)} · ${piSkillScopeLabel(skill.scope)} · Pi source: <code>${skill.source}</code></small>
           <small>Skill file: <code>${skill.filePath}</code></small>
           <small>Base directory: <code>${skill.baseDir}</code></small>
-          <small>${piSkillPreferenceLabel(skill.preference)} · ${piSkillEffectiveLabel(skill.enabled)}</small>
+          <small>${piSkillPreferenceNote(skill)} · ${piSkillEffectiveLabel(skill.enabled)}</small>
           ${skill.packageSource === undefined ? nothing : html`<small>Supplied by Pi package: <code>${skill.packageSource}</code></small>`}
+          ${duplicate === undefined ? nothing : html`<small class="diagnostic">${duplicate}</small>`}
+          ${override === undefined ? nothing : html`<small class="diagnostic">${override}</small>`}
           ${offReason === undefined ? nothing : html`<small class="diagnostic">${offReason}</small>`}
+          ${promotion === undefined ? nothing : html`<small class="diagnostic">${promotion}</small>`}
           ${shadowed === undefined ? nothing : html`<small class="diagnostic">${shadowed}</small>`}
           ${validation === undefined ? nothing : html`<small class="diagnostic">${validation}</small>`}
           ${skill.disableModelInvocation === true ? html`<small class="diagnostic">This skill asks Pi to keep it out of the model's skill list.</small>` : nothing}
@@ -175,7 +187,7 @@ export class SettingsSkillsPanel extends LitElement {
         <label class="toggle">
           <input
             type="checkbox"
-            aria-label=${`${piSkillScopeLabel(skill.scope)} skill ${skill.name}`}
+            aria-label=${piSkillRowLabel(skill, duplicates)}
             .checked=${live(skill.enabled)}
             ?disabled=${this.isOperating}
             @change=${(event: Event) => { void this.toggleSkill(skill, event); }}
@@ -232,5 +244,5 @@ export class SettingsSkillsPanel extends LitElement {
 }
 
 function skillsDescription(targetLabel: string): TemplateResult {
-  return html`Turn the skills Pi finds on <strong>${targetLabel}</strong> on or off, and see where each one came from: a Pi skill folder, a Pi package, or a configured path. This writes PI WEB's saved preference for a skill name; it never moves or deletes a skill file.`;
+  return html`Turn the skills Pi finds on <strong>${targetLabel}</strong> on or off, and see where each one came from: a Pi skill folder, a Pi package, or a configured path. Each row is one skill file, and its switch writes PI WEB's saved preference for that skill alone; it never moves or deletes a skill file.`;
 }

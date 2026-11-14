@@ -330,6 +330,7 @@ export interface CapturedSessionDaemonRequest {
 
 interface CapturedPiSkillsRequest {
   action: "list" | "set-enabled";
+  id?: string;
   name?: string;
   scope?: "global" | "project";
   enabled?: boolean;
@@ -354,6 +355,7 @@ interface CapturedPiPackageRequest {
 
 function appTestSkill(name: string): PiSkillInfo {
   return {
+    id: `sk1:g:${name}`,
     name,
     description: `What ${name} does`,
     filePath: `/pi/skills/${name}/SKILL.md`,
@@ -408,7 +410,7 @@ function fakePiSkillsService(): PiSkillsService {
       return Promise.resolve(appTestSkillsResponse());
     },
     setEnabled: (request) => {
-      piSkillsRequests.push({ action: "set-enabled", name: request.name, scope: request.scope, enabled: request.enabled, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      piSkillsRequests.push({ action: "set-enabled", name: request.name ?? "", ...(request.id === undefined ? {} : { id: request.id }), scope: request.scope, enabled: request.enabled, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
       return Promise.resolve({ ...appTestSkillsResponse(), requiresReload: true });
     },
   };

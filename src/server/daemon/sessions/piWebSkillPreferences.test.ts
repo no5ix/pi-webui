@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Skill } from "@earendil-works/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import type { ResourceDiagnostic, Skill } from "@earendil-works/pi-coding-agent";
 import type { PiSkillPreferenceConfig } from "../../../shared/apiTypes.js";
+import { skillIdentity } from "../../shared/resources/skillIdentity.js";
 import { piWebSkillsOverride, type CachedPreferences, type SkillFilterLogger, type SkillLoadResult, type SkillPreferenceReader } from "./piWebSkillPreferences";
 
 /**
@@ -130,3 +134,112 @@ describe("the skill filter a session runs", () => {
     expect(applyB(result("pdf")).skills.map((entry) => entry.name)).toEqual(["pdf"]);
   });
 });
+
+/**
+ * The skills a name cannot tell apart, at the point a session's skill list is decided.
+ *
+ * Pi's loader keeps one skill per name and reports the one it dropped, so the filter is handed the
+ * winner plus a collision diagnostic naming the loser. These tests pin the two directions the panel
+ * promises: turning the machine-wide skill off must not speak for the project's own skill of that
+ * name, and turning the project's own skill on must reach the session that the disabled namesake left.
+ */
+describe("skills that share a display name", () => {
+  let root: string;
+  let agentDir: string;
+  let projectPath: string;
+  let globalAuditPath: string;
+  let projectAuditPath: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "pi-web-skill-override-"));
+    agentDir = join(root, "agent");
+    projectPath = join(root, "project");
+    globalAuditPath = writeSkill(join(agentDir, "skills", "nestjs-code-audit"), "nestjs-code-audit");
+    projectAuditPath = writeSkill(join(projectPath, ".pi", "skills", "nestjs-code-audit"), "nestjs-code-audit");
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const globalId = () => skillIdentity(globalAuditPath, { projectPath }).id;
+  const projectId = () => skillIdentity(projectAuditPath, { projectPath }).id;
+
+  const auditAt = (filePath: string): Skill => ({
+    name: "nestjs-code-audit",
+    description: "Audits a NestJS service.",
+    filePath,
+    baseDir: dirname(filePath),
+    sourceInfo: { path: filePath, source: "skills", scope: "user", origin: "top-level" },
+    disableModelInvocation: false,
+  });
+
+  /** What Pi's loader hands over when it kept the global skill and dropped the project's one. */
+  function piDedupedLoad(): SkillLoadResult {
+    return {
+      skills: [auditAt(globalAuditPath)],
+      diagnostics: [{
+        type: "collision",
+        message: 'name "nestjs-code-audit" collision',
+        path: projectAuditPath,
+        collision: { resourceType: "skill", name: "nestjs-code-audit", winnerPath: globalAuditPath, loserPath: projectAuditPath },
+      }],
+    };
+  }
+
+  function override(global: PiSkillPreferenceConfig, project?: PiSkillPreferenceConfig) {
+    const log = logger();
+    const apply = piWebSkillsOverride(agentDir, projectPath, log, reader(() => global, () => project ?? {}), new Map<string, CachedPreferences>());
+    return { apply, log };
+  }
+
+  it("drops the global skill the reader turned off and keeps the project's own skill of the same name", () => {
+    const both: SkillLoadResult = { skills: [auditAt(globalAuditPath), auditAt(projectAuditPath)], diagnostics: [] };
+    const { apply } = override({ version: 2, disabled: [{ id: globalId() }] });
+
+    expect(apply(both).skills.map((entry) => entry.filePath)).toEqual([projectAuditPath]);
+  });
+
+  it("drops the project's own skill the project turned off and keeps the global skill of the same name", () => {
+    const both: SkillLoadResult = { skills: [auditAt(globalAuditPath), auditAt(projectAuditPath)], diagnostics: [] };
+    const { apply } = override({}, { version: 2, disabled: [{ id: projectId() }] });
+
+    expect(apply(both).skills.map((entry) => entry.filePath)).toEqual([globalAuditPath]);
+  });
+
+  it("gives the session the project's own skill when the reader turned it on and the global one off", () => {
+    const { apply, log } = override(
+      { version: 2, disabled: [{ id: globalId() }] },
+      { version: 2, enabled: [{ id: projectId() }] },
+    );
+
+    const applied = apply(piDedupedLoad());
+
+    expect(applied.skills.map((entry) => entry.filePath)).toEqual([projectAuditPath]);
+    expect(applied.diagnostics.filter((entry: ResourceDiagnostic) => entry.type === "collision")).toHaveLength(1);
+    expect(applied.diagnostics.map((entry: ResourceDiagnostic) => entry.message).join(" ")).toContain("in place of a same-named skill that is turned off");
+    expect(log.info).toHaveBeenCalledWith(expect.objectContaining({ loaded: 1, kept: 0, removed: 1, promoted: 1 }), expect.any(String));
+  });
+
+  it("leaves the name out of the session when nothing asked for the shadowed skill", () => {
+    const { apply } = override({ version: 2, disabled: [{ id: globalId() }] });
+
+    expect(apply(piDedupedLoad()).skills).toEqual([]);
+  });
+
+  it("keeps the skill Pi loaded when the reader turned on a shadowed one the winner did not leave room for", () => {
+    const { apply } = override(
+      {},
+      { version: 2, enabled: [{ id: projectId() }] },
+    );
+
+    expect(apply(piDedupedLoad()).skills.map((entry) => entry.filePath)).toEqual([globalAuditPath]);
+  });
+});
+
+function writeSkill(dir: string, name: string): string {
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "SKILL.md");
+  writeFileSync(path, `---\nname: ${name}\ndescription: A skill.\n---\n`, "utf8");
+  return path;
+}

@@ -18,6 +18,7 @@ function response(): PiSkillsResponse {
   return {
     skills: [
       {
+        id: "sk1:g:pdf",
         name: "pdf",
         description: "Work with PDF files",
         filePath: "/home/test/.pi/skills/pdf/SKILL.md",
@@ -103,6 +104,28 @@ describe("registerPiSkillsRoutes", () => {
     expect((await app.inject({ method: "POST", url: "/api/pi-skills/set-enabled", payload: { name: "  ", scope: "global", enabled: false } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/api/pi-skills/set-enabled", payload: { name: "pdf", scope: "global", enabled: "off" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/api/pi-skills/set-enabled", payload: ["pdf"] })).statusCode).toBe(400);
+  });
+
+  it("carries the skill identity to the service, with the display name beside it", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/pi-skills/set-enabled", payload: { id: "sk1:g:abc", name: "pdf", scope: "global", enabled: false } });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.setEnabled.mock.calls.at(-1)?.[0]).toMatchObject({ id: "sk1:g:abc", name: "pdf", scope: "global", enabled: false });
+  });
+
+  it("refuses a switch that names no skill at all, so a half-filled request writes nothing", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/pi-skills/set-enabled", payload: { scope: "global", enabled: false } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<{ error: string }>().error).toContain('"id"');
+    expect(mocks.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("refuses an id that is not a usable string", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/pi-skills/set-enabled", payload: { id: "   ", name: "pdf", scope: "global", enabled: false } });
+
+    expect(response.statusCode).toBe(400);
+    expect(mocks.setEnabled).not.toHaveBeenCalled();
   });
 
   it("answers a skill the scope does not offer with 404", async () => {

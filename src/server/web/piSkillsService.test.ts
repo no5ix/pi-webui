@@ -16,6 +16,7 @@ import {
   type SkillPreferencesStore,
 } from "./piSkillsService";
 import { SettingsProjectError, type SettingsProjectResolver } from "../shared/resources/settingsProjectResolver.js";
+import { skillIdentity } from "../shared/resources/skillIdentity.js";
 import type { LoadedSkillPreferences } from "../../config.js";
 import type { LoadedProjectSkillPreferences } from "../shared/resources/skillPreferences.js";
 
@@ -25,7 +26,21 @@ import type { LoadedProjectSkillPreferences } from "../shared/resources/skillPre
  * Pi discovers skills; PI WEB owns the preference that takes one out. These tests pin the seam
  * between them: what a scope is allowed to show, which answer wins when the two scopes disagree,
  * and that a switch writes only the scope the request named.
+ *
+ * A preference is written against a skill identity, so the expectations name the identity the same
+ * function the panel and the session compute, for the file the fake discovery reported: a written
+ * answer must be about the skill the reader pressed, and a row's `id` is what says so.
  */
+
+const AGENT_DIR = "/home/test/.pi";
+
+/** The identity of one skill in the agent directory, computed the way the panel computes it. */
+const globalSkillId = (name: string, path = `/home/test/.pi/skills/${name}/SKILL.md`) =>
+  skillIdentity(path, {}).id;
+
+/** The identity of one skill owned by a project, which is never the identity of a global skill. */
+const projectSkillId = (name: string, projectPath = "/work/project") =>
+  skillIdentity(`${projectPath}/.pi/skills/${name}/SKILL.md`, { projectPath }).id;
 
 const skill = (name: string, overrides: Partial<DiscoveredSkill> = {}): DiscoveredSkill => ({
   name,
@@ -78,7 +93,7 @@ const projects: SettingsProjectResolver = {
 const untrusted: SettingsProjectResolver = { ...projects, isProjectTrusted: () => false };
 
 function service(port: PiSkillDiscoveryPort, store: SkillPreferencesStore, resolver: SettingsProjectResolver = projects) {
-  return new DefaultPiSkillsService(port, store, resolver);
+  return new DefaultPiSkillsService(port, store, resolver, AGENT_DIR);
 }
 
 function scopeNames(response: PiSkillsResponse): string[] {
@@ -135,7 +150,14 @@ describe("listing skills", () => {
   });
 
   it("keeps a global configured skill global when it lives outside the selected repository", async () => {
-    const globalConfiguredSkill = skill("shared-helper", { piScope: "user", source: "local", filePath: "/home/test/shared/skills/shared-helper/SKILL.md" });
+    const globalConfiguredSkill: DiscoveredSkill = {
+      name: "shared-helper",
+      description: "shared-helper description",
+      filePath: "/home/test/shared/skills/shared-helper/SKILL.md",
+      baseDir: "/home/test/shared/skills/shared-helper",
+      source: "path",
+      disableModelInvocation: false,
+    };
     const listed = await service(discovery([globalConfiguredSkill]), preferences().store).list({ projectId: "p-1" });
     expect(listed.skills[0]).toMatchObject({ scope: "global", origin: "path", name: "shared-helper" });
   });
@@ -184,7 +206,7 @@ describe("changing a skill's preference", () => {
 
     const response = await service(discovery([skill("pdf")]), store).setEnabled({ name: "pdf", scope: "global", enabled: false });
 
-    expect(writeGlobal).toHaveBeenCalledWith({ version: 1, disabled: ["pdf"] });
+    expect(writeGlobal).toHaveBeenCalledWith({ version: 2, disabled: [{ id: globalSkillId("pdf"), name: "pdf" }] });
     expect(writeProject).not.toHaveBeenCalled();
     expect(response.requiresReload).toBe(true);
     expect(response.skills[0]).toMatchObject({ name: "pdf", scope: "global", enabled: false, preference: "disabled" });
@@ -196,7 +218,7 @@ describe("changing a skill's preference", () => {
       name: "nestjs-code-audit", scope: "project", projectId: "p-1", enabled: true,
     });
 
-    expect(writeProject).toHaveBeenCalledWith("/work/project", { version: 1, enabled: ["nestjs-code-audit"] });
+    expect(writeProject).toHaveBeenCalledWith("/work/project", { version: 2, enabled: [{ id: globalSkillId("nestjs-code-audit"), name: "nestjs-code-audit" }] });
     expect(writeGlobal).not.toHaveBeenCalled();
     expect(saved.global.disabled).toEqual(["nestjs-code-audit"]);
     expect(response.skills[0]).toMatchObject({ name: "nestjs-code-audit", scope: "global", enabled: true, preference: "enabled" });
@@ -211,7 +233,7 @@ describe("changing a skill's preference", () => {
 
     const response = await service(discovery([skill("pdf", { piScope: "project", source: "project" })]), store).setEnabled({ name: "pdf", scope: "project", projectId: "p-1", enabled: false });
 
-    expect(writeProject).toHaveBeenCalledWith("/work/project", { version: 1, disabled: ["pdf"] });
+    expect(writeProject).toHaveBeenCalledWith("/work/project", { version: 2, disabled: [{ id: globalSkillId("pdf"), name: "pdf" }] });
     expect(writeGlobal).not.toHaveBeenCalled();
     expect(response.scopes[1]).toMatchObject({ scope: "project", projectPath: "/work/project", configPath: "/work/project/.pi-web/config.json" });
   });
@@ -283,13 +305,167 @@ describe("the trust answer the skills list is built on", () => {
     const shipsSkills = project("ships-skills", true);
     const plain = project("plain", false);
 
-    expect(projectSkillTrust(agentDir, undefined)).toBe(true);
+    expect(projectSkillTrust(agentDir, undefined)).toBe(false);
     expect(projectSkillTrust(agentDir, plain)).toBe(true);
     expect(projectSkillTrust(agentDir, shipsSkills)).toBe(false);
 
     new ProjectTrustStore(agentDir).set(shipsSkills, true);
 
     expect(projectSkillTrust(agentDir, shipsSkills)).toBe(true);
+  });
+});
+
+describe("two skills that share a display name", () => {
+  const globalAudit = () => skill("nestjs-code-audit");
+  const projectAudit = (projectPath = "/work/project") => skill("nestjs-code-audit", {
+    piScope: "project",
+    source: "project",
+    filePath: `${projectPath}/.pi/skills/nestjs-code-audit/SKILL.md`,
+    baseDir: `${projectPath}/.pi/skills/nestjs-code-audit`,
+  });
+
+  it("lists them as two rows, and their identities are not the same", async () => {
+    const listed = await service(discovery([globalAudit(), projectAudit()]), preferences().store).list({ projectId: "p-1" });
+    const [globalRow, projectRow] = listed.skills;
+
+    expect(listed.skills.map((entry) => entry.scope)).toEqual(["global", "project"]);
+    expect(listed.skills.map((entry) => entry.name)).toEqual(["nestjs-code-audit", "nestjs-code-audit"]);
+    expect(globalRow?.id).toBe(globalSkillId("nestjs-code-audit"));
+    expect(projectRow?.id).toBe(projectSkillId("nestjs-code-audit"));
+    expect(globalRow?.id).not.toBe(projectRow?.id);
+  });
+
+  it("turns the project's own skill off for that project and leaves the global skill of the same name in the list", async () => {
+    const { store, writeGlobal, saved } = preferences();
+
+    const response = await service(discovery([globalAudit(), projectAudit()]), store).setEnabled({
+      id: projectSkillId("nestjs-code-audit"), name: "nestjs-code-audit", scope: "project", projectId: "p-1", enabled: false,
+    });
+
+    expect(writeGlobal).not.toHaveBeenCalled();
+    expect(saved.project).toEqual({ version: 2, disabled: [{ id: projectSkillId("nestjs-code-audit"), name: "nestjs-code-audit" }] });
+    const rows = response.skills.filter((entry) => entry.name === "nestjs-code-audit");
+    expect(rows.find((entry) => entry.scope === "global")).toMatchObject({ enabled: true, preference: "default" });
+    expect(rows.find((entry) => entry.scope === "project")).toMatchObject({ enabled: false, preference: "disabled", answeredBy: "project" });
+  });
+
+  it("keeps a global skill that is turned off turned off when the project turns its own skill on", async () => {
+    const global = globalSkillId("nestjs-code-audit");
+    const { store } = preferences({ version: 2, disabled: [{ id: global, name: "nestjs-code-audit" }] });
+
+    await service(discovery([globalAudit(), projectAudit()]), store).setEnabled({
+      id: projectSkillId("nestjs-code-audit"), name: "nestjs-code-audit", scope: "project", projectId: "p-1", enabled: true,
+    });
+    const listed = await service(discovery([globalAudit(), projectAudit()]), store).list({ projectId: "p-1" });
+    const rows = listed.skills.filter((entry) => entry.name === "nestjs-code-audit");
+
+    expect(rows.find((entry) => entry.scope === "global")).toMatchObject({ enabled: false, preference: "disabled", answeredBy: "global" });
+    expect(rows.find((entry) => entry.scope === "project")).toMatchObject({ enabled: true, preference: "enabled", answeredBy: "project" });
+  });
+
+  it("refuses a global preference for a project's own skill, because the global file cannot name it", async () => {
+    const { store, writeGlobal } = preferences();
+
+    await expect(service(discovery([globalAudit(), projectAudit()]), store).setEnabled({
+      id: projectSkillId("nestjs-code-audit"), name: "nestjs-code-audit", scope: "global", projectId: "p-1", enabled: false,
+    })).rejects.toBeInstanceOf(PiSkillsRequestError);
+    expect(writeGlobal).not.toHaveBeenCalled();
+  });
+
+  it("refuses a name that two discovered skills carry, and leaves no preference behind", async () => {
+    const { store, writeGlobal, writeProject } = preferences();
+
+    await expect(service(discovery([globalAudit(), projectAudit()]), store).setEnabled({
+      name: "nestjs-code-audit", scope: "global", enabled: false,
+    })).rejects.toBeInstanceOf(PiSkillsRequestError);
+    expect(writeGlobal).not.toHaveBeenCalled();
+    expect(writeProject).not.toHaveBeenCalled();
+  });
+
+  it("applies a legacy name preference to one skill of that name when only one is discovered", async () => {
+    const listed = await service(discovery([globalAudit()]), preferences({ version: 1, disabled: ["nestjs-code-audit"] }).store).list({});
+
+    expect(listed.skills[0]).toMatchObject({ name: "nestjs-code-audit", enabled: false, preference: "disabled", answeredBy: "global" });
+    expect(listed.diagnostics).toEqual([]);
+  });
+
+  it("reports a legacy name two skills share, and applies it to neither", async () => {
+    const listed = await service(discovery([globalAudit(), projectAudit()]), preferences({ version: 1, disabled: ["nestjs-code-audit"] }).store).list({ projectId: "p-1" });
+
+    // The saved name is kept and answers for neither skill, so both rows keep Pi's default (on) and
+    // both stay in the list Pi is given. The ambiguity is reported separately, below.
+    expect(listed.skills.map((entry) => entry.enabled)).toEqual([true, true]);
+    expect(listed.skills.map((entry) => entry.preference)).toEqual(["default", "default"]);
+    expect(listed.diagnostics.map((entry) => entry.message).join(" ")).toContain("skill preference \"nestjs-code-audit\" names 2 skills");
+  });
+
+  it("reports a legacy name that names no skill Pi discovers, and keeps the entry answering for nothing", async () => {
+    const listed = await service(discovery([skill("pdf")]), preferences({ version: 1, disabled: ["gone-away"] }).store).list({});
+
+    expect(listed.skills[0]).toMatchObject({ name: "pdf", enabled: true, preference: "default" });
+    expect(listed.diagnostics.map((entry) => entry.message).join(" ")).toContain("\"gone-away\" names no skill Pi discovers");
+  });
+
+  it("labels an agent-directory skill by its folder, whatever path list Pi handed it over and whichever project is selected", async () => {
+    const agentSkill: DiscoveredSkill = {
+      name: "pdf",
+      description: "pdf description",
+      filePath: "/home/test/.pi/skills/pdf/SKILL.md",
+      baseDir: "/home/test/.pi/skills/pdf",
+      source: "path",
+      disableModelInvocation: false,
+    };
+
+    const noProject = await service(discovery([agentSkill]), preferences().store).list({});
+    const withProject = await service(discovery([agentSkill]), preferences().store).list({ projectId: "p-1" });
+
+    expect(noProject.skills[0]).toMatchObject({ origin: "agent", scope: "global" });
+    expect(withProject.skills[0]).toMatchObject({ origin: "agent", scope: "global" });
+  });
+
+  it("names a project's skill by the project the file is in, whatever project the panel has selected", async () => {
+    const otherProjectSkill: DiscoveredSkill = {
+      name: "audit",
+      description: "Audit a repository.",
+      filePath: "/work/other/.pi/skills/audit/SKILL.md",
+      baseDir: "/work/other/.pi/skills/audit",
+      source: "local",
+      piScope: "project",
+      disableModelInvocation: false,
+    };
+
+    const listed = await service(discovery([otherProjectSkill]), preferences().store).list({ projectId: "p-1" });
+
+    expect(listed.skills[0]).toMatchObject({ name: "audit", origin: "project", id: projectSkillId("audit", "/work/other") });
+  });
+
+  it("refuses a machine-wide preference for a skill that lives in a project the panel is not showing", async () => {
+    const otherProjectSkill: DiscoveredSkill = {
+      name: "audit",
+      description: "Audit a repository.",
+      filePath: "/work/other/.pi/skills/audit/SKILL.md",
+      baseDir: "/work/other/.pi/skills/audit",
+      source: "local",
+      piScope: "project",
+      disableModelInvocation: false,
+    };
+
+    await expect(service(discovery([otherProjectSkill]), preferences().store).setEnabled({ scope: "global", id: projectSkillId("audit", "/work/other"), name: "audit", enabled: false })).rejects.toThrow(/project's own skill/);
+  });
+
+  it("reports one scope naming the same skill in both lists, and lets the identity entry settle it", async () => {
+    const listed = await service(discovery([skill("pdf")]), preferences({ version: 2, disabled: ["pdf"], enabled: [{ id: globalSkillId("pdf"), name: "pdf" }] }).store).list({});
+
+    expect(listed.skills[0]).toMatchObject({ name: "pdf", enabled: true, preference: "enabled", answeredBy: "global" });
+    expect(listed.diagnostics.map((entry) => entry.message).join(" ")).toContain("both the turned-on list and the turned-off list");
+  });
+
+  it("marks the skill Pi shadowed by a same-named one as not in the list, and says why", async () => {
+    const listed = await service(discovery([globalAudit(), { ...projectAudit(), shadowedByPi: true }]), preferences().store).list({ projectId: "p-1" });
+
+    expect(listed.skills[0]).toMatchObject({ scope: "global", enabled: true });
+    expect(listed.skills[0]?.shadowed).toBeUndefined();
+    expect(listed.skills[1]).toMatchObject({ scope: "project", enabled: false, shadowed: true, preference: "default" });
   });
 });
 

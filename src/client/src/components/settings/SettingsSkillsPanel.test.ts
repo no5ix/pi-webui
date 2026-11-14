@@ -13,6 +13,7 @@ afterEach(() => {
 
 function skill(name: string, overrides: Partial<PiSkillInfo> = {}): PiSkillInfo {
   return {
+    id: `sk1:g:${name}`,
     name,
     description: `What ${name} does`,
     filePath: `/pi/skills/${name}/SKILL.md`,
@@ -126,7 +127,7 @@ describe("settings-skills-panel", () => {
 
     const text = panelText(panel);
     expect(text).toContain("Off because its Pi package npm:@acme/tools is turned off");
-    expect(text).toContain("A skill named shadowed from a stronger source is the one Pi uses");
+    expect(text).toContain("Pi keeps one skill per name");
     expect(text).toContain("Front matter is missing a name");
     expect(text).toContain("Skill path collided");
     expect(text).toContain("Not in the list Pi is given");
@@ -150,6 +151,73 @@ describe("settings-skills-panel", () => {
     selector.value = "";
     selector.dispatchEvent(new Event("change", { bubbles: true }));
     expect(onSelectProject).toHaveBeenCalledWith(undefined);
+  });
+
+  it("shows two skills that share a display name as two rows, and each switch speaks for its own skill", async () => {
+    const onToggleSkill = vi.fn<(skill: PiSkillInfo, enabled: boolean) => void>();
+    const panel = await mount((element) => {
+      element.skillsResponse = {
+        skills: [
+          skill("audit", { id: "sk1:g:global-audit", scope: "global", origin: "agent", filePath: "/pi/skills/audit/SKILL.md" }),
+          skill("audit", {
+            id: "sk1:p:project-audit", scope: "project", origin: "project", filePath: "/work/.pi/skills/audit/SKILL.md",
+            enabled: false, shadowed: true,
+          }),
+        ],
+        diagnostics: [],
+        scopes: [
+          { scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" },
+          { scope: "project", skillsDir: "/work/.pi/skills", configPath: "/work/.pi-web/config.json", projectId: "p-1", projectPath: "/work", projectTrusted: true },
+        ],
+      };
+      element.onToggleSkill = onToggleSkill;
+    });
+
+    const rows = panel.shadowRoot?.querySelectorAll(".skill-card") ?? [];
+    const labels = switches(panel).map((input) => input.getAttribute("aria-label") ?? "");
+    expect(rows).toHaveLength(2);
+    expect(panelText(panel)).toContain('More than one skill is named "audit"');
+    expect(labels).toEqual([
+      "Project skill audit, Project skill folder, /work/.pi/skills/audit/SKILL.md",
+      "Global skill audit, Pi skill folder, /pi/skills/audit/SKILL.md",
+    ]);
+
+    const [projectSwitch, globalSwitch] = switches(panel);
+    if (globalSwitch === undefined || projectSwitch === undefined) throw new Error("Expected a switch on each row");
+    flip(projectSwitch, true);
+    await panel.updateComplete;
+
+    expect(recordedToggle(onToggleSkill, 0)[0].id).toBe("sk1:p:project-audit");
+    expect(recordedToggle(onToggleSkill, 0)[1]).toBe(true);
+    flip(globalSwitch, false);
+    await panel.updateComplete;
+    expect(recordedToggle(onToggleSkill, 1)[0].id).toBe("sk1:g:global-audit");
+    expect(recordedToggle(onToggleSkill, 1)[1]).toBe(false);
+  });
+
+  it("names the project override, and the skill a preference put into the list", async () => {
+    const panel = await mount((element) => {
+      element.skillsResponse = {
+        skills: [
+          skill("audit", { id: "sk1:g:global-audit", preference: "disabled", answeredBy: "global", enabled: false }),
+          skill("audit", {
+            id: "sk1:p:project-audit", scope: "project", origin: "project", filePath: "/work/.pi/skills/audit/SKILL.md",
+            preference: "enabled", answeredBy: "project", enabled: true, promoted: true,
+          }),
+        ],
+        diagnostics: [],
+        scopes: [
+          { scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" },
+          { scope: "project", skillsDir: "/work/.pi/skills", configPath: "/work/.pi-web/config.json", projectId: "p-1", projectPath: "/work", projectTrusted: true },
+        ],
+      };
+    });
+
+    const text = panelText(panel);
+    expect(text).toContain("Turned off on this machine");
+    expect(text).toContain("Turned on for this project");
+    expect(text).toContain("This project's saved answer overrides this machine's answer");
+    expect(text).toContain("in place of a same-named skill that is turned off");
   });
 
   it("routes the switch a reader flips, with the row it was flipped on", async () => {
@@ -185,7 +253,7 @@ describe("settings-skills-panel", () => {
           { scope: "project", skillsDir: "/work/.pi/skills", configPath: "/work/.pi-web/config.json", projectId: "p-1", projectPath: "/work", projectTrusted: true },
         ],
       };
-      element.operation = { name: "commit", scope: "project", enabled: false };
+      element.operation = { id: "sk1:g:commit", name: "commit", scope: "project", enabled: false };
     });
     expect(panelText(panel)).toContain("Saving…");
     expect(switches(panel)[0]?.disabled).toBe(true);
@@ -194,7 +262,7 @@ describe("settings-skills-panel", () => {
   it("marks a row as saving while its switch is in flight, and every switch waits for it", async () => {
     const panel = await mount((element) => {
       element.skillsResponse = { skills: [skill("commit")], diagnostics: [], scopes: [{ scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" }] };
-      element.operation = { name: "commit", scope: "global", enabled: false };
+      element.operation = { id: "sk1:g:commit", name: "commit", scope: "global", enabled: false };
     });
 
     const [input] = switches(panel);

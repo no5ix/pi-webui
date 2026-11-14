@@ -1,8 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_EXTENSION_DIALOGS_TIMEOUT_MS, DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_UPLOADS_FOLDER, AGENT_SESSION_DIR_ENV_KEYS, agentSessionDirEnvOverride, detectDeprecatedAgentInputs, effectiveAgentConfig, environmentFactsEnabled, effectivePiWebConfig, loadPiWebConfig, maxUploadBytes, offlineModeEnabled, savePiWebConfig } from "./config.js";
+import { DEFAULT_EXTENSION_DIALOGS_TIMEOUT_MS, DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_UPLOADS_FOLDER, AGENT_SESSION_DIR_ENV_KEYS, agentSessionDirEnvOverride, detectDeprecatedAgentInputs, effectiveAgentConfig, environmentFactsEnabled, effectivePiWebConfig, loadGlobalSkillPreferences, loadPiWebConfig, maxUploadBytes, offlineModeEnabled, parseSkillPreferenceConfig, saveGlobalSkillPreferences, savePiWebConfig, skillPreferenceRecord } from "./config.js";
 
 let tempDir: string;
 let configPath: string;
@@ -297,6 +298,66 @@ describe("offlineModeEnabled", () => {
 function testOptions(): { env: NodeJS.ProcessEnv } {
   return { env: { PI_WEB_CONFIG: configPath } };
 }
+
+/**
+ * The saved skill preferences, in the two spellings PI WEB reads.
+ *
+ * An existing installation lists skill names; a scope written after identities exist lists
+ * `{ id, name }` entries. Both have to keep working from the same key: a file that stopped parsing
+ * would read as "no preferences", and a reader's turned-off skills would come back with nobody having
+ * turned them on.
+ */
+describe("the saved skill preferences", () => {
+  it("reads a file of skill names, as an existing installation writes it", () => {
+    writeFileSync(configPath, JSON.stringify({ port: 9000, skills: { version: 1, disabled: ["pdf"], enabled: ["release"] } }), "utf8");
+
+    const loaded = loadGlobalSkillPreferences(testOptions());
+
+    expect(loaded.exists).toBe(true);
+    expect(loaded.config).toEqual({ version: 1, disabled: ["pdf"], enabled: ["release"] });
+  });
+
+  it("reads a file of skill identities", () => {
+    writeFileSync(configPath, JSON.stringify({ skills: { version: 2, disabled: [{ id: "sk1:g:abc", name: "pdf" }, { id: "sk1:p:def" }] } }), "utf8");
+
+    expect(loadGlobalSkillPreferences(testOptions()).config).toEqual({ version: 2, disabled: [{ id: "sk1:g:abc", name: "pdf" }, { id: "sk1:p:def" }] });
+  });
+
+  it("reads a string that spells an identity key as that identity, so a hand-edited file works", () => {
+    expect(parseSkillPreferenceConfig({ disabled: ["sk1:g:abc"] }, configPath)).toEqual({ disabled: [{ id: "sk1:g:abc" }] });
+  });
+
+  it("refuses a version it does not write, so a reader learns the file is not understood", () => {
+    expect(() => parseSkillPreferenceConfig({ version: 3, disabled: ["pdf"] }, configPath)).toThrow("must be 1 or 2");
+  });
+
+  it("refuses an entry that names no skill, and a list that is not a list", () => {
+    expect(() => parseSkillPreferenceConfig({ disabled: [{ name: "pdf" }] }, configPath)).toThrow('must name a skill with an "id"');
+    expect(() => parseSkillPreferenceConfig({ disabled: "pdf" }, configPath)).toThrow("must be a list of skill names or skill identities");
+    expect(() => parseSkillPreferenceConfig({ enabled: [""] }, configPath)).toThrow("must be a list of skill names or skill identities");
+  });
+
+  it("writes the version the entries need, and writes no empty list", () => {
+    expect(skillPreferenceRecord({ disabled: ["pdf"] })).toEqual({ version: 1, disabled: ["pdf"] });
+    expect(skillPreferenceRecord({ enabled: [{ id: "sk1:g:abc", name: "pdf" }] })).toEqual({ version: 2, enabled: [{ id: "sk1:g:abc", name: "pdf" }] });
+    expect(skillPreferenceRecord({ version: 2, enabled: [{ id: "sk1:g:abc" }], disabled: [] })).toEqual({ version: 2, enabled: [{ id: "sk1:g:abc" }] });
+    expect(skillPreferenceRecord({ version: 1, disabled: ["pdf", { id: "sk1:g:abc", name: "pdf" }] })).toEqual({ version: 2, disabled: ["pdf", { id: "sk1:g:abc", name: "pdf" }] });
+    expect(skillPreferenceRecord({})).toEqual({ version: 1 });
+  });
+
+  it("saves the skills key alone, so a browser that never saw the other keys cannot drop them", () => {
+    writeFileSync(configPath, JSON.stringify({ port: 9000, ntfy: { topic: "ops" }, skills: { version: 1, disabled: ["pdf"] } }), "utf8");
+
+    saveGlobalSkillPreferences({ version: 2, enabled: [{ id: "sk1:g:abc", name: "pdf" }] }, testOptions());
+
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual({
+      port: 9000,
+      ntfy: { topic: "ops" },
+      skills: { version: 2, enabled: [{ id: "sk1:g:abc", name: "pdf" }] },
+    });
+    expect(loadGlobalSkillPreferences(testOptions()).config).toEqual({ version: 2, enabled: [{ id: "sk1:g:abc", name: "pdf" }] });
+  });
+});
 
 describe("a plugin's own settings survive a round trip", () => {
   /**

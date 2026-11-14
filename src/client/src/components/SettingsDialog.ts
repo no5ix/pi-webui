@@ -28,7 +28,7 @@ import "./settings/SettingsSkillsPanel";
 import "./settings/SettingsMcpPanel";
 import "./settings/SettingsShortcutsPanel";
 import { friendlyPiPackageErrorMessage, piPackageMutationFollowUpMessage, shouldRefreshGatewayPluginsAfterPiPackageMutation, type PiPackageOperationState } from "./settings/piPackageSettings";
-import { piSkillMutationMessage, piSkillToggleRequest, type PiSkillOperationState } from "./settings/piSkillSettings";
+import { findSkillRow, piSkillMutationMessage, piSkillToggleRequest, piSkillWriteOutcome, type PiSkillOperationState } from "./settings/piSkillSettings";
 import { piMcpMutationMessage, piMcpRemoveRequest, piMcpSetEnabledRequest, piMcpTestRequest, type PiMcpOperationState } from "./settings/piMcpSettings";
 import { loadGatewaySettingsData, loadPiMcpData, loadPiPackagesData, loadPiSkillsData } from "./settings/settingsDataLoading";
 import { mergeSelectedMachineAccessConfig } from "./settings/settingsMachineAccessConfig";
@@ -984,7 +984,7 @@ export class SettingsDialog extends LitElement {
     this.skillsLoadRequestSeq += 1;
     this.skillsLoading = false;
     this.saving = true;
-    this.skillOperation = { name: toggle.name, scope: toggle.scope, enabled };
+    this.skillOperation = { id: toggle.id ?? "", name: skill.name, scope: toggle.scope, enabled };
     this.skillsError = "";
     this.skillsMessage = "";
     try {
@@ -993,15 +993,14 @@ export class SettingsDialog extends LitElement {
       // Verify the effective state through the same project-scoped read used when opening the panel.
       const refreshed = await piSkillsApi.list(projectId, target.id);
       if (!this.isCurrentSkillsMutation(requestSeq, target, projectId)) return;
-      const savedSkill = refreshed.skills.find((entry) => entry.name === toggle.name);
-      if (savedSkill?.enabled !== enabled) {
-        throw new Error("The preference write did not produce the requested effective skill state.");
-      }
       this.skillsResponse = refreshed;
-      this.skillsMessage = piSkillMutationMessage(toggle.scope, toggle.name, enabled, target);
+      const outcome = piSkillWriteOutcome(findSkillRow(refreshed.skills, toggle), enabled);
+      if (outcome.kind === "unverified") throw new Error(`The preference write did not take effect: ${outcome.reason}`);
+      const saved = piSkillMutationMessage(toggle.scope, skill.name, enabled, target);
+      this.skillsMessage = outcome.kind === "effective" ? saved : `${saved}. ${outcome.reason}`;
     } catch (error) {
       if (this.isCurrentSkillsMutation(requestSeq, target, projectId)) {
-        this.skillsError = `Could not verify the skill ${toggle.name} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
+        this.skillsError = `Could not verify the skill ${skill.name} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
       }
     } finally {
       if (this.skillsMutationSeq === requestSeq) {

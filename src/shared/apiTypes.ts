@@ -458,25 +458,45 @@ export type PiSkillScope = "global" | "project";
 /** Where a skill came from: Pi's own skill folders, a Pi package, or a configured path. */
 export type PiSkillOrigin = "agent" | "project" | "package" | "path";
 
-/** The saved preference for one skill name. `default` means nothing has been written for it. */
+/** The saved preference for one skill. `default` means nothing has been written for it. */
 export type PiSkillPreference = "default" | "enabled" | "disabled";
 
 export type PiSkillValidation = "valid" | "warning";
 
 /**
- * The saved skill preferences of one scope: the names a reader turned off, and the names it turned
- * back on. A name in neither list has no preference, and Pi's own default (enabled) applies, so
+ * One saved preference under the identity schema: the skill's identity decides, and its display name
+ * travels beside it so a hand-edited config file still says which skill the opaque id stands for.
+ */
+export interface PiSkillPreferenceEntry {
+  id: string;
+  name?: string;
+}
+
+/**
+ * One saved entry. A v1 file lists bare skill names, a v2 file lists identity entries; a reader that
+ * has not been migrated keeps its names, and resolution treats them as names, never as guesses.
+ */
+export type PiSkillPreferenceEntryValue = PiSkillPreferenceEntry | string;
+
+/**
+ * The saved skill preferences of one scope: the skills a reader turned off, and the skills it turned
+ * back on. A skill in neither list has no preference, and Pi's own default (enabled) applies, so
  * adding this file to an installation cannot disable a skill anybody already uses.
  */
 export interface PiSkillPreferenceConfig {
-  version?: 1;
-  /** Skill names explicitly kept in the runtime list. */
-  enabled?: string[];
-  /** Skill names kept out of the runtime list. Their files are never touched. */
-  disabled?: string[];
+  version?: 1 | 2;
+  /** Skills explicitly kept in the runtime list. */
+  enabled?: PiSkillPreferenceEntryValue[];
+  /** Skills kept out of the runtime list. Their files are never touched. */
+  disabled?: PiSkillPreferenceEntryValue[];
 }
 
 export interface PiSkillInfo {
+  /**
+   * Which skill this row is, in the form a preference is written against. Never derived from `name`:
+   * two skills that share a display name are two rows with two ids and two saved answers.
+   */
+  id: string;
   name: string;
   description: string;
   /** The skill file Pi reads, on the machine that answers the request. */
@@ -491,10 +511,17 @@ export interface PiSkillInfo {
   /** A package that is installed but filtered off supplies nothing, and its skills say so. */
   ownerPackageDisabled?: boolean;
   preference: PiSkillPreference;
+  /**
+   * Which saved entry answered: the project's, the machine's, or neither. `enabled` alone cannot say
+   * which of two files to go change, and those are two different scopes.
+   */
+  answeredBy?: PiSkillScope | "default";
   /** Effective state of the list Pi is given: the preference, then Pi's own default of enabled. */
   enabled: boolean;
   /** A skill of this name from a stronger source is the one Pi keeps, so this one is not used. */
   shadowed?: boolean;
+  /** This skill is in the list in place of a same-named skill the reader turned off. */
+  promoted?: boolean;
   validation: PiSkillValidation;
   validationMessage?: string;
   disableModelInvocation?: boolean;
@@ -526,7 +553,15 @@ export interface PiSkillsResponse {
 }
 
 export interface PiSkillSetEnabledRequest {
-  name: string;
+  /**
+   * The skill identity from the list, and the answer a current client sends.
+   *
+   * `name` stays accepted beside it: a browser newer than the machine it is talking to must not fail
+   * on a machine that knows identities, and a browser older than the server must not fail either, so
+   * a request carries both and the server answers with the identity when it has one.
+   */
+  id?: string;
+  name?: string;
   scope: PiSkillScope;
   enabled: boolean;
   /** Required for project scope: a project this machine has, resolved to its path by the server. */

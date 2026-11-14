@@ -47,7 +47,7 @@ Process restarts depend on the key:
 - `plugins`: a toggle saved in **Settings → PI WEB Plugins** applies at once, without a restart or reload, except for the cases [Turn plugins on and off](plugins.md#turn-plugins-on-and-off) lists (a workspace-provider or machine-registry plugin, a changed `settings` object, `serverSettings` block or `models` list of a plugin with a server half, a new package revision, and hand edits of this file, which wait for the next page load or session-daemon start).
 - `serverPlugins.safeStart`: persistent offline recovery state applied before server-plugin discovery/import on the next sessiond start; use the `pi-web plugins safe-start ...` CLI rather than hand-editing it.
 - Pi package install/remove/update: not a PI WEB config key; after a mutation, type `/reload` in each idle PI WEB session on the target machine to refresh ordinary Pi resources such as extensions, skills, prompt templates, themes, and context/system prompt files. For a PI WEB package with `serverModule`, manually [restart the session daemon](install.md#restart-the-session-daemon), then reload the browser. If a global Pi extension adds or removes a model provider, or changes a provider's connection settings, the same manual sessiond restart is required; `/reload` cannot change either startup snapshot. A known Pi model provider refreshing only its own model list is applied without a restart. See [Pi extension provider baseline](#pi-extension-provider-baseline).
-- `skills`: a change made in **Settings → Skills**, or by hand, takes a skill out of the list Pi is given to a session. A session that is already running keeps the skills it loaded: type `/reload` in each idle PI WEB session on that machine, and the next session created picks the answer up.
+- `skills`: a change made in **Settings → Skills**, or by hand, takes a skill out of the list Pi is given to a session. A skill is named by its identity (see [Skills](#skills)), so two skills of one display name are switched apart. A session that is already running keeps the skills it loaded: type `/reload` in each idle PI WEB session on that machine, and the next session created picks the answer up.
 - Pi MCP servers (`mcp.json`): not a PI WEB config key. Enabling, disabling, removing, or overriding a server edits Pi's own `mcp.json` on the target machine; type `/reload` in each idle PI WEB session there so pi's MCP extension connects or disconnects the server. See [skills, MCP servers, and Pi packages](pi-resources.md).
 - `shortcuts`: saved settings apply in the browser after config refresh/save.
 - `listTiles`: a choice saved in **Settings → Appearance → Lists** applies at once; a change made in the config file by hand applies after a browser reload.
@@ -162,7 +162,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | Update command for the Updates page | `updateCommand` | `PI_WEB_UPDATE_COMMAND` (the saved value wins) | Global | Not supported locally | Next status check, no restart |
 | Tiles per row in the Navigate lists | `listTiles.phone`, `listTiles.desktop` | — | Global (the gateway's browser UI) | Not supported locally | At once from Settings; browser reload after a hand edit |
 | One theme for every browser | `theme.themeId`, `theme.auto` | — | Global (the gateway's browser UI) | Not supported locally | At once in the browser that changes it; other browsers when they next load the page or come back to the foreground |
-| Skills kept out of the list Pi is given | `skills.enabled`, `skills.disabled` | — | Global + project | **Overrides**: a project entry answers for its project alone, then the global entry, then Pi's default (available) | Next session created, or `/reload` in each idle PI WEB session |
+| Skills kept out of the list Pi is given | `skills.enabled`, `skills.disabled` (each entry names a skill identity) | — | Global + project | **Overrides**: a project entry answers for its project alone, then the global entry, then Pi's default (available) | Next session created, or `/reload` in each idle PI WEB session |
 | Upload/body limit | `maxUploadBytes` | `PI_WEB_MAX_UPLOAD_BYTES` | Global | Not supported locally | Restart web/API and session daemon on that machine |
 | Extension dialog auto-cancel timeout | `extensionDialogsTimeoutMs` | — | Global/session daemon | Not supported locally | Restart session daemon on that machine |
 | Session environment facts | `environmentFacts` | `PI_WEB_ENVIRONMENT_FACTS` | Global/session daemon | Not supported locally | Restart session daemon on that machine |
@@ -302,10 +302,38 @@ A layout without a value fits the width, as before: two per row on a phone, one 
 
 `skills` records the PI WEB preference that keeps a skill out of the list Pi is given to a session:
 `skills.disabled` names the skills to leave out, `skills.enabled` names the ones to keep in. Pi owns
-discovery, and PI WEB edits no skill file; a name in neither list has no preference, so Pi's default
-of available stands. The project file `<project>/.pi-web/config.json` carries the same key for that
-project alone and never rewrites the global entry. **Settings → Skills** writes both scopes, and the
-[skills, MCP servers, and Pi packages guide](pi-resources.md) covers what a change takes to apply.
+discovery, and PI WEB edits no skill file; a skill in neither list has no preference, so Pi's default
+of available stands.
+
+A skill is named by its **identity**, not its name, because two skills can carry one name. A written
+scope looks like this:
+
+```json
+{
+  "skills": {
+    "version": 2,
+    "disabled": [{ "id": "sk1:g:6f0f1a2b3c4d5e6f708192a3", "name": "pdf" }],
+    "enabled": [{ "id": "sk1:p:1a2b3c4d5e6f708192a3b4c5", "name": "nestjs-code-audit" }]
+  }
+}
+```
+
+The `id` decides; the `name` beside it is the label that says which skill the id stands for, and it is
+not matched on. An id is a versioned key over the skill file's canonical path and its scope, so a
+machine-wide skill (`sk1:g:…`) and a project's own skill (`sk1:p:…`) of the same display name are
+different entries, and two projects' own skills of one name are different entries. Ids are read from
+**Settings → Skills**, which is the supported way to change a preference: a hand-written id that
+matches no discovered skill answers for nothing, and the panel says so.
+
+A `version: 1` file that lists bare names is still read. A name that exactly one discovered skill
+carries is applied to that skill and becomes an identity entry the next time a switch is saved;
+a name two skills share is preserved and applied to neither, and the panel reports it. See
+[skills, MCP servers, and Pi packages](pi-resources.md#existing-preferences-are-migrated-by-name-and-an-ambiguous-name-is-never-guessed).
+
+The project file `<project>/.pi-web/config.json` carries the same key for that project alone, and a
+project entry answers over the global entry for that project without rewriting it. **Settings → Skills**
+writes both scopes, and the [skills, MCP servers, and Pi packages guide](pi-resources.md) covers what a
+change takes to apply.
 
 ### Shared theme
 

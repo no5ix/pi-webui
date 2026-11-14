@@ -160,7 +160,7 @@ describe("the Skills and MCP sections", () => {
 
     await skillsPanel(dialog).onToggleSkill?.(skillInfo("pdf"), false);
     await settleRenderedDialog(dialog);
-    expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ name: "pdf", scope: "project", projectId: "p-1", enabled: false }, "lab-mac");
+    expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ id: "sk1:g:pdf", name: "pdf", scope: "project", projectId: "p-1", enabled: false }, "lab-mac");
     expect(piSkillsApi.list).toHaveBeenLastCalledWith("p-1", "lab-mac");
   });
 
@@ -171,7 +171,7 @@ describe("the Skills and MCP sections", () => {
     const machine: { skills: PiSkillInfo[] } = { skills: [skillInfo("pdf")] };
     vi.mocked(piSkillsApi.list).mockImplementation(() => Promise.resolve(skillsResponse(machine.skills)));
     vi.mocked(piSkillsApi.setEnabled).mockImplementation((request) => {
-      machine.skills = [skillInfo(request.name, { enabled: request.enabled, preference: request.enabled ? "enabled" : "disabled" })];
+      machine.skills = [skillInfo(request.name ?? "pdf", { enabled: request.enabled, preference: request.enabled ? "enabled" : "disabled" })];
       return Promise.resolve({ ...skillsResponse(machine.skills), requiresReload: true });
     });
     const dialog = await open("skills", labMac);
@@ -181,9 +181,33 @@ describe("the Skills and MCP sections", () => {
     await panel.onToggleSkill(skillInfo("pdf"), false);
     await settleRenderedDialog(dialog);
 
-    expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ name: "pdf", scope: "global", enabled: false }, "lab-mac");
+    expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ id: "sk1:g:pdf", name: "pdf", scope: "global", enabled: false }, "lab-mac");
     const redrawn = skillsPanel(dialog).skillsResponse;
     expect(redrawn?.skills[0]?.enabled).toBe(false);
+  });
+
+  it("verifies a skill switch against the row that was switched, not against a same-named row", async () => {
+    // Two machine-wide skills share the display name (a Pi package and the agent folder both supply
+    // "audit"), and the machine answers the write with the OTHER row turned off and the row that was
+    // pressed still on. A verification that looked a row up by name would read the first row of that
+    // name, call the write a success, and leave the reader looking at a switch that never moved.
+    // The identity is what makes the check mean the row that was pressed.
+    const packageRow = skillInfo("audit", { id: "sk1:g:package-audit" });
+    const folderRow = skillInfo("audit", { id: "sk1:g:folder-audit" });
+    const rows = [packageRow, folderRow];
+    vi.mocked(piSkillsApi.list).mockResolvedValue(skillsResponse(rows));
+    vi.mocked(piSkillsApi.setEnabled).mockResolvedValue({
+      ...skillsResponse([skillInfo("audit", { id: "sk1:g:package-audit", enabled: false, preference: "disabled" }), folderRow]),
+      requiresReload: true,
+    });
+    const dialog = await open("skills", labMac);
+    const panel = skillsPanel(dialog);
+
+    await panel.onToggleSkill?.(folderRow, false);
+    await settleRenderedDialog(dialog);
+
+    expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ id: "sk1:g:folder-audit", name: "audit", scope: "global", enabled: false }, "lab-mac");
+    expect(skillsPanel(dialog).error).toContain("Could not verify the skill audit");
   });
 
   it("probes and removes an MCP server through the machine that is selected", async () => {

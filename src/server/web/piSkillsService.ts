@@ -1,10 +1,12 @@
 import { readdir } from "node:fs/promises";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   DefaultPackageManager,
   loadSkills,
   loadSkillsFromDir,
   SettingsManager,
+  type ResolvedResource,
 } from "@earendil-works/pi-coding-agent";
 import type {
   PiSkillInfo,
@@ -21,10 +23,15 @@ import { loadGlobalSkillPreferences, saveGlobalSkillPreferences, type LoadedSkil
 import {
   applySkillPreference,
   loadProjectSkillPreferences,
-  resolveSkillPreference,
+  planSkillRuntime,
   saveProjectSkillPreferences,
+  type SkillPreferenceSubject,
+  type SkillRuntimePlan,
+  type SkillRuntimeRow,
   type LoadedProjectSkillPreferences,
 } from "../shared/resources/skillPreferences.js";
+import { isInsideAgentDir, skillOwnership, skillPreferenceIdentityFor } from "../shared/resources/skillIdentity.js";
+import { recoverShadowedSkills } from "../shared/resources/skillShadowRecovery.js";
 import { piProjectIsTrusted, unconfiguredSettingsProjectResolver, type SettingsProjectResolver } from "../shared/resources/settingsProjectResolver.js";
 import { isRecord } from "../../shared/unknownValues.js";
 import { isDisabledPackageSource, packageSourceString } from "../shared/resources/piPackageState.js";
@@ -38,13 +45,19 @@ export interface DiscoveredSkill {
   baseDir: string;
   /** pi's own source label: `user`, `project`, `path`, or the package's source. */
   source: string;
-  /** pi's own scope: a user (global) install, a project one, or a temporary one. */
-  piScope: "user" | "project" | "temporary";
+  /** pi's own scope: a user (global) skill, a project one, a temporary one, or none - a configured path has none. */
+  piScope?: "user" | "project" | "temporary";
   disableModelInvocation: boolean;
   /** The configured Pi package whose install root holds this skill. */
   packageSource?: string;
   /** A package that is configured off, so this skill is not in the runtime list at all. */
   ownerPackageDisabled?: boolean;
+  /**
+   * Pi's loader kept a same-named skill from a stronger source and dropped this one, so the session
+   * cannot see this file while the other is in the list. It is still a skill with its own identity and
+   * its own preference, and the panel has to be able to say so.
+   */
+  shadowedByPi?: boolean;
 }
 
 export interface SkillDiscovery {
@@ -89,12 +102,38 @@ export class PiSkillNotFoundError extends Error {
 }
 
 /**
+ * The skills of one discovery, as preference subjects: each with the identity the session runtime will
+ * name it by.
+ *
+ * The identity is computed from the skill file and the project the file belongs to, which is exactly
+ * what the session knows when it filters skills, so the row the panel shows and the skill the session
+ * is given are the same skill. The project comes from where the file is - a skill under
+ * `<root>/.pi/skills` or `<root>/.agents/skills` belongs to `<root>` - and not from the panel's current
+ * selection, because answering for a project skill with the identity of whatever project is selected
+ * would write a preference for one project while the reader means another, and in the no-project view
+ * it would write a global answer no session can ever read. The display name is carried beside it for
+ * the legacy name spelling and for the words the panel shows, and it decides nothing.
+ */
+export function skillPreferenceSubjects(skills: readonly DiscoveredSkill[], agentDir: string): SkillPreferenceSubject[] {
+  const identityFor = skillPreferenceIdentityFor(agentDir);
+  return skills.map((skill) => ({
+    identity: identityFor(skill.filePath),
+    name: skill.name,
+    ...(skill.shadowedByPi === true ? { shadowedByPi: true } : {}),
+  }));
+}
+
+
+
+/**
  * The Skills panel's service: pi's own discovery, with PI WEB's saved preference applied to it.
  *
  * Discovery is pi's, not a list PI WEB keeps. The configured packages are resolved without
  * installing anything, their enabled skill paths and the settings' skill paths go to
- * `loadSkills`, and that is the same call pi's resource loader makes. The saved preference is the
- * one the session's `skillsOverride` filter reads, so the panel and the runtime cannot disagree.
+ * `loadSkills`, and that is the same call pi's resource loader makes. The saved preference is the one
+ * the session's `skillsOverride` filter reads, through the same `planSkillRuntime` this service calls,
+ * so the panel and the runtime cannot disagree about one skill: both answer from the same rows, in the
+ * same order, over the same identities.
  */
 export class DefaultPiSkillsService implements PiSkillsService {
   private mutationQueue: Promise<void> = Promise.resolve();
@@ -103,6 +142,7 @@ export class DefaultPiSkillsService implements PiSkillsService {
     private readonly discovery: PiSkillDiscoveryPort,
     private readonly preferences: SkillPreferencesStore,
     private readonly projects: SettingsProjectResolver,
+    private readonly agentDir: string,
   ) {}
 
   async list(request: PiSkillsListRequest): Promise<PiSkillsResponse> {
@@ -110,9 +150,16 @@ export class DefaultPiSkillsService implements PiSkillsService {
     return this.response(await this.discovery.discover(scope.projectPath), scope);
   }
 
+  /**
+   * One skill switch, written against that skill's identity.
+   *
+   * The identity decides which skill the answer belongs to, so a machine-wide skill and a project's own
+   * skill of the same display name are switched apart, and a project's answer never lands in the
+   * machine's file. The request's own `scope` says which file to write, and a skill has to be one that
+   * file can speak for: the machine's file cannot name a project's own skill, because that skill's
+   * identity is built from the project.
+   */
   async setEnabled(request: PiSkillSetEnabledRequest): Promise<PiSkillSetEnabledResponse> {
-    const name = request.name.trim();
-    if (name === "") throw new PiSkillsRequestError("A skill preference needs a skill name");
     const scope = await this.resolveScope(request.projectId);
     if (request.scope === "project" && scope.projectPath === undefined) {
       throw new PiSkillsRequestError("A project-scope skill preference needs a project");
@@ -120,16 +167,17 @@ export class DefaultPiSkillsService implements PiSkillsService {
     return await this.enqueueMutation(async () => {
       const projectPath = scope.projectPath;
       const discovered = await this.discovery.discover(projectPath);
-      if (!discovered.skills.some((skill) => skill.name === name)) {
-        const scopeLabel = request.scope === "project" ? "for this project" : "on this machine";
-        throw new PiSkillNotFoundError(`No skill named "${name}" is available ${scopeLabel}`);
+      const subjects = skillPreferenceSubjects(discovered.skills, this.agentDir);
+      const subject = findPreferenceSubject(subjects, request);
+      if (request.scope === "global" && subject.identity.scope !== "global") {
+        throw new PiSkillsRequestError("A global skill preference cannot name a project's own skill: turn it off for that project instead.");
       }
       if (request.scope === "project" && projectPath !== undefined) {
         const stored = this.preferences.readProject(projectPath);
-        this.preferences.writeProject(projectPath, applySkillPreference(stored.config, name, request.enabled));
+        this.preferences.writeProject(projectPath, applySkillPreference(stored.config, subject, request.enabled, subjects));
       } else {
         const stored = this.preferences.readGlobal();
-        this.preferences.writeGlobal(applySkillPreference(stored.config, name, request.enabled));
+        this.preferences.writeGlobal(applySkillPreference(stored.config, subject, request.enabled, subjects));
       }
       return { ...this.response(await this.discovery.discover(projectPath), scope), requiresReload: true };
     });
@@ -153,14 +201,79 @@ export class DefaultPiSkillsService implements PiSkillsService {
   private response(found: SkillDiscovery, scope: ReadScope): PiSkillsResponse {
     const global = this.preferences.readGlobal();
     const project = scope.projectPath === undefined ? undefined : this.preferences.readProject(scope.projectPath);
-    const skills = found.skills.map((skill) => describeSkill(skill, global.config, project?.config, scope.projectPath));
+    const subjects = skillPreferenceSubjects(found.skills, this.agentDir);
+    const plan = planSkillRuntime(
+      subjects.filter((_, index) => found.skills[index]?.source !== "package"),
+      global.config,
+      project?.config,
+    );
+    const skills = found.skills.flatMap((skill, index) => {
+      const subject = subjects[index];
+      if (subject === undefined) return [];
+      return [describeSkill(skill, plan.rowFor(subject.identity.id) ?? unreachableRow(subject), scope.projectPath, this.agentDir)];
+    });
     return {
       skills,
-      diagnostics: found.diagnostics,
+      diagnostics: [...found.diagnostics, ...preferenceResolutionDiagnostics(plan)],
       unreadablePaths: found.unreadablePaths,
       scopes: scopeRows(found, global, project, scope),
     };
   }
+}
+
+/**
+ * The skill a preference request is about.
+ *
+ * A current client names the identity, and one written before identities existed names the display
+ * name. A name is only safe when one discovered skill carries it: where two do, the request is
+ * refused rather than answered for an arbitrary one, because writing that preference would switch off a
+ * skill the reader did not touch.
+ */
+function findPreferenceSubject(
+  subjects: readonly SkillPreferenceSubject[],
+  request: PiSkillSetEnabledRequest,
+): SkillPreferenceSubject {
+  const id = request.id?.trim();
+  if (id !== undefined && id !== "") {
+    const found = subjects.find((subject) => subject.identity.id === id);
+    if (found === undefined) throw new PiSkillNotFoundError(`No skill with the identity "${id}" is available`);
+    return found;
+  }
+  const name = request.name?.trim();
+  if (name === undefined || name === "") {
+    throw new PiSkillsRequestError("A skill preference needs a skill identity or a skill name");
+  }
+  const found = subjects.filter((subject) => subject.name === name);
+  if (found.length === 0) throw new PiSkillNotFoundError(`No skill named "${name}" is available`);
+  if (found.length > 1) {
+    throw new PiSkillsRequestError(`More than one skill is named "${name}", so the preference has to name the skill's identity`);
+  }
+  const [only] = found;
+  if (only === undefined) throw new PiSkillNotFoundError(`No skill named "${name}" is available`);
+  return only;
+}
+
+/**
+ * What a saved preference could not say, in the rows' own diagnostics.
+ *
+ * A legacy name shared by two skills is kept as it was and answers for neither, and a name that
+ * matches no discovered skill is kept and answers for nothing. Both are reported: a preference that is
+ * doing nothing is a fact about the reader's config, and a panel that quietly ignores it leaves the
+ * reader to work that out from a switch that does not move.
+ */
+function preferenceResolutionDiagnostics(plan: SkillRuntimePlan): PiSkillsDiagnostic[] {
+  return [
+    ...plan.ambiguous.map((entry) => ({
+      message: `The saved ${entry.scope} skill preference "${entry.name}" names ${String(entry.identities.length)} skills that share that name, so it was kept as it is and applies to none of them. Switch the skill you mean, and that answer is saved against the skill itself.`,
+    })),
+    ...plan.unresolved.map((entry) => ({
+      message: `The saved ${entry.scope} skill preference "${entry.name}" names no skill Pi discovers, so it applies to nothing. It is kept in case the skill comes back.`,
+    })),
+    ...plan.conflicts.map((entry) => ({
+      message: `The saved ${entry.scope} skill preference names "${entry.name}" in both the turned-on list and the turned-off list, which cannot both be true. The skill is kept out of the list Pi is given. Switch it to write one answer.`,
+      path: entry.identity.resourceKey,
+    })),
+  ];
 }
 
 interface ReadScope {
@@ -196,29 +309,40 @@ function scopeRows(
 /**
  * One discovered skill as the panel shows it.
  *
- * Two questions are answered here, and they are not the same question. Where a skill lives decides
- * its `scope` and `origin`: a path inside the selected repository is project-owned even when pi
- * discovered it through a configured path. Whether pi will load it is `preference` and `enabled`,
- * and the session answers that by name through the same resolution the resource loader's
- * `skillsOverride` applies (`filterSkillsByPreference`), a project entry first and the machine's
- * global entry under it. Both fields come out of one resolution because a row that is switched off
- * while the session still loads the skill, or the other way round, is a panel that lies about the
- * machine.
+ * Two questions are answered here, and they are not the same question. Where a skill lives decides its
+ * `scope` and `origin`: a path inside the selected repository is project-owned even when pi discovered
+ * it through a configured path. Whether the session loads it is the plan's answer for that skill's
+ * identity, and both fields come out of that one row because a row that is switched off while the
+ * session still loads the skill, or the other way round, is a panel that lies about the machine.
+ *
+ * `enabled` therefore reports the plan, not the preference. A skill the reader turned on and Pi shadowed
+ * by a same-named one is shown off and marked shadowed, and a skill the plan promoted into the list is
+ * shown on and says why.
  */
-function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, project: PiSkillPreferenceConfig | undefined, projectPath: string | undefined): PiSkillInfo {
+/** A skill row for a skill the session can never be given: a Pi package that is turned off loads nothing. */
+function unreachableRow(subject: SkillPreferenceSubject): SkillRuntimeRow {
+  return { identity: subject.identity, name: subject.name, preference: "default", answeredBy: "default", enabled: false };
+}
+
+function describeSkill(skill: DiscoveredSkill, row: SkillRuntimeRow, projectPath: string | undefined, agentDir: string): PiSkillInfo {
   const resolvedFile = resolve(skill.filePath);
   const resolvedProject = projectPath === undefined ? undefined : resolve(projectPath);
-  const isProjectOwnedPath = resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`));
+  const owner = skillOwnership(skill.filePath, agentDir);
+  const isProjectOwnedPath = owner.kind === "project" || (resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`)));
   const scope: PiSkillScope = skill.piScope === "project" || isProjectOwnedPath ? "project" : "global";
-  const origin: PiSkillOrigin = skill.packageSource !== undefined
+  const fromAgentDir = isInsideAgentDir(skill.filePath, agentDir);
+  const origin: PiSkillOrigin = skill.packageSource !== undefined || skill.source === "package"
     ? "package"
-    : isProjectOwnedPath || skill.source === "project" ? "project" : skill.source === "user" ? "agent" : "path";
+    : fromAgentDir ? "agent"
+    : isProjectOwnedPath || skill.piScope === "project" ? "project"
+    : skill.piScope === "user" ? "agent"
+    : "path";
   const filteredByOwner = skill.ownerPackageDisabled === true;
-  const preference = resolveSkillPreference(skill.name, global, project);
   const validationMessage = filteredByOwner
     ? `Supplied by the disabled Pi package ${skill.packageSource ?? ""}, which loads none of its resources.`
     : undefined;
   return {
+    id: row.identity.id,
     name: skill.name,
     description: skill.description,
     filePath: skill.filePath,
@@ -228,8 +352,11 @@ function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, 
     source: skill.source,
     ...(skill.packageSource === undefined ? {} : { packageSource: skill.packageSource }),
     ...(filteredByOwner ? { ownerPackageDisabled: true } : {}),
-    preference,
-    enabled: filteredByOwner ? false : preference !== "disabled",
+    preference: row.preference,
+    answeredBy: row.answeredBy,
+    enabled: filteredByOwner ? false : row.enabled,
+    ...(row.shadowed === true ? { shadowed: true } : {}),
+    ...(row.promoted === true ? { promoted: true } : {}),
     validation: validationMessage === undefined ? "valid" : "warning",
     ...(validationMessage === undefined ? {} : { validationMessage }),
     ...(skill.disableModelInvocation ? { disableModelInvocation: true } : {}),
@@ -245,7 +372,45 @@ function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, 
  * a list carrying a cloned project's skills next to a row that says the project is not trusted.
  */
 export function projectSkillTrust(agentDir: string, projectPath: string | undefined): boolean {
-  return projectPath === undefined ? true : piProjectIsTrusted(agentDir, projectPath);
+  return projectPath === undefined ? false : piProjectIsTrusted(agentDir, projectPath);
+}
+
+/**
+ * The skill paths Pi's own resource loader hands `loadSkills`, in its order.
+ *
+ * Pi keeps one skill per name and keeps the first it reads, so this list - not the set of files on
+ * disk - decides which skill of a name a session loads. The Skills panel shows which skill is in the
+ * list, so it has to read the same list the session's loader reads: the enabled skill resources in
+ * package-manager resolution order (a project's own skills before a machine's), a directory that holds
+ * a `SKILL.md` mapped to that file, deduped, and no default directories added on top. Handing it a
+ * different order - defaults first, settings paths appended - makes the panel claim a skill is in a
+ * session that the session loads from a different file, which is the one thing this surface must not
+ * do (found in a live browser run on 2026-11-14, where a project skill and a machine skill of one name
+ * swapped places between panel and session).
+ */
+function piLoaderSkillPaths(resources: readonly ResolvedResource[]): string[] {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (const resource of resources) {
+    if (!resource.enabled) continue;
+    const path = skillResourcePath(resource);
+    if (seen.has(path)) continue;
+    seen.add(path);
+    paths.push(path);
+  }
+  return paths;
+}
+
+/** Pi's loader maps an auto-discovered or package skill directory that holds a `SKILL.md` to that file. */
+function skillResourcePath(resource: ResolvedResource): string {
+  if (resource.metadata.source !== "auto" && resource.metadata.origin !== "package") return resource.path;
+  try {
+    if (!statSync(resource.path).isDirectory()) return resource.path;
+  } catch {
+    return resource.path;
+  }
+  const skillFile = join(resource.path, "SKILL.md");
+  return existsSync(skillFile) ? skillFile : resource.path;
 }
 
 /**
@@ -265,7 +430,7 @@ export function createPiSkillDiscovery(cwd: string, agentDir: string): PiSkillDi
       const manager = new DefaultPackageManager({ cwd: workspace, agentDir, settingsManager });
       const disabledSources = configuredDisabledSources(settingsManager);
       const resolved = await manager.resolve(() => Promise.resolve("skip"));
-      const enabledPaths = resolved.skills.filter((resource) => resource.enabled).map((resource) => resource.path);
+      const enabledSkillPaths = piLoaderSkillPaths(resolved.skills);
       const packageRoots = packageRootsBySource(resolved.skills);
       const diagnostics: PiSkillsDiagnostic[] = resolved.skills
         .filter((resource) => !resource.enabled)
@@ -273,8 +438,8 @@ export function createPiSkillDiscovery(cwd: string, agentDir: string): PiSkillDi
       const loaded = loadSkills({
         cwd: workspace,
         agentDir,
-        skillPaths: [...enabledPaths, ...settingsManager.getSkillPaths()],
-        includeDefaults: true,
+        skillPaths: enabledSkillPaths,
+        includeDefaults: false,
       });
       const unreadablePaths: PiSkillsDiagnostic[] = [];
       for (const diagnostic of loaded.diagnostics) {
@@ -293,6 +458,18 @@ export function createPiSkillDiscovery(cwd: string, agentDir: string): PiSkillDi
         disableModelInvocation: skill.disableModelInvocation,
         ...packageOwner(skill.filePath, packageRoots),
       }));
+      const shadowed = recoverShadowedSkills(loaded.diagnostics, loaded.skills, skillPreferenceIdentityFor(agentDir))
+        .map((entry) => ({
+          name: entry.skill.name,
+          description: entry.skill.description,
+          filePath: entry.skill.filePath,
+          baseDir: entry.skill.baseDir,
+          source: entry.skill.sourceInfo.source,
+          piScope: entry.skill.sourceInfo.scope,
+          disableModelInvocation: entry.skill.disableModelInvocation,
+          shadowedByPi: true as const,
+          ...packageOwner(entry.skill.filePath, packageRoots),
+        }));
       const skillsDirs: { scope: PiSkillScope; path: string }[] = [
         { scope: "global", path: join(agentDir, "skills") },
         ...(projectPath === undefined ? [] : [{ scope: "project" as const, path: join(projectPath, ".pi", "skills") }]),
@@ -302,7 +479,7 @@ export function createPiSkillDiscovery(cwd: string, agentDir: string): PiSkillDi
         if (unreadable !== undefined) unreadablePaths.push(unreadable);
       }
       return {
-        skills: [...skills, ...readDisabledPackageSkills(manager, disabledSources)],
+        skills: [...skills, ...shadowed, ...readDisabledPackageSkills(manager, disabledSources)],
         diagnostics,
         unreadablePaths,
         skillsDirs,
@@ -420,6 +597,7 @@ export function createDefaultPiSkillsService(cwd: string, agentDir: string, proj
       requireProjectPath: (projectId) => projects.requireProjectPath(projectId),
       isProjectTrusted: (projectPath) => piProjectIsTrusted(agentDir, projectPath),
     },
+    agentDir,
   );
 }
 

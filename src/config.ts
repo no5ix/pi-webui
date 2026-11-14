@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import type { NtfyConfig, PiSkillPreferenceConfig, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "./shared/apiTypes.js";
+import type { NtfyConfig, PiSkillPreferenceConfig, PiSkillPreferenceEntryValue, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "./shared/apiTypes.js";
+import { isSkillIdentityKey } from "./server/shared/resources/skillIdentity.js";
 import { isPiWebPluginId, piWebPluginIdPattern } from "./shared/pluginIds.js";
 import { isRecord } from "./shared/unknownValues.js";
 import { parseNtfyConfig } from "./shared/ntfy.js";
@@ -262,35 +263,63 @@ export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, 
 export const SKILL_PREFERENCE_CONFIG_KEY = "skills";
 
 /**
- * The saved skill preferences: names kept out of Pi's runtime list, and names put back in it.
+ * The saved skill preferences: the skills a reader kept out of Pi's runtime list, and the skills it
+ * put back in it.
  *
- * A name in neither list carries no preference, and Pi's own default (the skill is available)
+ * A skill in neither list carries no preference, and Pi's own default (the skill is available)
  * applies. That is what makes the key safe to add to an installation: writing it cannot disable a
  * skill a reader already uses, and a missing key is not a list of nothing.
+ *
+ * Two spellings are read. A `version: 1` file lists bare skill names; a `version: 2` file lists
+ * `{ id, name }` entries, where the `id` is the skill's identity and the name is the label that says
+ * which skill the opaque id stands for. Names are still read so an existing installation keeps its
+ * answers, and a name is resolved to an identity only where the discovered skills make that mapping
+ * unambiguous - see the skills preference module. A string entry that already spells an identity key
+ * is read as that identity, which keeps a hand-edited file workable.
  */
 export function parseSkillPreferenceConfig(value: unknown, path: string): PiSkillPreferenceConfig {
   if (!isRecord(value)) throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY} must be an object: ${path}`);
   const version = value["version"];
-  if (version !== undefined && version !== 1) throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.version must be 1: ${path}`);
+  if (version !== undefined && version !== 1 && version !== 2) {
+    throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.version must be 1 or 2: ${path}`);
+  }
   return {
-    ...(version === 1 ? { version: 1 as const } : {}),
-    ...(value["enabled"] !== undefined ? { enabled: parseSkillNameList(value["enabled"], "enabled", path) } : {}),
-    ...(value["disabled"] !== undefined ? { disabled: parseSkillNameList(value["disabled"], "disabled", path) } : {}),
+    ...(version === 1 || version === 2 ? { version } : {}),
+    ...(value["enabled"] !== undefined ? { enabled: parseSkillPreferenceEntries(value["enabled"], "enabled", path) } : {}),
+    ...(value["disabled"] !== undefined ? { disabled: parseSkillPreferenceEntries(value["disabled"], "disabled", path) } : {}),
   };
 }
 
-function parseSkillNameList(value: unknown, field: string, path: string): string[] {
-  const names: string[] = [];
+function parseSkillPreferenceEntries(value: unknown, field: string, path: string): PiSkillPreferenceEntryValue[] {
   if (!Array.isArray(value)) {
-    throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} must be a list of skill names: ${path}`);
+    throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} must be a list of skill names or skill identities: ${path}`);
   }
+  const entries: PiSkillPreferenceEntryValue[] = [];
+  const seen = new Set<string>();
   for (const entry of value) {
-    if (typeof entry !== "string" || entry.trim() === "") {
-      throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} must be a list of skill names: ${path}`);
-    }
-    names.push(entry.trim());
+    const normalized = parseSkillPreferenceEntry(entry, field, path);
+    const key = typeof normalized === "string" ? `name\u0000${normalized}` : `id\u0000${normalized.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push(normalized);
   }
-  return [...new Set(names)];
+  return entries;
+}
+
+function parseSkillPreferenceEntry(entry: unknown, field: string, path: string): PiSkillPreferenceEntryValue {
+  const listError = new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} must be a list of skill names or skill identities: ${path}`);
+  if (typeof entry === "string") {
+    const name = entry.trim();
+    if (name === "") throw listError;
+    return isSkillIdentityKey(name) ? { id: name } : name;
+  }
+  if (!isRecord(entry)) throw listError;
+  const id = entry["id"];
+  if (typeof id !== "string" || id.trim() === "") {
+    throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} entries must name a skill with an "id": ${path}`);
+  }
+  const name = entry["name"];
+  return typeof name === "string" && name.trim() !== "" ? { id: id.trim(), name: name.trim() } : { id: id.trim() };
 }
 
 export interface LoadedSkillPreferences {
@@ -320,13 +349,24 @@ export function saveGlobalSkillPreferences(preferences: PiSkillPreferenceConfig,
   return { path, exists: true, config };
 }
 
-/** The stored form: one spelling, with the version, and no empty list written for a scope that has none. */
+/**
+ * The stored form: one spelling, with the version the entries need, and no empty list written for a
+ * scope that has none. The version declares the shape that is present, so a file that carries an
+ * identity entry - beside a name a reader has not switched yet - says `version: 2`.
+ */
 export function skillPreferenceRecord(config: PiSkillPreferenceConfig): Record<string, unknown> {
+  const enabled = config.enabled === undefined || config.enabled.length === 0 ? [] : config.enabled.map(normalizeSkillPreferenceEntry);
+  const disabled = config.disabled === undefined || config.disabled.length === 0 ? [] : config.disabled.map(normalizeSkillPreferenceEntry);
+  const hasIdentityEntry = [...enabled, ...disabled].some((entry) => typeof entry !== "string");
   return {
-    version: 1,
-    ...(config.enabled === undefined || config.enabled.length === 0 ? {} : { enabled: [...config.enabled] }),
-    ...(config.disabled === undefined || config.disabled.length === 0 ? {} : { disabled: [...config.disabled] }),
+    version: hasIdentityEntry ? 2 : 1,
+    ...(enabled.length === 0 ? {} : { enabled }),
+    ...(disabled.length === 0 ? {} : { disabled }),
   };
+}
+
+function normalizeSkillPreferenceEntry(entry: PiSkillPreferenceEntryValue): PiSkillPreferenceEntryValue {
+  return typeof entry === "string" ? entry : entry.name === undefined ? { id: entry.id } : { id: entry.id, name: entry.name };
 }
 
 /** Sets or clears the shared theme alone; every other key stays exactly as the file holds it. */

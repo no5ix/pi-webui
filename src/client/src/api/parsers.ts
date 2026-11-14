@@ -2167,7 +2167,14 @@ function parseState<T extends string>(states: readonly T[], value: unknown, what
   return value;
 }
 
+/** A state a gateway may not answer for at all: absent is absent, and a present value must be one of the states. */
+function optionalState<T extends string>(states: readonly T[], value: unknown, what: string): T | undefined {
+  if (value === undefined) return undefined;
+  return parseState(states, value, what);
+}
+
 const PI_SKILL_SCOPES = ["global", "project"] as const;
+const PI_SKILL_ANSWER_SCOPES = ["global", "project", "default"] as const;
 const PI_SKILL_ORIGINS = ["agent", "project", "package", "path"] as const;
 const PI_SKILL_PREFERENCES = ["default", "enabled", "disabled"] as const;
 const PI_SKILL_VALIDATIONS = ["valid", "warning"] as const;
@@ -2212,10 +2219,16 @@ export function parsePiSkillSetEnabledResponse(value: unknown): PiSkillSetEnable
  * is read as "not said" - an empty string, which the panel renders as nothing - while every field
  * the older machine does answer for, including `origin`, `preference` and `validation`, stays
  * required: a row that cannot say where a skill came from is a failed read, not a plain row.
+ *
+ * `id` is the skill's identity, and it is what a preference is written against, so two skills that
+ * share a display name are two rows with two ids. It is read as an empty string from a gateway that
+ * predates identities, and an empty id is the signal for the panel to fall back to the name spelling
+ * of a request, because that is all an older machine understands.
  */
 function parsePiSkillInfo(value: unknown): PiSkillInfo {
   const record = requireRecord(value);
   return {
+    id: optionalString(record, "id") ?? "",
     name: requireString(record, "name"),
     description: optionalString(record, "description") ?? "",
     filePath: requireString(record, "filePath"),
@@ -2226,8 +2239,10 @@ function parsePiSkillInfo(value: unknown): PiSkillInfo {
     ...optionalField("packageSource", optionalString(record, "packageSource")),
     ...optionalField("ownerPackageDisabled", parseOptionalBoolean(record["ownerPackageDisabled"], "ownerPackageDisabled")),
     preference: parseState(PI_SKILL_PREFERENCES, record["preference"], "Pi skill preference"),
+    ...optionalField("answeredBy", optionalState(PI_SKILL_ANSWER_SCOPES, record["answeredBy"], "Pi skill answer scope")),
     enabled: requireBoolean(record, "enabled"),
     ...optionalField("shadowed", parseOptionalBoolean(record["shadowed"], "shadowed")),
+    ...optionalField("promoted", parseOptionalBoolean(record["promoted"], "promoted")),
     validation: parseState(PI_SKILL_VALIDATIONS, record["validation"], "Pi skill validation"),
     ...optionalField("validationMessage", optionalString(record, "validationMessage")),
     ...optionalField("disableModelInvocation", parseOptionalBoolean(record["disableModelInvocation"], "disableModelInvocation")),

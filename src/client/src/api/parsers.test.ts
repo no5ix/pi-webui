@@ -220,6 +220,7 @@ describe("API parsers", () => {
 
   it("parses the skill list, keeping the saved preference apart from what Pi loaded", () => {
     const skill = {
+      id: "sk1:g:0123456789abcdef0123",
       name: "commit",
       description: "Write a commit message",
       filePath: "/pi/skills/commit/SKILL.md",
@@ -245,13 +246,44 @@ describe("API parsers", () => {
 
   it("parses the package and project fields of a skill row", () => {
     const parsed = parsePiSkillsResponse({
-      skills: [{ name: "deploy", description: "Deploy", filePath: "/pkg/skills/deploy/SKILL.md", baseDir: "/pkg/skills/deploy", scope: "project", origin: "package", source: "npm:@acme/tools", packageSource: "npm:@acme/tools", ownerPackageDisabled: true, preference: "default", enabled: false, shadowed: true, validation: "warning", validationMessage: "front matter is short", disableModelInvocation: true }],
+      skills: [{ id: "sk1:p:fedcba9876543210fedc", name: "deploy", description: "Deploy", filePath: "/pkg/skills/deploy/SKILL.md", baseDir: "/pkg/skills/deploy", scope: "project", origin: "package", source: "npm:@acme/tools", packageSource: "npm:@acme/tools", ownerPackageDisabled: true, preference: "enabled", answeredBy: "project", enabled: false, shadowed: true, promoted: true, validation: "warning", validationMessage: "front matter is short", disableModelInvocation: true }],
       diagnostics: [],
       scopes: [{ scope: "project", skillsDir: "/repo/.pi/skills", configPath: "/repo/.pi-web/config.json", projectId: "p 1", projectPath: "/repo", projectTrusted: false }],
     });
 
-    expect(parsed.skills[0]).toMatchObject({ packageSource: "npm:@acme/tools", ownerPackageDisabled: true, shadowed: true, validation: "warning", validationMessage: "front matter is short", disableModelInvocation: true });
+    expect(parsed.skills[0]).toMatchObject({
+      id: "sk1:p:fedcba9876543210fedc",
+      packageSource: "npm:@acme/tools",
+      ownerPackageDisabled: true,
+      answeredBy: "project",
+      shadowed: true,
+      promoted: true,
+      validation: "warning",
+      validationMessage: "front matter is short",
+      disableModelInvocation: true,
+    });
     expect(parsed.scopes[0]).toEqual({ scope: "project", skillsDir: "/repo/.pi/skills", configPath: "/repo/.pi-web/config.json", projectId: "p 1", projectPath: "/repo", projectTrusted: false });
+  });
+
+  it("reads a skill row from a machine that answers skills by name, and reads no identity it did not send", () => {
+    const parsed = parsePiSkillsResponse({
+      skills: [{ name: "commit", description: "Commit", filePath: "/pi/skills/commit/SKILL.md", baseDir: "/pi/skills/commit", scope: "global", origin: "agent", source: "user", preference: "default", enabled: true, validation: "valid" }],
+      diagnostics: [],
+      scopes: [],
+    });
+
+    expect(parsed.skills[0]).toMatchObject({ id: "", name: "commit" });
+    expect(parsed.skills[0]?.answeredBy).toBeUndefined();
+    expect(parsed.skills[0]?.promoted).toBeUndefined();
+    expect(parsed.skills[0]?.shadowed).toBeUndefined();
+  });
+
+  it("refuses an answer scope that is not one of the three it writes", () => {
+    expect(() => parsePiSkillsResponse({
+      skills: [{ id: "sk1:g:x", name: "commit", filePath: "/p", baseDir: "/p", scope: "global", origin: "agent", source: "user", preference: "default", answeredBy: "machine", enabled: true, validation: "valid" }],
+      diagnostics: [],
+      scopes: [],
+    })).toThrow("Invalid Pi skill answer scope");
   });
 
   it("requires the reload answer of a skill set-enabled response", () => {

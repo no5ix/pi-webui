@@ -102,6 +102,7 @@ export function packageMutationResponse(action: PiPackageMutationResponse["actio
 /** One skill row, with the paths a real read always carries. */
 export function skillInfo(name: string, overrides: Partial<PiSkillInfo> = {}): PiSkillInfo {
   return {
+    id: `sk1:g:${name}`,
     name,
     description: `What ${name} does`,
     filePath: `/pi/skills/${name}/SKILL.md`,

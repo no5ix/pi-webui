@@ -70,6 +70,7 @@ describe("settings data loading helpers", () => {
 
 const skillsResponse: PiSkillsResponse = {
   skills: [{
+    id: "sk1:g:pdf",
     name: "pdf",
     description: "Work with PDF files",
     filePath: "/pi/skills/pdf/SKILL.md",

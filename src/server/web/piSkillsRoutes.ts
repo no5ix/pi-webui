@@ -40,10 +40,21 @@ function normalizeRoutePrefix(prefix: string): string {
   return normalized === "" ? "/api" : normalized;
 }
 
+/**
+ * The body of one skill switch.
+ *
+ * The skill is named by its identity when the caller has one, and a client written before identities
+ * existed names it by its display name. Both are accepted, and a name alone is refused when it is
+ * blank: the service is what decides whether a name is safe to answer for, because only the service
+ * knows how many skills on this machine carry it.
+ */
 function parseSetEnabledRequest(body: unknown): PiSkillSetEnabledRequest {
   if (!isRecord(body)) throw new PiSkillsRequestValidationError("Skill request body must be an object");
-  const name = body["name"];
-  if (typeof name !== "string" || name.trim() === "") throw new PiSkillsRequestValidationError("Skill name must be a non-empty string");
+  const id = optionalTrimmedText(body["id"]);
+  const name = optionalTrimmedText(body["name"]);
+  if (id === undefined && name === undefined) {
+    throw new PiSkillsRequestValidationError("Skill request must carry an \"id\" or a \"name\"");
+  }
   const scope = parseScope(body["scope"]);
   const enabled = body["enabled"];
   if (typeof enabled !== "boolean") throw new PiSkillsRequestValidationError("Skill enabled must be true or false");
@@ -51,7 +62,19 @@ function parseSetEnabledRequest(body: unknown): PiSkillSetEnabledRequest {
   if (scope === "project" && projectId === undefined) {
     throw new PiSkillsRequestValidationError("A project-scope skill preference needs a projectId");
   }
-  return { name: name.trim(), scope, enabled, ...(projectId === undefined ? {} : { projectId }) };
+  return {
+    ...(id === undefined ? {} : { id }),
+    ...(name === undefined ? {} : { name }),
+    scope,
+    enabled,
+    ...(projectId === undefined ? {} : { projectId }),
+  };
+}
+
+function optionalTrimmedText(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") throw new PiSkillsRequestValidationError("Skill id and name must be non-empty strings");
+  return value.trim();
 }
 
 function parseScope(value: unknown): PiSkillScope {
