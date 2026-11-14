@@ -56,7 +56,7 @@ export class SettingsAppearancePanel extends LitElement {
   override render() {
     return html`
       <settings-panel-frame heading="Appearance">
-        <p slot="description">Pick a theme, or let the system's light and dark preference choose between a matching pair.</p>
+        <p slot="description">Choose a visual style. Darkness and Lightness are PI WEB's built-in themes; follow the system to switch between them automatically.</p>
 
         <div class="toggles">
           <label class="follow">

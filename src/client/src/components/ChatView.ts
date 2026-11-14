@@ -233,7 +233,15 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      (the five reports of broken corners) is wrong at some device pixel ratio
      no matter which radius it picks, because two rasterizations of "the same"
      arc need not agree. The parent clips; children paint square. */
-  .msg { max-width: var(--pi-chat-measure); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); padding: var(--pi-row-gutter); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface-card); overflow: hidden; overflow: clip; }
+  .msg { max-width: var(--pi-chat-measure); min-width: 0; box-sizing: border-box; margin: 0 auto var(--pi-row-rhythm); padding: var(--pi-row-gutter); border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-lg); background: var(--pi-surface-card); overflow: hidden; overflow: clip; }
+  /* The assistant is the reading surface, not a separate panel. A quiet edge and
+     a small surface lift preserve grouping without repeating a heavy card for
+     every turn. User/tool/system rows keep their stronger semantic treatment. */
+  .msg.assistant:not(.tool-image-output) { border-color: transparent; background: transparent; box-shadow: none; }
+  .msg.assistant > .msg-header { background: transparent; box-shadow: none; }
+  .msg.assistant .msg-body { line-height: 1.62; }
+  .msg.user { box-shadow: 0 1px 2px var(--pi-shadow-soft); }
+  .msg.system { box-shadow: none; }
   /* The phone was already right: its rows sit on their own insets, so the aligning
      inset is a desktop-only addition rather than a loosening of the phone. */
   @media (max-width: 640px) { .chat { --pi-row-gutter: var(--pi-space-5); --pi-row-inset: var(--pi-space-5); --pi-row-rhythm: var(--pi-space-5); } }

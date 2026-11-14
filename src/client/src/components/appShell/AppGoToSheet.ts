@@ -126,8 +126,9 @@ export class AppGoToSheet extends LitElement {
     .commands { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pi-space-3); padding-top: var(--pi-space-4); border-top: 1px solid var(--pi-border); }
     .destination-item { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
     .destination-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
-    .destination { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto; align-items: center; gap: var(--pi-space-4); box-sizing: border-box; min-height: var(--pi-row-min-height); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); color: var(--pi-text); padding: 0 var(--pi-space-5); font: inherit; text-align: start; cursor: pointer; }
-    .destination.current { border-color: var(--pi-accent); background: var(--pi-selection-bg); }
+    .destination { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto; align-items: center; gap: var(--pi-space-4); box-sizing: border-box; min-height: var(--pi-row-min-height); border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text); padding: 0 var(--pi-space-5); font: inherit; text-align: start; cursor: pointer; }
+    .destination.current { border-color: var(--pi-accent-border); background: var(--pi-selection-bg); }
+    @media (hover: hover) { .destination:hover:not(.current) { background: var(--pi-surface-hover); } }
     .destination:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset-tight); }
     @media (pointer: coarse) { .destination:active { background: var(--pi-surface-hover); } }
     .destination-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; color: var(--pi-muted); }
