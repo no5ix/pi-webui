@@ -153,8 +153,9 @@ export function piSkillToggleRequest(
   };
 }
 
-export function isPiSkillTogglePending(operation: PiSkillOperationState | undefined, info: Pick<PiSkillInfo, "name" | "scope">): boolean {
-  return operation?.name === info.name && operation.scope === info.scope;
+export function isPiSkillTogglePending(operation: PiSkillOperationState | undefined, info: Pick<PiSkillInfo, "name" | "scope">, projectSelected = false): boolean {
+  const preferenceScope: PiSkillScope = projectSelected ? "project" : info.scope;
+  return operation?.name === info.name && operation.scope === preferenceScope;
 }
 
 export function piSkillMutationMessage(scope: PiSkillScope, name: string, enabled: boolean, target: SettingsMachineTarget): string {

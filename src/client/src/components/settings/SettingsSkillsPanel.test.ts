@@ -154,6 +154,22 @@ describe("settings-skills-panel", () => {
     expect(recordedToggle(onToggleSkill, 1)[1]).toBe(true);
   });
 
+  it("marks a global skill as saving when the selected project's preference is being written", async () => {
+    const panel = await mount((element) => {
+      element.projectSelection = "p-1";
+      element.skillsResponse = {
+        skills: [skill("commit")], diagnostics: [],
+        scopes: [
+          { scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" },
+          { scope: "project", skillsDir: "/work/.pi/skills", configPath: "/work/.pi-web/config.json", projectId: "p-1", projectPath: "/work", projectTrusted: true },
+        ],
+      };
+      element.operation = { name: "commit", scope: "project", enabled: false };
+    });
+    expect(panelText(panel)).toContain("Saving…");
+    expect(switches(panel)[0]?.disabled).toBe(true);
+  });
+
   it("marks a row as saving while its switch is in flight, and every switch waits for it", async () => {
     const panel = await mount((element) => {
       element.skillsResponse = { skills: [skill("commit")], diagnostics: [], scopes: [{ scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" }] };

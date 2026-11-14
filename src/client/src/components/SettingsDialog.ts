@@ -240,8 +240,8 @@ export class SettingsDialog extends LitElement {
         this.resetPackageStateForTargetChange();
         if (this.isConnected) void this.loadPackagesForTarget(currentTarget);
         this.resetSkillsStateForTargetChange();
-        if (this.isConnected) void this.loadSkillsForTarget(currentTarget);
         this.resetMcpStateForTargetChange();
+        if (this.isConnected) void this.loadSkillsForTarget(currentTarget);
         if (this.isConnected) void this.loadMcpProjectsForTarget(currentTarget);
         if (this.isConnected) void this.loadMcpForTarget(currentTarget);
         return;
@@ -479,7 +479,12 @@ export class SettingsDialog extends LitElement {
           .operation=${this.skillOperation}
           .error=${this.skillsError}
           .operationMessage=${this.skillsMessage}
-          .onReload=${() => this.loadSkillsForTarget()}
+          .onReload=${() => { void this.loadMcpProjectsForTarget(); void this.loadSkillsForTarget(); }}
+          .projects=${this.mcpProjects}
+          .projectSelection=${this.mcpProjectSelection}
+          .projectsLoading=${this.mcpProjectsLoading}
+          .projectsError=${this.mcpProjectsError}
+          .onSelectProject=${(projectId: string | undefined) => { this.selectMcpProject(projectId); }}
           .onToggleSkill=${(skill: PiSkillInfo, enabled: boolean) => this.setSkillEnabled(skill, enabled)}
         ></settings-skills-panel>
       `;
@@ -712,25 +717,23 @@ export class SettingsDialog extends LitElement {
   }
 
   /**
-   * The skills of the selected machine.
-   *
-   * The read carries no project id, so a project scope the machine will not read stays the panel's
-   * "not read" line rather than an empty list, and a failed read clears the rows instead of leaving
-   * another machine's skills on screen.
+   * The skills of the selected machine, for the project selected in the shared resource scope.
+   * A response belongs to both its machine and project; an answer for a project the reader left
+   * must never paint over the newly selected project's list.
    */
-  private async loadSkillsForTarget(target = this.settingsTarget()): Promise<void> {
+  private async loadSkillsForTarget(target = this.settingsTarget(), projectId = this.mcpProjectSelection): Promise<void> {
     const requestSeq = ++this.skillsLoadRequestSeq;
     this.skillsLoading = true;
     this.skillsError = "";
     try {
-      const result = await loadPiSkillsData(target, (targetId) => piSkillsApi.list(undefined, targetId));
-      if (!this.isCurrentSkillsLoad(requestSeq, target)) return;
+      const result = await loadPiSkillsData(target, (targetId) => piSkillsApi.list(projectId, targetId));
+      if (!this.isCurrentSkillsLoad(requestSeq, target, projectId)) return;
 
       this.skillsResponse = result.skillsResponse;
       this.skillsError = result.error;
-      this.afterRead("skills", result.error === "" ? "answered" : "unanswered", () => this.loadSkillsForTarget(target));
+      this.afterRead("skills", result.error === "" ? "answered" : "unanswered", () => this.loadSkillsForTarget(target, projectId));
     } finally {
-      if (this.isCurrentSkillsLoad(requestSeq, target)) this.skillsLoading = false;
+      if (this.isCurrentSkillsLoad(requestSeq, target, projectId)) this.skillsLoading = false;
     }
   }
 
@@ -771,6 +774,8 @@ export class SettingsDialog extends LitElement {
         this.mcpProjectSelection = undefined;
         this.mcpProjectSelections.set(target.id, undefined);
         void this.loadMcpForTarget(target, undefined);
+        this.resetSkillsScopeState();
+        void this.loadSkillsForTarget(target, undefined);
       }
     } catch (error) {
       if (!this.isCurrentMcpTarget(target, requestSeq)) return;
@@ -792,7 +797,11 @@ export class SettingsDialog extends LitElement {
     this.mcpProjectSelections.set(target.id, projectId);
     this.mcpProjectSelection = projectId;
     this.resetMcpScopeState();
-    if (this.isConnected) void this.loadMcpForTarget(target, projectId);
+    this.resetSkillsScopeState();
+    if (this.isConnected) {
+      void this.loadMcpForTarget(target, projectId);
+      void this.loadSkillsForTarget(target, projectId);
+    }
   }
 
   /**
@@ -969,7 +978,8 @@ export class SettingsDialog extends LitElement {
   private async setSkillEnabled(skill: PiSkillInfo, enabled: boolean): Promise<void> {
     if (this.saving) return;
     const target = this.settingsTarget();
-    const toggle = piSkillToggleRequest(skill, enabled, this.skillsResponse?.scopes ?? []);
+    const projectId = this.mcpProjectSelection;
+    const toggle = piSkillToggleRequest(skill, enabled, this.skillsResponse?.scopes ?? [], projectId);
     const requestSeq = ++this.skillsMutationSeq;
     this.skillsLoadRequestSeq += 1;
     this.skillsLoading = false;
@@ -979,11 +989,11 @@ export class SettingsDialog extends LitElement {
     this.skillsMessage = "";
     try {
       const response = await piSkillsApi.setEnabled(toggle, target.id);
-      if (!this.isCurrentSkillsMutation(requestSeq, target)) return;
+      if (!this.isCurrentSkillsMutation(requestSeq, target, projectId)) return;
       this.skillsResponse = response;
       this.skillsMessage = piSkillMutationMessage(toggle.scope, toggle.name, enabled, target);
     } catch (error) {
-      if (this.isCurrentSkillsMutation(requestSeq, target)) {
+      if (this.isCurrentSkillsMutation(requestSeq, target, projectId)) {
         this.skillsError = `Failed to change the skill ${toggle.name} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
       }
     } finally {
@@ -1130,12 +1140,16 @@ export class SettingsDialog extends LitElement {
     return requestSeq === this.packageMutationSeq && this.isCurrentPackageTarget(target);
   }
 
-  private isCurrentSkillsMutation(requestSeq: number, target: SettingsMachineTarget): boolean {
-    return requestSeq === this.skillsMutationSeq && this.isCurrentSkillsTarget(target);
+  private isCurrentSkillsMutation(requestSeq: number, target: SettingsMachineTarget, projectId: string | undefined): boolean {
+    return requestSeq === this.skillsMutationSeq && this.isCurrentSkillsScope(target, projectId);
   }
 
-  private isCurrentSkillsLoad(requestSeq: number, target: SettingsMachineTarget): boolean {
-    return requestSeq === this.skillsLoadRequestSeq && this.isCurrentSkillsTarget(target);
+  private isCurrentSkillsLoad(requestSeq: number, target: SettingsMachineTarget, projectId: string | undefined): boolean {
+    return requestSeq === this.skillsLoadRequestSeq && this.isCurrentSkillsScope(target, projectId);
+  }
+
+  private isCurrentSkillsScope(target: SettingsMachineTarget, projectId: string | undefined): boolean {
+    return this.isCurrentSkillsTarget(target) && this.mcpProjectSelection === projectId;
   }
 
   private isCurrentMcpMutation(requestSeq: number, target: SettingsMachineTarget, projectId: string | undefined): boolean {
@@ -1215,6 +1229,19 @@ export class SettingsDialog extends LitElement {
     this.mcpProjectsLoading = true;
     this.mcpProjectsError = "";
     this.mcpProjectSelection = this.mcpProjectSelections.get(this.settingsTarget().id);
+  }
+
+  /** The rows, messages and in-flight work of the Skills scope the reader is leaving. */
+  private resetSkillsScopeState(): void {
+    const hadSkillOperation = this.skillOperation !== undefined;
+    this.skillsLoadRequestSeq += 1;
+    this.skillsMutationSeq += 1;
+    this.skillsLoading = false;
+    this.skillOperation = undefined;
+    this.skillsMessage = "";
+    this.skillsError = "";
+    this.skillsResponse = undefined;
+    if (hadSkillOperation) this.saving = false;
   }
 
   /** The rows, messages and in-flight work of the MCP scope the reader is leaving. */

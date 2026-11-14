@@ -128,7 +128,7 @@ export class SettingsSkillsPanel extends LitElement {
     const offReason = piSkillOffReasonNote(skill);
     const shadowed = piSkillShadowedNote(skill);
     const validation = piSkillValidationNote(skill);
-    const pending = isPiSkillTogglePending(this.operation, skill);
+    const pending = isPiSkillTogglePending(this.operation, skill, this.projectSelection !== undefined);
     return html`
       <article class=${`skill-card${skill.enabled ? "" : " off"}`}>
         <div class="skill-main">

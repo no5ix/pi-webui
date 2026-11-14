@@ -108,6 +108,8 @@ describe("the Skills and MCP sections", () => {
 
     expect(panelTag(dialog)).toBe("settings-skills-panel");
     expect(skillsPanel(dialog).skillsResponse?.skills.map((entry: PiSkillInfo) => entry.name)).toEqual(["pdf"]);
+    expect(skillsPanel(dialog).projects.map((project) => project.id)).toEqual(["p-1"]);
+    expect(skillsPanel(dialog).projectSelection).toBeUndefined();
   });
 
   it("opens the MCP panel on the servers the machine reported", async () => {
@@ -135,6 +137,30 @@ describe("the Skills and MCP sections", () => {
     expect(mcpTargets.length).toBeGreaterThan(0);
     expect(new Set(skillsTargets)).toEqual(new Set(["local"]));
     expect(new Set(mcpTargets)).toEqual(new Set(["local"]));
+  });
+
+  it("loads project skills and writes a global skill preference as a project override", async () => {
+    const projectSkills = skillsResponse(
+      [skillInfo("pdf", { scope: "global", enabled: true })],
+      [
+        { scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" },
+        { scope: "project", skillsDir: "/work/project/.pi/skills", configPath: "/work/project/.pi-web/config.json", projectId: "p-1", projectPath: "/work/project", projectTrusted: true },
+      ],
+    );
+    vi.mocked(piSkillsApi.list).mockImplementation(async (projectId) => projectId === "p-1" ? projectSkills : skillsResponse([skillInfo("pdf")]));
+    vi.mocked(piSkillsApi.setEnabled).mockResolvedValue({ ...projectSkills, requiresReload: true });
+    const dialog = await open("skills", labMac);
+    const panel = skillsPanel(dialog);
+    if (panel.onSelectProject === undefined || panel.onToggleSkill === undefined) throw new Error("Expected the Skills project selector and toggle to be wired");
+
+    await panel.onSelectProject("p-1");
+    await settleRenderedDialog(dialog);
+    expect(piSkillsApi.list).toHaveBeenLastCalledWith("p-1", "lab-mac");
+    expect(skillsPanel(dialog).skillsResponse?.scopes[1]?.projectId).toBe("p-1");
+
+    await skillsPanel(dialog).onToggleSkill?.(skillInfo("pdf"), false);
+    await settleRenderedDialog(dialog);
+    expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ name: "pdf", scope: "project", projectId: "p-1", enabled: false }, "lab-mac");
   });
 
   it("switches a skill through the machine that is selected, and redraws from that machine's answer", async () => {
