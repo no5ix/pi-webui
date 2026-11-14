@@ -131,6 +131,26 @@ describe("settings-skills-panel", () => {
     expect(text).toContain("Not in the list Pi is given");
   });
 
+  it("renders the project selector visibly before the skill response is available", async () => {
+    const onSelectProject = vi.fn<(projectId: string | undefined) => void>();
+    const panel = await mount((element) => {
+      element.projects = [{ id: "p-1", name: "Work", path: "/work", createdAt: "2026-01-01T00:00:00.000Z" }];
+      element.projectSelection = "p-1";
+      element.onSelectProject = onSelectProject;
+      element.loading = true;
+    });
+
+    const selector = panel.shadowRoot?.querySelector<HTMLSelectElement>("#skills-project");
+    expect(selector).not.toBeNull();
+    expect(selector?.value).toBe("p-1");
+    expect(selector?.querySelector('option[value="p-1"]')?.textContent).toBe("Work");
+    expect(panelText(panel)).toContain("Loading skills");
+    if (selector === null || selector === undefined) throw new Error("Expected a rendered Skills project selector");
+    selector.value = "";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(onSelectProject).toHaveBeenCalledWith(undefined);
+  });
+
   it("routes the switch a reader flips, with the row it was flipped on", async () => {
     const onToggleSkill = vi.fn<(skill: PiSkillInfo, enabled: boolean) => void>();
     const panel = await mount((element) => {

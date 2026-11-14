@@ -2,7 +2,7 @@ import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { settingsControlStyles } from "./settingsControlStyles.js";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import type { PiSkillInfo, PiSkillsResponse } from "../../api";
+import type { PiSkillInfo, PiSkillsResponse, Project } from "../../api";
 import "./SettingsPanelFrame";
 import type { SettingsNotice } from "./SettingsPanelFrame";
 import {
@@ -38,6 +38,11 @@ export class SettingsSkillsPanel extends LitElement {
   @property() error = "";
   @property() operationMessage = "";
   @property({ attribute: false }) onReload?: () => void | Promise<void>;
+  @property({ attribute: false }) projects: readonly Project[] = [];
+  @property({ attribute: false }) projectSelection: string | undefined;
+  @property({ type: Boolean }) projectsLoading = false;
+  @property() projectsError = "";
+  @property({ attribute: false }) onSelectProject?: (projectId: string | undefined) => void | Promise<void>;
   /** The row's own scope travels with the request: a browser never names a path. */
   @property({ attribute: false }) onToggleSkill?: (skill: PiSkillInfo, enabled: boolean) => void | Promise<void>;
 
@@ -54,6 +59,7 @@ export class SettingsSkillsPanel extends LitElement {
         .notices=${this.panelNotices()}
         .onAction=${this.onReload}
       >
+        ${this.renderProjectChooser()}
         ${this.renderPanelContent(targetLabel)}
       </settings-panel-frame>
     `;
@@ -87,6 +93,28 @@ export class SettingsSkillsPanel extends LitElement {
     return html`
       <div class="scope-note">${piSkillProjectScopeNote(response.scopes)}</div>
       ${groups.map((group) => this.renderScopeGroup(group, targetLabel))}
+    `;
+  }
+
+  /** The same project scope selector used by MCP, visible even before skills finish loading. */
+  private renderProjectChooser(): TemplateResult {
+    return html`
+      <div class="project-chooser">
+        <label for="skills-project">Project scope</label>
+        <select
+          id="skills-project"
+          .value=${this.projectSelection ?? ""}
+          ?disabled=${this.projectsLoading || this.onSelectProject === undefined}
+          @change=${(event: Event) => {
+            const value = event.target instanceof HTMLSelectElement ? event.target.value : "";
+            void this.onSelectProject?.(value === "" ? undefined : value);
+          }}
+        >
+          <option value="">No project: this machine's global skills only</option>
+          ${this.projects.map((project) => html`<option value=${project.id} ?selected=${project.id === this.projectSelection}>${project.name}</option>`)}
+        </select>
+        <small>${this.projectsError || (this.projectsLoading ? "Loading this machine's projects…" : this.projectSelection === undefined ? "Choose a project to manage skill preferences for that repository." : "Switches apply only to this project; global preferences remain unchanged.")}</small>
+      </div>
     `;
   }
 
@@ -179,6 +207,10 @@ export class SettingsSkillsPanel extends LitElement {
     .loading-card, .skill-card { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); padding: var(--pi-space-6); }
     .loading-card, .scope-note, .section-note { color: var(--pi-muted); }
     .scope-note { font-size: var(--pi-text-xs); }
+    .project-chooser { display: grid; gap: var(--pi-space-2); margin-block-end: var(--pi-space-4); }
+    .project-chooser label { font-size: var(--pi-text-sm); font-weight: var(--pi-weight-semibold); }
+    .project-chooser select { box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-bg); color: var(--pi-text); font: inherit; }
+    @media (pointer: coarse) { .project-chooser select { min-height: var(--pi-control-height-touch); } }
     .scope-section { display: grid; gap: var(--pi-space-5); }
     .scope-heading { display: grid; gap: var(--pi-space-2); }
     .skill-list { display: grid; gap: var(--pi-space-5); }
