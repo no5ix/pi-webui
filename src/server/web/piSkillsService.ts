@@ -30,7 +30,7 @@ import {
   type SkillRuntimeRow,
   type LoadedProjectSkillPreferences,
 } from "../shared/resources/skillPreferences.js";
-import { isInsideAgentDir, skillOwnership, skillPreferenceIdentityFor } from "../shared/resources/skillIdentity.js";
+import { isGlobalAgentSkillPath, skillOwnership, skillPreferenceIdentityFor } from "../shared/resources/skillIdentity.js";
 import { recoverShadowedSkills } from "../shared/resources/skillShadowRecovery.js";
 import { piProjectIsTrusted, unconfiguredSettingsProjectResolver, type SettingsProjectResolver } from "../shared/resources/settingsProjectResolver.js";
 import { isRecord } from "../../shared/unknownValues.js";
@@ -328,13 +328,13 @@ function describeSkill(skill: DiscoveredSkill, row: SkillRuntimeRow, projectPath
   const resolvedFile = resolve(skill.filePath);
   const resolvedProject = projectPath === undefined ? undefined : resolve(projectPath);
   const owner = skillOwnership(skill.filePath, agentDir);
-  const isProjectOwnedPath = owner.kind === "project" || (resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`)));
-  const scope: PiSkillScope = skill.piScope === "project" || isProjectOwnedPath ? "project" : "global";
-  const fromAgentDir = isInsideAgentDir(skill.filePath, agentDir);
+  const isProjectOwnedPath = owner.kind === "project" || (owner.kind === "location-only" && resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`)));
+  const scope: PiSkillScope = isProjectOwnedPath ? "project" : "global";
+  const fromAgentDir = isGlobalAgentSkillPath(skill.filePath, agentDir);
   const origin: PiSkillOrigin = skill.packageSource !== undefined || skill.source === "package"
     ? "package"
     : fromAgentDir ? "agent"
-    : isProjectOwnedPath || skill.piScope === "project" ? "project"
+    : isProjectOwnedPath ? "project"
     : skill.piScope === "user" ? "agent"
     : "path";
   const filteredByOwner = skill.ownerPackageDisabled === true;
