@@ -15,9 +15,6 @@
     "pi-web-plugins/**/*.ts"
   ],
   "ignoreExportsUsedInFile": true,
-  "ignoreBinaries": [
-    "systemd-run"
-  ],
   "ignoreDependencies": [
     "mermaid"
   ]

@@ -8,6 +8,7 @@ import {
   publicNtfyConfig,
   sendNtfyNotice,
   NtfyConfigError,
+  type NtfyFetch,
   type NtfyStatus,
 } from "../../../shared/ntfy.js";
 
@@ -25,7 +26,7 @@ import {
 export interface NtfyRoutesOptions {
   /** The stored ntfy block, read live so a saved change needs no restart. */
   readConfig: () => NtfyConfig | undefined;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: NtfyFetch;
 }
 
 /** What the panel sends with a test: the block it is showing, so a test proves the drafted channel. */

@@ -10,7 +10,10 @@ afterEach(() => { resetLazySurfaces(); });
  * the app still boots, and the dialog simply never appears.
  */
 describe("surfaces that load when they are opened", () => {
-  it("loads a surface once, however many times it is opened", async () => {
+  // The settings surface is the app's largest client chunk, and this import runs while the full
+  // suite saturates every core: it finishes in well under a second alone and passes five seconds
+  // under the parallel suite, the same contention that raised the build-graph test's timeout.
+  it("loads a surface once, however many times it is opened", { timeout: 15_000 }, async () => {
     const first = loadSurface("settings");
     const second = loadSurface("settings");
     expect(second).toBe(first);

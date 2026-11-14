@@ -20,7 +20,6 @@ import type {
 import { loadGlobalSkillPreferences, saveGlobalSkillPreferences, type LoadedSkillPreferences } from "../../config.js";
 import {
   applySkillPreference,
-  isSkillEnabled,
   loadProjectSkillPreferences,
   resolveSkillPreference,
   saveProjectSkillPreferences,
@@ -194,6 +193,18 @@ function scopeRows(
   ];
 }
 
+/**
+ * One discovered skill as the panel shows it.
+ *
+ * Two questions are answered here, and they are not the same question. Where a skill lives decides
+ * its `scope` and `origin`: a path inside the selected repository is project-owned even when pi
+ * discovered it through a configured path. Whether pi will load it is `preference` and `enabled`,
+ * and the session answers that by name through the same resolution the resource loader's
+ * `skillsOverride` applies (`filterSkillsByPreference`), a project entry first and the machine's
+ * global entry under it. Both fields come out of one resolution because a row that is switched off
+ * while the session still loads the skill, or the other way round, is a panel that lies about the
+ * machine.
+ */
 function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, project: PiSkillPreferenceConfig | undefined, projectPath: string | undefined): PiSkillInfo {
   const resolvedFile = resolve(skill.filePath);
   const resolvedProject = projectPath === undefined ? undefined : resolve(projectPath);
@@ -203,6 +214,7 @@ function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, 
     ? "package"
     : isProjectOwnedPath || skill.source === "project" ? "project" : skill.source === "user" ? "agent" : "path";
   const filteredByOwner = skill.ownerPackageDisabled === true;
+  const preference = resolveSkillPreference(skill.name, global, project);
   const validationMessage = filteredByOwner
     ? `Supplied by the disabled Pi package ${skill.packageSource ?? ""}, which loads none of its resources.`
     : undefined;
@@ -216,8 +228,8 @@ function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, 
     source: skill.source,
     ...(skill.packageSource === undefined ? {} : { packageSource: skill.packageSource }),
     ...(filteredByOwner ? { ownerPackageDisabled: true } : {}),
-    preference: resolveSkillPreference(skill.name, global, project),
-    enabled: filteredByOwner ? false : isSkillEnabled(skill.name, global, scope === "project" ? project : undefined),
+    preference,
+    enabled: filteredByOwner ? false : preference !== "disabled",
     validation: validationMessage === undefined ? "valid" : "warning",
     ...(validationMessage === undefined ? {} : { validationMessage }),
     ...(skill.disableModelInvocation ? { disableModelInvocation: true } : {}),

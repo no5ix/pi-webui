@@ -516,29 +516,6 @@ function parseTlsPath(value: unknown, key: string, path: string): string {
   return value;
 }
 
-/** An http(s) endpoint a translation request is sent to. */
-function parseHttpUrl(value: unknown, key: string, path: string): string {
-  if (typeof value !== "string" || value === "") throw new PiWebConfigError(`PI WEB config ${key} must be a non-empty URL: ${path}`);
-  const trimmed = value.trim();
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    throw new PiWebConfigError(`PI WEB config ${key} must be a URL: ${path}`);
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new PiWebConfigError(`PI WEB config ${key} must be an http(s) URL: ${path}`);
-  }
-  return trimmed;
-}
-
-function parseTimeoutMs(value: unknown, key: string, path: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 250 || value > 60_000) {
-    throw new PiWebConfigError(`PI WEB config ${key} must be an integer between 250 and 60000: ${path}`);
-  }
-  return value;
-}
-
 function parseUpdateCommand(value: unknown, path: string): string {
   if (typeof value !== "string") throw new PiWebConfigError(`PI WEB config updateCommand must be a string: ${path}`);
   return value.trim();

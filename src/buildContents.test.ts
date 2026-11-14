@@ -41,12 +41,20 @@ describe("production build contents", () => {
     expect(serveOffAt).toBeGreaterThanOrEqual(0);
     expect(stopChildrenAt).toBeGreaterThanOrEqual(0);
     expect(serveOffAt).toBeLessThan(stopChildrenAt);
-    for (const scriptName of ["dev:sessiond", "start:sessiond"] as const) {
-      const command = scripts[scriptName];
-      if (typeof command !== "string") throw new Error(`package.json script is missing: ${scriptName}`);
-      expect(command).toMatch(/^pnpm run build:plugins && /u);
-      expect(command).toContain("src/server/sessiond.ts");
-    }
+    const startSessiond = scripts["start:sessiond"];
+    if (typeof startSessiond !== "string") throw new Error("package.json script is missing: start:sessiond");
+    expect(startSessiond).toMatch(/^pnpm run build:plugins && /u);
+    expect(startSessiond).toContain("src/server/sessiond.ts");
+    // Both entrypoints must have the plugin artifacts built before the session daemon is exec'd. Run
+    // on its own, `start:sessiond` builds them; `dev:sessiond` is one of the four children the dev
+    // stack starts, and the stack builds them once, then exports PI_WEB_DEV_SKIP_PLUGIN_BUILD so the
+    // watchers do not each rebuild them (2026-11-14).
+    const devSessiond = scripts["dev:sessiond"];
+    if (typeof devSessiond !== "string") throw new Error("package.json script is missing: dev:sessiond");
+    expect(devSessiond).toContain("if [ \"${PI_WEB_DEV_SKIP_PLUGIN_BUILD:-}\" != \"1\" ]; then pnpm run build:plugins; fi;");
+    expect(devSessiond.indexOf("pnpm run build:plugins")).toBeLessThan(devSessiond.indexOf("src/server/sessiond.ts"));
+    expect(devScript).toContain("pnpm run build:plugins");
+    expect(devScript.indexOf("pnpm run build:plugins")).toBeLessThan(devScript.indexOf("export PI_WEB_DEV_SKIP_PLUGIN_BUILD=1"));
   });
 
   // Constructing the full compiler graph can exceed Vitest's default timeout under parallel-suite CPU contention.

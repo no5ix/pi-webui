@@ -159,16 +159,17 @@ export class SettingsMcpPanel extends LitElement {
     if (this.loading && response.servers.length === 0) {
       return html`<p class="section-note">Refreshing MCP servers from ${targetLabel}…</p>`;
     }
+    if (response.servers.length === 0) {
+      return html`<div class="loading-card">${piMcpEmptyListNote(response, targetLabel)}</div>`;
+    }
+    // With no project managed the panel lists what the machine sent, in the order it sent it: a
+    // project-scoped row that is on screen is a configured server, and a group the reader cannot reach
+    // would hide it rather than show it.
+    if (!this.projectSelected) {
+      return this.renderServerCards(response.servers);
+    }
     const projectServers = response.servers.filter((server) => server.scope === "project");
     const globalServers = response.servers.filter((server) => server.scope !== "project");
-    if (!this.projectSelected) {
-      return html`
-        <section class="section-card resource-scope" aria-label="Global MCP servers">
-          <header class="scope-heading"><h3>Global MCP servers</h3><small>Available across all projects on ${targetLabel}.</small></header>
-          ${globalServers.length === 0 ? html`<p class="section-note">${piMcpEmptyListNote({ ...response, servers: globalServers }, targetLabel)}</p>` : this.renderServerCards(globalServers)}
-        </section>
-      `;
-    }
     return html`
       <section class="section-card resource-scope" aria-label="Project MCP servers">
         <header class="scope-heading"><h3>Project MCP servers</h3><small>Defined in this project's MCP configuration.</small></header>

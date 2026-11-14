@@ -742,48 +742,53 @@ describe("PiSessionService prompt, queue, and auth warnings", () => {
   });
 
   it("refreshes auth state and dedupes warnings when logout removes the current model's credentials", async () => {
-    const hub = new CapturingSessionEventHub();
-    // The shared model runtime reads a live credential store. Mutating the store
-    // and refreshing here simulates the committed snapshot that
-    // ModelRuntime.login()/logout() establishes before AuthService emits.
-    // applyAuthChange then only needs to notify active sessions.
-    const credentials = new InMemoryCredentialStore();
-    await seedCredential(credentials, "anthropic", { type: "api_key", key: "sk-test" });
-    const modelRuntime = await createTestModelRuntime(credentials);
-    const model = modelRuntime.getModel(TEST_MODEL_PROVIDER, TEST_MODEL_ID);
-    if (model === undefined) throw new Error("Expected Anthropic model fixture");
-    const fake = fakeRuntime("auth-session", { model, modelRuntime });
+    // A machine whose environment already carries the provider's credential has configured auth that
+    // no credential store can take away, so the logout this scenario stages removes nothing there.
+    // The provider's environment is out of scope for the scenario and put back after it.
+    await withProviderEnvironmentSuppressed(TEST_MODEL_PROVIDER, async () => {
+      const hub = new CapturingSessionEventHub();
+      // The shared model runtime reads a live credential store. Mutating the store
+      // and refreshing here simulates the committed snapshot that
+      // ModelRuntime.login()/logout() establishes before AuthService emits.
+      // applyAuthChange then only needs to notify active sessions.
+      const credentials = new InMemoryCredentialStore();
+      await seedCredential(credentials, "anthropic", { type: "api_key", key: "sk-test" });
+      const modelRuntime = await createTestModelRuntime(credentials);
+      const model = modelRuntime.getModel(TEST_MODEL_PROVIDER, TEST_MODEL_ID);
+      if (model === undefined) throw new Error("Expected Anthropic model fixture");
+      const fake = fakeRuntime("auth-session", { model, modelRuntime });
 
-    const service = new PiSessionService(hub, {
-      agentDir: TEST_AGENT_DIR,
-      modelRuntime,
-      createAgentRuntime: runtimeCreator(fake.runtime),
-      sessionManager: sessionGateway([sessionRecord("auth-session")]),
-      heartbeatIntervalMs: 60_000,
+      const service = new PiSessionService(hub, {
+        agentDir: TEST_AGENT_DIR,
+        modelRuntime,
+        createAgentRuntime: runtimeCreator(fake.runtime),
+        sessionManager: sessionGateway([sessionRecord("auth-session")]),
+        heartbeatIntervalMs: 60_000,
+      });
+
+      await service.status(sessionRef("auth-session"));
+      hub.sessionEvents.length = 0;
+      hub.globalEvents.length = 0;
+
+      await credentials.delete("anthropic");
+      await modelRuntime.refresh();
+      service.applyAuthChange({ removedProviderId: "anthropic" });
+      service.applyAuthChange({ removedProviderId: "anthropic" });
+
+      const warningCount = () => hub.sessionEvents.filter(({ event }) => event.type === "command.output" && event.level === "error" && event.message.includes(`${TEST_MODEL_PROVIDER}/${TEST_MODEL_ID}`)).length;
+      expect(warningCount()).toBe(1);
+      expect(hub.globalEvents.some((event) => event.type === "status.update" && event.status.sessionId === "auth-session")).toBe(true);
+
+      await seedCredential(credentials, "anthropic", { type: "api_key", key: "sk-new" });
+      await modelRuntime.refresh();
+      service.applyAuthChange();
+      await credentials.delete("anthropic");
+      await modelRuntime.refresh();
+      service.applyAuthChange({ removedProviderId: "anthropic" });
+      expect(warningCount()).toBe(2);
+
+      await service.dispose();
     });
-
-    await service.status(sessionRef("auth-session"));
-    hub.sessionEvents.length = 0;
-    hub.globalEvents.length = 0;
-
-    await credentials.delete("anthropic");
-    await modelRuntime.refresh();
-    service.applyAuthChange({ removedProviderId: "anthropic" });
-    service.applyAuthChange({ removedProviderId: "anthropic" });
-
-    const warningCount = () => hub.sessionEvents.filter(({ event }) => event.type === "command.output" && event.level === "error" && event.message.includes(`${TEST_MODEL_PROVIDER}/${TEST_MODEL_ID}`)).length;
-    expect(warningCount()).toBe(1);
-    expect(hub.globalEvents.some((event) => event.type === "status.update" && event.status.sessionId === "auth-session")).toBe(true);
-
-    await seedCredential(credentials, "anthropic", { type: "api_key", key: "sk-new" });
-    await modelRuntime.refresh();
-    service.applyAuthChange();
-    await credentials.delete("anthropic");
-    await modelRuntime.refresh();
-    service.applyAuthChange({ removedProviderId: "anthropic" });
-    expect(warningCount()).toBe(2);
-
-    await service.dispose();
   });
 
   it("clears queued messages when stopping a session runtime", async () => {
@@ -803,6 +808,31 @@ describe("PiSessionService prompt, queue, and auth warnings", () => {
     await service.dispose();
   });
 });
+
+/**
+ * Run a scenario with a provider's own environment variables taken out of the process.
+ *
+ * Pi reads a provider's credentials from the credential store and from the environment, so a test
+ * that stages "this provider has no auth" is only true on a machine whose shell does not supply it.
+ * The variables are restored on every path, so the scenario does not leak into the next test file's
+ * process.
+ */
+async function withProviderEnvironmentSuppressed<T>(providerId: string, scenario: () => Promise<T>): Promise<T> {
+  const prefix = `${providerId.toUpperCase()}_`;
+  const saved = new Map<string, string>();
+  for (const key of Object.keys(process.env)) {
+    if (!key.startsWith(prefix)) continue;
+    const value = process.env[key];
+    if (value === undefined) continue;
+    saved.set(key, value);
+    Reflect.deleteProperty(process.env, key);
+  }
+  try {
+    return await scenario();
+  } finally {
+    for (const [key, value] of saved) process.env[key] = value;
+  }
+}
 
 async function writeLocalModelsConfig(path: string, modelId: string): Promise<void> {
   await writeFile(path, JSON.stringify({

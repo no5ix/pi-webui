@@ -53,16 +53,6 @@ export function renderBranchIcon(): TemplateResult {
   return html`<svg class="ui-icon" viewBox=${ATTRIBUTES.viewBox} aria-hidden="true" focusable="false" fill=${ATTRIBUTES.fill} stroke=${ATTRIBUTES.stroke} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><path d="M6 7v10"></path><path d="M18 7a6 6 0 0 1-6 6H6"></path></svg>`;
 }
 
-/** A magnifier, drawn on the reading toolbar's Search action. */
-export function renderSearchIcon(): TemplateResult {
-  return html`<svg class="ui-icon" viewBox=${ATTRIBUTES.viewBox} aria-hidden="true" focusable="false" fill=${ATTRIBUTES.fill} stroke=${ATTRIBUTES.stroke} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 4.5 4.5"></path></svg>`;
-}
-
-/** A letterform pair, drawn on the reading toolbar's Translate action. */
-export function renderTranslateIcon(): TemplateResult {
-  return html`<svg class="ui-icon" viewBox=${ATTRIBUTES.viewBox} aria-hidden="true" focusable="false" fill=${ATTRIBUTES.fill} stroke=${ATTRIBUTES.stroke} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9"></path><path d="M8.5 4v2"></path><path d="M11 6C11 11 7.5 14 4 15"></path><path d="M5.5 10.5c1.5 2.5 3.5 4 5.5 4.5"></path><path d="m13 20 4-10 4 10"></path><path d="M14.2 17h5.6"></path></svg>`;
-}
-
 /** The iOS Share mark (a tray with an arrow out of it), drawn where the install steps name the button. */
 export function renderShareIcon(): TemplateResult {
   return html`<svg class="ui-icon" viewBox=${ATTRIBUTES.viewBox} aria-hidden="true" focusable="false" fill=${ATTRIBUTES.fill} stroke=${ATTRIBUTES.stroke} stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10H6v11h12V10h-2"></path><path d="M12 3v12"></path><path d="m8 7 4-4 4 4"></path></svg>`;

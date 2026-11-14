@@ -994,7 +994,7 @@ export class SettingsDialog extends LitElement {
       const refreshed = await piSkillsApi.list(projectId, target.id);
       if (!this.isCurrentSkillsMutation(requestSeq, target, projectId)) return;
       const savedSkill = refreshed.skills.find((entry) => entry.name === toggle.name);
-      if (savedSkill === undefined || savedSkill.enabled !== enabled) {
+      if (savedSkill?.enabled !== enabled) {
         throw new Error("The preference write did not produce the requested effective skill state.");
       }
       this.skillsResponse = refreshed;
