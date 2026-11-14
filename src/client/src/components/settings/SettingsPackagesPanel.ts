@@ -1,10 +1,11 @@
 import { css, html, LitElement, type TemplateResult } from "lit";
 import { settingsControlStyles } from "./settingsControlStyles.js";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import type { PiPackageInfo, PiPackageScope, PiPackagesResponse } from "../../api";
 import "./SettingsPanelFrame";
 import type { SettingsNotice } from "./SettingsPanelFrame";
-import { isPiPackageOperationPending, normalizePiPackageSource, piPackageFilteredLabel, piPackageInstalledPathLabel, piPackageScopeLabel, piPackageSourceValidationMessage, piPackageUpdateDisabledReason, updateAllPiPackagesDisabledReason, type PiPackageOperationState } from "./piPackageSettings";
+import { isPiPackageOperationPending, normalizePiPackageSource, piPackageEnabledLabel, piPackageFilteredLabel, piPackageInstalledPathLabel, piPackageScopeLabel, piPackageSourceValidationMessage, piPackageToggleReloadNote, piPackageUpdateDisabledReason, updateAllPiPackagesDisabledReason, type PiPackageOperationState } from "./piPackageSettings";
 import { settingsMachineTarget, settingsMachineTargetLabel, type SettingsMachineTarget } from "./settingsMachineTarget";
 import { interactiveSurfaceStyles } from "../shared";
 
@@ -20,6 +21,8 @@ export class SettingsPackagesPanel extends LitElement {
   @property({ attribute: false }) onInstallPackage?: (source: string) => void | Promise<void>;
   @property({ attribute: false }) onRemovePackage?: (source: string, scope: PiPackageScope) => void | Promise<void>;
   @property({ attribute: false }) onUpdatePackage?: (source?: string) => void | Promise<void>;
+  /** Keeps a package installed and stops it contributing anything, which is what its switch writes. */
+  @property({ attribute: false }) onTogglePackage?: (source: string, scope: PiPackageScope, enabled: boolean) => void | Promise<void>;
   @state() private installSource = "";
   @state() private validationMessage = "";
 
@@ -55,6 +58,7 @@ export class SettingsPackagesPanel extends LitElement {
         content: html`<strong>Trusted code warning:</strong> Pi packages and PI WEB plugins can run with your user permissions. Install packages and enable plugins only from sources you trust.`,
       });
     }
+    if (showTrustedCodeWarning) notices.push({ type: "info", content: piPackageToggleReloadNote(this.packageTarget) });
     return notices;
   }
 
@@ -107,7 +111,7 @@ export class SettingsPackagesPanel extends LitElement {
 
   private renderPackageListContent(packages: PiPackageInfo[], targetLabel: string): TemplateResult {
     if (this.loading && packages.length === 0) return html`<p class="section-note">Loading Pi packages from ${targetLabel}…</p>`;
-    if (packages.length === 0) return html`<p class="section-note">No Pi packages configured in Pi settings on ${targetLabel} yet.</div>`;
+    if (packages.length === 0) return html`<p class="section-note">No Pi packages configured in Pi settings on ${targetLabel} yet.</p>`;
     return html`
       <div class="package-list">
         ${packages.map((packageInfo) => this.renderPackage(packageInfo))}
@@ -118,15 +122,21 @@ export class SettingsPackagesPanel extends LitElement {
   private renderPackage(packageInfo: PiPackageInfo): TemplateResult {
     const updateReason = piPackageUpdateDisabledReason(packageInfo);
     const updating = isPiPackageOperationPending(this.operation, "update", packageInfo.source);
+    const toggling = isPiPackageOperationPending(this.operation, "set-enabled", packageInfo.source);
     return html`
       <article class=${`package-card${packageInfo.filtered ? " filtered" : ""}`}>
         <div class="package-main">
           <strong>${packageInfo.source}</strong>
-          <small>${piPackageScopeLabel(packageInfo)} · ${piPackageFilteredLabel(packageInfo)}</small>
+          <small>${piPackageScopeLabel(packageInfo)} · ${piPackageFilteredLabel(packageInfo)} · ${piPackageEnabledLabel(packageInfo)}</small>
           <small>Installed path: <code>${piPackageInstalledPathLabel(packageInfo)}</code></small>
+          ${packageInfo.enabled ? null : html`<small class="action-note">Turned off, so this package contributes no extension, skill, prompt template, theme, or context file. It stays installed and stays configured.</small>`}
           ${updateReason === undefined ? null : html`<small class="action-note">${updateReason}</small>`}
         </div>
         <div class="package-actions">
+          <label class="toggle">
+            <input type="checkbox" aria-label=${`${piPackageScopeLabel(packageInfo)} Pi package ${packageInfo.source}`} .checked=${live(packageInfo.enabled)} ?disabled=${this.isOperating} @change=${(event: Event) => { void this.togglePackage(packageInfo, event); }}>
+            <span>${toggling ? "Saving…" : packageInfo.enabled ? "Enabled" : "Off"}</span>
+          </label>
           <button class="secondary" title=${updateReason ?? "Update this Pi package"} ?disabled=${this.isOperating || updateReason !== undefined} @click=${() => { void this.updatePackage(packageInfo.source); }}>${updating ? "Updating…" : "Update"}</button>
           <button class="danger" title="Remove this Pi package" ?disabled=${this.isOperating} @click=${() => { void this.removePackage(packageInfo); }}>Remove</button>
         </div>
@@ -173,6 +183,15 @@ export class SettingsPackagesPanel extends LitElement {
     }
   }
 
+  private async togglePackage(packageInfo: PiPackageInfo, event: Event): Promise<void> {
+    const enabled = event.target instanceof HTMLInputElement ? event.target.checked : packageInfo.enabled;
+    try {
+      await this.onTogglePackage?.(packageInfo.source, packageInfo.scope, enabled);
+    } catch {
+      // The parent owns network error presentation so package errors are consistent across Settings.
+    }
+  }
+
   private get packageTarget(): SettingsMachineTarget {
     return this.targetMachine ?? settingsMachineTarget(undefined);
   }
@@ -206,6 +225,8 @@ export class SettingsPackagesPanel extends LitElement {
     .package-card.filtered { opacity: .82; }
     .package-main strong, .package-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .package-actions { display: flex; align-items: center; gap: var(--pi-space-4); }
+    .toggle { display: inline-flex; align-items: center; gap: var(--pi-space-3); white-space: nowrap; }
+    .toggle input { box-sizing: border-box; width: var(--pi-checkbox-size); height: var(--pi-checkbox-size); accent-color: var(--pi-accent); }
 
     @media (max-width: 760px) {
       .package-toolbar { display: grid; gap: var(--pi-space-6); }

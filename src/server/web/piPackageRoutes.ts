@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { PiPackageScope } from "../../shared/apiTypes.js";
 import { ActiveAgentProfileAccessError } from "./activeAgentProfileProvider.js";
-import type { PiPackageService } from "./piPackageService.js";
+import { PiPackageNotFoundError, type PiPackageService } from "./piPackageService.js";
 import { errorMessage, isRecord } from "../../shared/unknownValues.js";
 
 class PiPackageRequestValidationError extends Error {}
@@ -42,6 +42,23 @@ export function registerPiPackageRoutes(app: FastifyInstance, service: PiPackage
       return sendPiPackageError(reply, error);
     }
   });
+
+  /**
+   * Keeps a package installed and configured, and moves pi's filter over its resources.
+   *
+   * The scope is required, not inferred: a project package is a project's file, and a switch that
+   * guessed "user" would edit somebody's global settings from a project card.
+   */
+  app.post<{ Body: unknown }>(`${routePrefix}/pi-packages/set-enabled`, async (request, reply) => {
+    try {
+      const body = requireRequestObject(request.body);
+      const enabled = body["enabled"];
+      if (typeof enabled !== "boolean") throw new PiPackageRequestValidationError("Pi package enabled must be true or false");
+      return await service.setEnabled(parseRequiredSource(body["source"]), parseRequiredScope(body["scope"]), enabled);
+    } catch (error) {
+      return sendPiPackageError(reply, error);
+    }
+  });
 }
 
 function normalizeRoutePrefix(prefix: string): string {
@@ -69,6 +86,11 @@ function parseOptionalUpdateSource(body: unknown): string | undefined {
   return parseRequiredSource(source);
 }
 
+function parseRequiredScope(value: unknown): PiPackageScope {
+  if (value !== "user" && value !== "project") throw new PiPackageRequestValidationError("Pi package scope must be \"user\" or \"project\"");
+  return value;
+}
+
 function parseOptionalScope(value: unknown): PiPackageScope | undefined {
   if (value === undefined) return undefined;
   if (value !== "user" && value !== "project") throw new PiPackageRequestValidationError("Pi package scope must be \"user\" or \"project\"");
@@ -83,6 +105,8 @@ function requireRequestObject(value: unknown): Record<string, unknown> {
 function sendPiPackageError(reply: FastifyReply, error: unknown): FastifyReply {
   const status = error instanceof PiPackageRequestValidationError
     ? 400
+    : error instanceof PiPackageNotFoundError
+      ? 404
     : error instanceof ActiveAgentProfileAccessError
       ? 503
       : 500;

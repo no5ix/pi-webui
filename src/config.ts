@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import type { NtfyConfig, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "./shared/apiTypes.js";
+import type { NtfyConfig, PiSkillPreferenceConfig, PiWebConfigValues, PiWebDeprecatedAgentInput, PiWebListTilesConfig, PiWebLoggingConfig, PiWebServerSettingsUpdates, PiWebSharedThemeConfig } from "./shared/apiTypes.js";
 import { isPiWebPluginId, piWebPluginIdPattern } from "./shared/pluginIds.js";
 import { isRecord } from "./shared/unknownValues.js";
 import { parseNtfyConfig } from "./shared/ntfy.js";
@@ -256,6 +256,77 @@ export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, 
   const kept = Object.fromEntries(Object.entries(existing).filter(([key]) => !SAVED_CONFIG_KEYS.has(key)));
   writeConfigObject(path, { ...kept, ...piWebConfigRecord(normalized) });
   return { path, exists: true, config: normalized, deprecatedAgentInputs: detectDeprecatedAgentInputs(env, normalized) };
+}
+
+/** The config key that holds the skill preferences of one scope. */
+export const SKILL_PREFERENCE_CONFIG_KEY = "skills";
+
+/**
+ * The saved skill preferences: names kept out of Pi's runtime list, and names put back in it.
+ *
+ * A name in neither list carries no preference, and Pi's own default (the skill is available)
+ * applies. That is what makes the key safe to add to an installation: writing it cannot disable a
+ * skill a reader already uses, and a missing key is not a list of nothing.
+ */
+export function parseSkillPreferenceConfig(value: unknown, path: string): PiSkillPreferenceConfig {
+  if (!isRecord(value)) throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY} must be an object: ${path}`);
+  const version = value["version"];
+  if (version !== undefined && version !== 1) throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.version must be 1: ${path}`);
+  return {
+    ...(version === 1 ? { version: 1 as const } : {}),
+    ...(value["enabled"] !== undefined ? { enabled: parseSkillNameList(value["enabled"], "enabled", path) } : {}),
+    ...(value["disabled"] !== undefined ? { disabled: parseSkillNameList(value["disabled"], "disabled", path) } : {}),
+  };
+}
+
+function parseSkillNameList(value: unknown, field: string, path: string): string[] {
+  const names: string[] = [];
+  if (!Array.isArray(value)) {
+    throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} must be a list of skill names: ${path}`);
+  }
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new PiWebConfigError(`PI WEB config ${SKILL_PREFERENCE_CONFIG_KEY}.${field} must be a list of skill names: ${path}`);
+    }
+    names.push(entry.trim());
+  }
+  return [...new Set(names)];
+}
+
+export interface LoadedSkillPreferences {
+  path: string;
+  exists: boolean;
+  config: PiSkillPreferenceConfig;
+}
+
+/** The global scope's saved skill preferences, read from PI WEB's own config file. */
+export function loadGlobalSkillPreferences(options: LoadOptions = {}): LoadedSkillPreferences {
+  const path = piWebConfigPath(options.env ?? process.env, options.cwd ?? process.cwd());
+  const value = readExistingConfigObject(path)[SKILL_PREFERENCE_CONFIG_KEY];
+  return { path, exists: value !== undefined, config: value === undefined ? {} : parseSkillPreferenceConfig(value, path) };
+}
+
+/**
+ * Writes the global scope's skill preferences alone; every other key of the file stays as it is.
+ *
+ * It does not travel through the general config save on purpose: that save round-trips the whole
+ * config through whichever browser pressed Save, and an older page has never seen this key.
+ */
+export function saveGlobalSkillPreferences(preferences: PiSkillPreferenceConfig, options: LoadOptions = {}): LoadedSkillPreferences {
+  const path = piWebConfigPath(options.env ?? process.env, options.cwd ?? process.cwd());
+  const others = Object.fromEntries(Object.entries(readExistingConfigObject(path)).filter(([key]) => key !== SKILL_PREFERENCE_CONFIG_KEY));
+  const config = parseSkillPreferenceConfig(preferences, path);
+  writeConfigObject(path, { ...others, [SKILL_PREFERENCE_CONFIG_KEY]: skillPreferenceRecord(config) });
+  return { path, exists: true, config };
+}
+
+/** The stored form: one spelling, with the version, and no empty list written for a scope that has none. */
+export function skillPreferenceRecord(config: PiSkillPreferenceConfig): Record<string, unknown> {
+  return {
+    version: 1,
+    ...(config.enabled === undefined || config.enabled.length === 0 ? {} : { enabled: [...config.enabled] }),
+    ...(config.disabled === undefined || config.disabled.length === 0 ? {} : { disabled: [...config.disabled] }),
+  };
 }
 
 /** Sets or clears the shared theme alone; every other key stays exactly as the file holds it. */

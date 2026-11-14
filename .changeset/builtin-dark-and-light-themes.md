@@ -1,0 +1,5 @@
+---
+"@gang-of-beads/pi-web": patch
+---
+
+Add two built-in looks, **Builtin Dark** and **Builtin Light**, beside the Material pair in **Settings → Appearance**. They are PI WEB's own themes, not a plugin's, so they are there on a fresh install with nothing to enable, and they are a pair: **Follow system** switches between them, and a browser that follows the system opens the page in the light one and repaints when the system asks for dark. A theme's colours are its own — canvas, text, accent, diff, syntax, selection, shadows — and every surface PI WEB paints reads them, including the colours the browser paints for itself — the page declares its light or dark scheme, form controls take the theme's accent, the tab icon is drawn from the theme, and the browser's own theme colour (a phone's address bar) is repainted with it — and the plugin themes a machine contributes. The qualified ids are `core:builtin-dark` and `core:builtin-light`, so a shared-theme config, a plugin, and a deep link can name them.

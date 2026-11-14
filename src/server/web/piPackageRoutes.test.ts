@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PiPackageInfo } from "../../shared/apiTypes.js";
 import { ActiveAgentProfileAccessError } from "./activeAgentProfileProvider.js";
+import { PiPackageNotFoundError } from "./piPackageService.js";
 import type { PiPackageService } from "./piPackageService.js";
 import { registerPiPackageRoutes } from "./piPackageRoutes.js";
 
@@ -26,7 +27,7 @@ describe("registerPiPackageRoutes", () => {
     const response = await app.inject({ method: "GET", url: "/api/pi-packages" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" }] });
+    expect(response.json()).toEqual({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools", disabled: false, enabled: true }] });
     expect(serviceMocks.list).toHaveBeenCalledOnce();
   });
 
@@ -40,7 +41,7 @@ describe("registerPiPackageRoutes", () => {
       const response = await prefixedApp.inject({ method: "GET", url: "/api/machines/local/pi-packages" });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" }] });
+      expect(response.json()).toEqual({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools", disabled: false, enabled: true }] });
       expect(prefixedMocks.list).toHaveBeenCalledOnce();
     } finally {
       await prefixedApp.close();
@@ -96,6 +97,40 @@ describe("registerPiPackageRoutes", () => {
     expect(serviceMocks.update).not.toHaveBeenCalled();
   });
 
+  it("enables and disables a package in the scope the request names", async () => {
+    const disable = await app.inject({ method: "POST", url: "/api/pi-packages/set-enabled", payload: { source: "npm:@acme/tools", scope: "user", enabled: false } });
+    const enable = await app.inject({ method: "POST", url: "/api/pi-packages/set-enabled", payload: { source: "../project-tools", scope: "project", enabled: true } });
+
+    expect(disable.statusCode).toBe(200);
+    expect(disable.json()).toMatchObject({ action: "set-enabled", source: "npm:@acme/tools", scope: "user", enabled: false, requiresReload: true });
+    expect(enable.statusCode).toBe(200);
+    expect(enable.json()).toMatchObject({ action: "set-enabled", source: "../project-tools", scope: "project", enabled: true });
+    expect(serviceMocks.setEnabled).toHaveBeenNthCalledWith(1, "npm:@acme/tools", "user", false);
+    expect(serviceMocks.setEnabled).toHaveBeenNthCalledWith(2, "../project-tools", "project", true);
+  });
+
+  it("answers 404 when the named scope does not configure the package", async () => {
+    serviceMocks.setEnabled.mockRejectedValueOnce(new PiPackageNotFoundError("No Pi package \"npm:@acme/gone\" is configured in the user scope"));
+
+    const response = await app.inject({ method: "POST", url: "/api/pi-packages/set-enabled", payload: { source: "npm:@acme/gone", scope: "user", enabled: false } });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "No Pi package \"npm:@acme/gone\" is configured in the user scope" });
+  });
+
+  it("refuses an enable request with no scope, so a switch cannot guess the global file", async () => {
+    const missingScope = await app.inject({ method: "POST", url: "/api/pi-packages/set-enabled", payload: { source: "npm:@acme/tools", enabled: false } });
+    const missingEnabled = await app.inject({ method: "POST", url: "/api/pi-packages/set-enabled", payload: { source: "npm:@acme/tools", scope: "user" } });
+    const missingSource = await app.inject({ method: "POST", url: "/api/pi-packages/set-enabled", payload: { scope: "user", enabled: false } });
+
+    expect(missingScope.statusCode).toBe(400);
+    expect(missingScope.json()).toEqual({ error: "Pi package scope must be \"user\" or \"project\"" });
+    expect(missingEnabled.statusCode).toBe(400);
+    expect(missingEnabled.json()).toEqual({ error: "Pi package enabled must be true or false" });
+    expect(missingSource.statusCode).toBe(400);
+    expect(serviceMocks.setEnabled).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when the daemon-owned active profile is unavailable", async () => {
     serviceMocks.list.mockRejectedValueOnce(new ActiveAgentProfileAccessError({ status: "unavailable", error: "connect ECONNREFUSED" }));
 
@@ -116,11 +151,12 @@ describe("registerPiPackageRoutes", () => {
 });
 
 function fakePiPackageService() {
-  const packages: PiPackageInfo[] = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" }];
+  const packages: PiPackageInfo[] = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools", disabled: false, enabled: true }];
   const list = vi.fn<PiPackageService["list"]>(() => Promise.resolve({ packages: [...packages] }));
   const install = vi.fn<PiPackageService["install"]>((source) => Promise.resolve({ action: "install", source, packages: [...packages] }));
   const remove = vi.fn<PiPackageService["remove"]>((source, scope = "user") => Promise.resolve({ action: "remove", source, scope, removed: true, packages: [...packages] }));
   const update = vi.fn<PiPackageService["update"]>((source) => Promise.resolve({ action: "update", ...(source === undefined ? {} : { source }), packages: [...packages] }));
-  const service: PiPackageService = { list, install, remove, update };
-  return { service, list, install, remove, update };
+  const setEnabled = vi.fn<PiPackageService["setEnabled"]>((source, scope, enabled) => Promise.resolve({ action: "set-enabled", source, scope, enabled, requiresReload: true, packages: [...packages] }));
+  const service: PiPackageService = { list, install, remove, update, setEnabled };
+  return { service, list, install, remove, update, setEnabled };
 }

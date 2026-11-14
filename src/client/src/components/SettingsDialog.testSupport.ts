@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { Machine, PiPackageInfo, PiPackageMutationResponse, PiWebConfigResponse, PiWebConfigValues, PiWebPluginInfo, PiWebPluginsResponse } from "../api";
+import type { Machine, PiMcpListResponse, PiMcpServerInfo, PiPackageInfo, PiPackageMutationResponse, PiSkillInfo, PiSkillsResponse, PiSkillsScopeInfo, PiWebConfigResponse, PiWebConfigValues, PiWebPluginInfo, PiWebPluginsResponse } from "../api";
 import { SettingsDialog } from "./SettingsDialog";
 
 export const remoteMachine: Machine = {
@@ -91,11 +91,68 @@ export function pluginInfo(id: string, enabled: boolean): PiWebPluginInfo {
 }
 
 export function packageInfo(source: string): PiPackageInfo {
-  return { source, scope: "user", filtered: false, installedPath: `/pi/packages/${source}` };
+  return { source, scope: "user", filtered: false, installedPath: `/pi/packages/${source}`, disabled: false, enabled: true };
 }
 
 export function packageMutationResponse(action: PiPackageMutationResponse["action"], packages: PiPackageInfo[], source?: string): PiPackageMutationResponse {
   return source === undefined ? { action, packages } : { action, source, packages };
+}
+
+/** One skill row, with the paths a real read always carries. */
+export function skillInfo(name: string, overrides: Partial<PiSkillInfo> = {}): PiSkillInfo {
+  return {
+    name,
+    description: `What ${name} does`,
+    filePath: `/pi/skills/${name}/SKILL.md`,
+    baseDir: `/pi/skills/${name}`,
+    scope: "global",
+    origin: "agent",
+    source: "user",
+    preference: "default",
+    enabled: true,
+    validation: "valid",
+    ...overrides,
+  };
+}
+
+export function skillScope(scope: PiSkillsScopeInfo["scope"], overrides: Partial<PiSkillsScopeInfo> = {}): PiSkillsScopeInfo {
+  return {
+    scope,
+    skillsDir: scope === "global" ? "/pi/skills" : "/repo/.pi/skills",
+    configPath: scope === "global" ? "/config/pi-web/config.json" : "/repo/.pi-web/config.json",
+    ...overrides,
+  };
+}
+
+export function skillsResponse(skills: PiSkillInfo[], scopes: PiSkillsScopeInfo[] = [skillScope("global")]): PiSkillsResponse {
+  return { skills, diagnostics: [], scopes };
+}
+
+/** One MCP server, with the redacted shape the API answers: names, never values. */
+export function mcpServerInfo(name: string, overrides: Partial<PiMcpServerInfo> = {}): PiMcpServerInfo {
+  return {
+    name,
+    scope: "global",
+    transport: "stdio",
+    configured: "enabled",
+    configPath: "/pi/mcp.json",
+    enabled: true,
+    command: "npx",
+    envNames: ["ACME_TOKEN"],
+    probe: { state: "unprobed" },
+    ...overrides,
+  };
+}
+
+export function mcpListResponse(servers: PiMcpServerInfo[], overrides: Partial<PiMcpListResponse> = {}): PiMcpListResponse {
+  return {
+    servers,
+    errors: [],
+    globalConfigPath: "/pi/mcp.json",
+    projectTrusted: false,
+    projectScopeRead: false,
+    ...overrides,
+  };
 }
 
 export interface Deferred<T> {

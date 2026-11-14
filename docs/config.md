@@ -47,6 +47,8 @@ Process restarts depend on the key:
 - `plugins`: a toggle saved in **Settings → PI WEB Plugins** applies at once, without a restart or reload, except for the cases [Turn plugins on and off](plugins.md#turn-plugins-on-and-off) lists (a workspace-provider or machine-registry plugin, a changed `settings` object, `serverSettings` block or `models` list of a plugin with a server half, a new package revision, and hand edits of this file, which wait for the next page load or session-daemon start).
 - `serverPlugins.safeStart`: persistent offline recovery state applied before server-plugin discovery/import on the next sessiond start; use the `pi-web plugins safe-start ...` CLI rather than hand-editing it.
 - Pi package install/remove/update: not a PI WEB config key; after a mutation, type `/reload` in each idle PI WEB session on the target machine to refresh ordinary Pi resources such as extensions, skills, prompt templates, themes, and context/system prompt files. For a PI WEB package with `serverModule`, manually [restart the session daemon](install.md#restart-the-session-daemon), then reload the browser. If a global Pi extension adds or removes a model provider, or changes a provider's connection settings, the same manual sessiond restart is required; `/reload` cannot change either startup snapshot. A known Pi model provider refreshing only its own model list is applied without a restart. See [Pi extension provider baseline](#pi-extension-provider-baseline).
+- `skills`: a change made in **Settings → Skills**, or by hand, takes a skill out of the list Pi is given to a session. A session that is already running keeps the skills it loaded: type `/reload` in each idle PI WEB session on that machine, and the next session created picks the answer up.
+- Pi MCP servers (`mcp.json`): not a PI WEB config key. Enabling, disabling, removing, or overriding a server edits Pi's own `mcp.json` on the target machine; type `/reload` in each idle PI WEB session there so pi's MCP extension connects or disconnects the server. See [skills, MCP servers, and Pi packages](pi-resources.md).
 - `shortcuts`: saved settings apply in the browser after config refresh/save.
 - `listTiles`: a choice saved in **Settings → Appearance → Lists** applies at once; a change made in the config file by hand applies after a browser reload.
 
@@ -160,6 +162,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | Update command for the Updates page | `updateCommand` | `PI_WEB_UPDATE_COMMAND` (the saved value wins) | Global | Not supported locally | Next status check, no restart |
 | Tiles per row in the Navigate lists | `listTiles.phone`, `listTiles.desktop` | — | Global (the gateway's browser UI) | Not supported locally | At once from Settings; browser reload after a hand edit |
 | One theme for every browser | `theme.themeId`, `theme.auto` | — | Global (the gateway's browser UI) | Not supported locally | At once in the browser that changes it; other browsers when they next load the page or come back to the foreground |
+| Skills kept out of the list Pi is given | `skills.enabled`, `skills.disabled` | — | Global + project | **Overrides**: a project entry answers for its project alone, then the global entry, then Pi's default (available) | Next session created, or `/reload` in each idle PI WEB session |
 | Upload/body limit | `maxUploadBytes` | `PI_WEB_MAX_UPLOAD_BYTES` | Global | Not supported locally | Restart web/API and session daemon on that machine |
 | Extension dialog auto-cancel timeout | `extensionDialogsTimeoutMs` | — | Global/session daemon | Not supported locally | Restart session daemon on that machine |
 | Session environment facts | `environmentFacts` | `PI_WEB_ENVIRONMENT_FACTS` | Global/session daemon | Not supported locally | Restart session daemon on that machine |
@@ -295,7 +298,20 @@ The command should update PI WEB and restart it; it runs in a new terminal on th
 
 A layout without a value fits the width, as before: two per row on a phone, one in the desktop sidebar, and as many as fit on the desktop's full-width Navigate page. The choice lives in the config rather than the browser, so clearing a browser's data keeps it; a phone and a desktop still differ because the choice is kept per layout, not per device. PI WEB uses its phone layout in a window under 760 px wide or on a touch screen under 1080 px wide, so a phone keeps the phone layout on its side and an iPad held landscape gets the desktop layout.
 
+### Skills
+
+`skills` records the PI WEB preference that keeps a skill out of the list Pi is given to a session:
+`skills.disabled` names the skills to leave out, `skills.enabled` names the ones to keep in. Pi owns
+discovery, and PI WEB edits no skill file; a name in neither list has no preference, so Pi's default
+of available stands. The project file `<project>/.pi-web/config.json` carries the same key for that
+project alone and never rewrites the global entry. **Settings → Skills** writes both scopes, and the
+[skills, MCP servers, and Pi packages guide](pi-resources.md) covers what a change takes to apply.
+
 ### Shared theme
+
+PI WEB ships four looks of its own: the Material pair (dark, light) and the Builtin pair (dark, light), each
+paired so **Follow system** swaps within the pair, plus every theme a [PI WEB plugin](plugins.md) contributes.
+**Settings → Appearance** shows them all with their colours and states which one is in use.
 
 By default each browser keeps its own theme. Turn on **Settings → Appearance → Same theme on every device** to keep one theme in the gateway's global config instead; every browser that opens this PI WEB then uses it, and a theme picked on any of them changes it for all:
 
@@ -308,7 +324,7 @@ By default each browser keeps its own theme. Turn on **Settings → Appearance �
 }
 ```
 
-`themeId` is a theme's qualified id (`core:material-dark`, `core:material-light`, or `<plugin>:<theme>`), and `auto` follows the system's light/dark preference within the theme's pair. Turning the switch off removes the key; each browser then keeps the theme it last showed. A general Settings save never replaces the key, so it changes only through that switch, a theme choice while it is on, or a hand edit. Other browsers apply a change when they next load the page or come back to the foreground; one that stays open in front keeps its theme until then.
+`themeId` is a theme's qualified id: one of PI WEB's own looks (`core:material-dark`, `core:material-light`, `core:builtin-dark`, `core:builtin-light`) or a contributed theme (`<plugin>:<theme>`), and `auto` follows the system's light/dark preference within the theme's pair. Turning the switch off removes the key; each browser then keeps the theme it last showed. A general Settings save never replaces the key, so it changes only through that switch, a theme choice while it is on, or a hand edit. Other browsers apply a change when they next load the page or come back to the foreground; one that stays open in front keeps its theme until then.
 
 ### Model for new sessions
 
@@ -386,6 +402,8 @@ Models fetched by a background refresh appear the next time a client asks for th
 To turn the background refresh off entirely, set `PI_WEB_OFFLINE` or `PI_OFFLINE` in the session daemon's environment and restart it. In offline mode PI WEB performs no provider catalog network requests, including after logins, and sessions use the catalogs already stored in the agent directory. The `PI_WEB_SKIP_VERSION_CHECK` and `PI_SKIP_VERSION_CHECK` keys do **not** affect this refresh; they only suppress PI WEB release checks.
 
 ### Project trust for project-local resources
+
+A project's own MCP servers (`<project>/.pi/mcp.json`) and skills (`<project>/.pi/skills`) are trust-requiring resources: **Settings → MCP Servers** and **Settings → Skills** read and change them only for a project Pi would load them for, and both panels say when the project scope was not read.
 
 PI WEB always honors Pi's project-trust settings before loading a workspace's project-local `.pi/` resources — `.pi/extensions/*`, the `packages` declared in `.pi/settings.json`, and the other `.pi/` settings and resources. There is no opt-out config key: trust applies at every session start, the way `pi` itself applies it.
 

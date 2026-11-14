@@ -1,13 +1,41 @@
-import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { DefaultPackageManager, SettingsManager, type PackageSource } from "@earendil-works/pi-coding-agent";
 import type { PiPackageInfo, PiPackageMutationAction, PiPackageMutationResponse, PiPackageScope, PiPackagesResponse } from "../../shared/apiTypes.js";
 import { requireActiveAgentProfile, type ActiveAgentProfileProvider } from "./activeAgentProfileProvider.js";
+import {
+  isDisabledPackageSource,
+  isFilteredPackageSource,
+  packageSourceForEnabled,
+  packageSourceString,
+} from "../shared/resources/piPackageState.js";
+
+/**
+ * The package operations PI WEB needs from pi, in pi's own words.
+ *
+ * Enable and disable are settings writes, not install operations: the entries of one scope's
+ * `packages` list are read and written whole, so a change touches that scope only and pi's own
+ * filter carries it into every later resource resolution.
+ */
+/** One row of pi's own configured-package listing, before PI WEB adds the switch's state. */
+export interface ConfiguredPackageRow {
+  source: string;
+  scope: PiPackageScope;
+  filtered: boolean;
+  installedPath?: string;
+}
 
 export interface PiPackageManagerPort {
-  listConfiguredPackages(): PiPackageInfo[];
+  listConfiguredPackages(): ConfiguredPackageRow[];
+  readPackageEntries(scope: PiPackageScope): PackageSource[];
+  writePackageEntries(scope: PiPackageScope, entries: PackageSource[]): Promise<void>;
   installAndPersist(source: string, options?: { local?: boolean }): Promise<void>;
   removeAndPersist(source: string, options?: { local?: boolean }): Promise<boolean>;
   update(source?: string): Promise<void>;
   flush?(): Promise<void>;
+}
+
+/** A package the request names is not configured in the scope it names. */
+export class PiPackageNotFoundError extends Error {
+  override name = "PiPackageNotFoundError";
 }
 
 export interface PiPackageService {
@@ -15,6 +43,7 @@ export interface PiPackageService {
   install(source: string): Promise<PiPackageMutationResponse>;
   remove(source: string, scope?: PiPackageScope): Promise<PiPackageMutationResponse>;
   update(source?: string): Promise<PiPackageMutationResponse>;
+  setEnabled(source: string, scope: PiPackageScope, enabled: boolean): Promise<PiPackageMutationResponse>;
 }
 
 export type PiPackageServiceForAgentDir = (agentDir: string) => PiPackageService;
@@ -41,6 +70,10 @@ export class ActiveProfilePiPackageService implements PiPackageService {
 
   update(source?: string): Promise<PiPackageMutationResponse> {
     return this.enqueueMutation((service) => service.update(source));
+  }
+
+  setEnabled(source: string, scope: PiPackageScope, enabled: boolean): Promise<PiPackageMutationResponse> {
+    return this.enqueueMutation((service) => service.setEnabled(source, scope, enabled));
   }
 
   private enqueueMutation(operation: (service: PiPackageService) => Promise<PiPackageMutationResponse>): Promise<PiPackageMutationResponse> {
@@ -71,7 +104,7 @@ export class DefaultPiPackageService implements PiPackageService {
     return this.enqueueMutation(async () => {
       await this.manager.installAndPersist(source);
       await this.flushSettings();
-      return this.mutationResponse("install", { source });
+      return this.mutationResponse("install", { source, requiresReload: true });
     });
   }
 
@@ -81,7 +114,7 @@ export class DefaultPiPackageService implements PiPackageService {
         ? await this.manager.removeAndPersist(source, { local: true })
         : await this.manager.removeAndPersist(source);
       await this.flushSettings();
-      return this.mutationResponse("remove", { source, scope, removed });
+      return this.mutationResponse("remove", { source, scope, removed, requiresReload: true });
     });
   }
 
@@ -90,12 +123,34 @@ export class DefaultPiPackageService implements PiPackageService {
       if (source === undefined) {
         await this.manager.update();
         await this.flushSettings();
-        return this.mutationResponse("update", {});
+        return this.mutationResponse("update", { requiresReload: true });
       }
 
       await this.manager.update(source);
       await this.flushSettings();
-      return this.mutationResponse("update", { source });
+      return this.mutationResponse("update", { source, requiresReload: true });
+    });
+  }
+
+  /**
+   * Moves one package's filter, in the scope the request names, and nothing else.
+   *
+   * The entry is found by pi's own source string, and a scope that does not configure it is an
+   * error rather than a write: a project-scope request can never reach the global list, and a
+   * package this machine has never installed is not something a switch can turn on.
+   */
+  setEnabled(source: string, scope: PiPackageScope, enabled: boolean): Promise<PiPackageMutationResponse> {
+    return this.enqueueMutation(async () => {
+      const requested = source.trim();
+      if (requested === "") throw new PiPackageNotFoundError("A Pi package source must be a non-empty string");
+      const entries = this.manager.readPackageEntries(scope);
+      const index = entries.findIndex((entry) => packageSourceString(entry) === requested);
+      if (index < 0) throw new PiPackageNotFoundError(`No Pi package "${requested}" is configured in the ${scope === "project" ? "project" : "user"} scope`);
+      const updated = [...entries];
+      updated[index] = packageSourceForEnabled(requested, enabled);
+      await this.manager.writePackageEntries(scope, updated);
+      await this.flushSettings();
+      return this.mutationResponse("set-enabled", { source: requested, scope, enabled, requiresReload: true });
     });
   }
 
@@ -117,12 +172,22 @@ export class DefaultPiPackageService implements PiPackageService {
   }
 
   private listPackages(): PiPackageInfo[] {
-    return this.manager.listConfiguredPackages().map((configuredPackage) => ({
-      source: configuredPackage.source,
-      scope: configuredPackage.scope,
-      filtered: configuredPackage.filtered,
-      ...(configuredPackage.installedPath === undefined ? {} : { installedPath: configuredPackage.installedPath }),
-    }));
+    const entriesByScope: Record<PiPackageScope, PackageSource[]> = {
+      user: this.manager.readPackageEntries("user"),
+      project: this.manager.readPackageEntries("project"),
+    };
+    return this.manager.listConfiguredPackages().map((configuredPackage) => {
+      const entry = entriesByScope[configuredPackage.scope].find((candidate) => packageSourceString(candidate) === configuredPackage.source);
+      const disabled = isDisabledPackageSource(entry);
+      return {
+        source: configuredPackage.source,
+        scope: configuredPackage.scope,
+        filtered: configuredPackage.filtered || isFilteredPackageSource(entry),
+        ...(configuredPackage.installedPath === undefined ? {} : { installedPath: configuredPackage.installedPath }),
+        disabled,
+        enabled: !disabled,
+      };
+    });
   }
 }
 
@@ -135,6 +200,12 @@ export function createDefaultPiPackageService(cwd: string, agentDir: string): Pi
   const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
   return new DefaultPiPackageService({
     listConfiguredPackages: () => manager.listConfiguredPackages(),
+    readPackageEntries: (scope) => (scope === "project" ? settingsManager.getProjectSettings().packages : settingsManager.getGlobalSettings().packages) ?? [],
+    writePackageEntries: async (scope, entries) => {
+      if (scope === "project") settingsManager.setProjectPackages(entries);
+      else settingsManager.setPackages(entries);
+      await settingsManager.flush();
+    },
     installAndPersist: (source, options) => manager.installAndPersist(source, options),
     removeAndPersist: (source, options) => manager.removeAndPersist(source, options),
     update: (source) => manager.update(source),

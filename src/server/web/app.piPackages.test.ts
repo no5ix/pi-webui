@@ -7,7 +7,7 @@ describe("buildApp Pi package routes", () => {
   it("serves Pi package management routes through the app wiring", async () => {
     const listResponse = await appTestContext.app.inject({ method: "GET", url: "/api/pi-packages" });
     expect(listResponse.statusCode).toBe(200);
-    expect(listResponse.json()).toEqual({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/tmp/pi-tools" }] });
+    expect(listResponse.json()).toEqual({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/tmp/pi-tools", disabled: false, enabled: true }] });
 
     const installResponse = await appTestContext.app.inject({ method: "POST", url: "/api/pi-packages/install", payload: { source: "npm:@acme/new-tools" } });
     expect(installResponse.statusCode).toBe(200);

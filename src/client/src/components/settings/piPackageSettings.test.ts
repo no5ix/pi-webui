@@ -3,8 +3,8 @@ import type { PiPackageInfo } from "../../api";
 import { canUpdateAllPiPackages, friendlyPiPackageErrorMessage, isPiPackageOperationPending, normalizePiPackageSource, piPackageFilteredLabel, piPackageMutationFollowUpMessage, piPackageScopeLabel, piPackageSourceValidationMessage, piPackageUpdateDisabledReason, shouldRefreshGatewayPluginsAfterPiPackageMutation, updateAllPiPackagesDisabledReason } from "./piPackageSettings";
 import { settingsMachineTarget, settingsMachineTargetLabel, type SettingsMachineTarget } from "./settingsMachineTarget";
 
-const userPackage: PiPackageInfo = { source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" };
-const projectPackage: PiPackageInfo = { source: "../project-tools", scope: "project", filtered: true };
+const userPackage: PiPackageInfo = { source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools", disabled: false, enabled: true };
+const projectPackage: PiPackageInfo = { source: "../project-tools", scope: "project", filtered: true, disabled: false, enabled: true };
 const localTarget: SettingsMachineTarget = { id: "local", name: "local", kind: "local" };
 const remoteTarget: SettingsMachineTarget = { id: "remote-a", name: "Lab Mac", kind: "remote" };
 

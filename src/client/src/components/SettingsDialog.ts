@@ -6,7 +6,7 @@ import { renderBackIcon, renderCrossIcon, uiIconStyle } from "./uiIcons.js";
 import { disclosureIconStyle, renderDisclosureIcon } from "./disclosureIcon.js";
 import { customElement, property, state } from "lit/decorators.js";
 import type { AppAction } from "../actions";
-import { configApi, notificationsApi, piPackagesApi, pluginsApi, type Machine, type MachineRuntime, type PiPackageMutationResponse, type PiPackageScope, type PiPackagesResponse, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
+import { configApi, notificationsApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi, type Machine, type MachineRuntime, type PiMcpListResponse, type PiMcpMutationResponse, type PiMcpServerInfo, type PiPackageMutationResponse, type PiPackageScope, type PiPackagesResponse, type PiSkillInfo, type PiSkillsResponse, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
 import type { NtfyConfig, NtfyStatus } from "../../../shared/ntfy";
 import type { MachineReachabilityView } from "../machineReachability";
 import type { PiWebFleetReport, PiWebFleetRunResponse } from "../../../shared/apiTypes";
@@ -24,9 +24,13 @@ import "./settings/SettingsGeneralPanel";
 import "./settings/SettingsMachinesPanel";
 import "./settings/SettingsPackagesPanel";
 import "./settings/SettingsPluginsPanel";
+import "./settings/SettingsSkillsPanel";
+import "./settings/SettingsMcpPanel";
 import "./settings/SettingsShortcutsPanel";
 import { friendlyPiPackageErrorMessage, piPackageMutationFollowUpMessage, shouldRefreshGatewayPluginsAfterPiPackageMutation, type PiPackageOperationState } from "./settings/piPackageSettings";
-import { loadGatewaySettingsData, loadPiPackagesData } from "./settings/settingsDataLoading";
+import { piSkillMutationMessage, piSkillToggleRequest, type PiSkillOperationState } from "./settings/piSkillSettings";
+import { piMcpMutationMessage, piMcpRemoveRequest, piMcpSetEnabledRequest, piMcpTestRequest, type PiMcpOperationState } from "./settings/piMcpSettings";
+import { loadGatewaySettingsData, loadPiMcpData, loadPiPackagesData, loadPiSkillsData } from "./settings/settingsDataLoading";
 import { mergeSelectedMachineAccessConfig } from "./settings/settingsMachineAccessConfig";
 import { friendlySelectedMachineSettingsErrorMessage, isSelectedMachineSettingsUnsupported, settingsReadFailureWords, pluginLifecycleSupport, selectedMachineSettingsSupportKey, settingsMachineTarget, settingsMachineTargetLabel, type PluginLifecycleSupport, type SettingsMachineTarget } from "./settings/settingsMachineTarget";
 import { mergeSelectedMachinePluginConfig, pluginEnabledConfigPatch } from "./settings/settingsPluginConfig";
@@ -39,7 +43,7 @@ import { LOCAL_MACHINE_ID } from "../machineKeys";
 import type { ApprovedMachineOrigin } from "../../../shared/machineAccess";
 
 /** The reads the dialog makes, each read again by itself when it does not answer. */
-type SettingsRead = "config" | "access" | "plugins" | "packages";
+type SettingsRead = "config" | "access" | "plugins" | "packages" | "skills" | "mcp";
 
 @customElement("settings-dialog")
 export class SettingsDialog extends LitElement {
@@ -119,24 +123,38 @@ export class SettingsDialog extends LitElement {
   @state() private selectedPluginConfigResponse: PiWebConfigResponse | undefined;
   @state() private selectedPluginsResponse: PiWebPluginsResponse | undefined;
   @state() private packagesResponse: PiPackagesResponse | undefined;
+  @state() private skillsResponse: PiSkillsResponse | undefined;
+  @state() private mcpResponse: PiMcpListResponse | undefined;
   @state() private loading = true;
   @state() private accessLoading = true;
   @state() private pluginLoading = true;
   @state() private packageLoading = true;
+  @state() private skillsLoading = true;
+  @state() private mcpLoading = true;
   @state() private saving = false;
   @state() private packageOperation: PiPackageOperationState | undefined;
+  @state() private skillOperation: PiSkillOperationState | undefined;
+  @state() private mcpOperation: PiMcpOperationState | undefined;
   @state() private error = "";
   @state() private accessError = "";
   @state() private pluginError = "";
   @state() private packageError = "";
+  @state() private skillsError = "";
+  @state() private mcpError = "";
   @state() private savedMessage = "";
   @state() private packageMessage = "";
+  @state() private skillsMessage = "";
+  @state() private mcpMessage = "";
   private savedMessageTimer: number | undefined;
   private loadRequestSeq = 0;
   private accessLoadRequestSeq = 0;
   private pluginLoadRequestSeq = 0;
   private packageLoadRequestSeq = 0;
   private packageMutationSeq = 0;
+  private skillsLoadRequestSeq = 0;
+  private skillsMutationSeq = 0;
+  private mcpLoadRequestSeq = 0;
+  private mcpMutationSeq = 0;
   private readonly readAttempts = new Map<SettingsRead, number>();
   private readonly readAgainTimers = new Map<SettingsRead, ReturnType<typeof setTimeout>>();
 
@@ -154,6 +172,8 @@ export class SettingsDialog extends LitElement {
     void this.onRefreshMachineRuntime?.(this.settingsTarget().id);
     void this.loadPluginsForTarget();
     void this.loadPackagesForTarget();
+    void this.loadSkillsForTarget();
+    void this.loadMcpForTarget();
   }
 
   override disconnectedCallback(): void {
@@ -205,6 +225,10 @@ export class SettingsDialog extends LitElement {
         if (this.isConnected) void this.loadPluginsForTarget(currentTarget);
         this.resetPackageStateForTargetChange();
         if (this.isConnected) void this.loadPackagesForTarget(currentTarget);
+        this.resetSkillsStateForTargetChange();
+        if (this.isConnected) void this.loadSkillsForTarget(currentTarget);
+        this.resetMcpStateForTargetChange();
+        if (this.isConnected) void this.loadMcpForTarget(currentTarget);
         return;
       }
     }
@@ -266,6 +290,8 @@ export class SettingsDialog extends LitElement {
       { id: "notifications", label: "Notifications", detail: "This browser, ntfy, task events" },
       { id: "machines", label: "Machines", detail: "All connected devices" },
       { id: "packages", label: "Pi Packages", detail: "Selected machine" },
+      { id: "skills", label: "Skills", detail: "Selected machine" },
+      { id: "mcp", label: "MCP Servers", detail: "Selected machine" },
       { id: "plugins", label: "PI WEB Plugins", detail: "Selected machine" },
       { id: "shortcuts", label: "Keyboard", detail: "Gateway shortcuts" },
       ...this.pluginSections.map((entry) => ({ id: entry.id, label: entry.title, detail: "Plugin" })),
@@ -425,7 +451,38 @@ export class SettingsDialog extends LitElement {
           .onInstallPackage=${(source: string) => this.installPiPackage(source)}
           .onRemovePackage=${(source: string, scope: PiPackageScope) => { this.removePiPackage(source, scope); }}
           .onUpdatePackage=${(source?: string) => this.updatePiPackage(source)}
+          .onTogglePackage=${(source: string, scope: PiPackageScope, enabled: boolean) => this.setPiPackageEnabled(source, scope, enabled)}
         ></settings-packages-panel>
+      `;
+    }
+    if (this.activeSection === "skills") {
+      return html`
+        <settings-skills-panel
+          .skillsResponse=${this.skillsResponse}
+          .targetMachine=${this.settingsTarget()}
+          .loading=${this.skillsLoading}
+          .operation=${this.skillOperation}
+          .error=${this.skillsError}
+          .operationMessage=${this.skillsMessage}
+          .onReload=${() => this.loadSkillsForTarget()}
+          .onToggleSkill=${(skill: PiSkillInfo, enabled: boolean) => this.setSkillEnabled(skill, enabled)}
+        ></settings-skills-panel>
+      `;
+    }
+    if (this.activeSection === "mcp") {
+      return html`
+        <settings-mcp-panel
+          .mcpResponse=${this.mcpResponse}
+          .targetMachine=${this.settingsTarget()}
+          .loading=${this.mcpLoading}
+          .operation=${this.mcpOperation}
+          .error=${this.mcpError}
+          .operationMessage=${this.mcpMessage}
+          .onReload=${() => this.loadMcpForTarget()}
+          .onToggleServer=${(server: PiMcpServerInfo, enabled: boolean) => this.setMcpServerEnabled(server, enabled)}
+          .onRemoveServer=${(server: PiMcpServerInfo) => this.removeMcpServer(server)}
+          .onTestServer=${(server: PiMcpServerInfo) => this.testMcpServer(server)}
+        ></settings-mcp-panel>
       `;
     }
     if (this.activeSection === "plugins") {
@@ -635,6 +692,46 @@ export class SettingsDialog extends LitElement {
   }
 
   /**
+   * The skills of the selected machine.
+   *
+   * The read carries no project id, so a project scope the machine will not read stays the panel's
+   * "not read" line rather than an empty list, and a failed read clears the rows instead of leaving
+   * another machine's skills on screen.
+   */
+  private async loadSkillsForTarget(target = this.settingsTarget()): Promise<void> {
+    const requestSeq = ++this.skillsLoadRequestSeq;
+    this.skillsLoading = true;
+    this.skillsError = "";
+    try {
+      const result = await loadPiSkillsData(target, (targetId) => piSkillsApi.list(undefined, targetId));
+      if (!this.isCurrentSkillsLoad(requestSeq, target)) return;
+
+      this.skillsResponse = result.skillsResponse;
+      this.skillsError = result.error;
+      this.afterRead("skills", result.error === "" ? "answered" : "unanswered", () => this.loadSkillsForTarget(target));
+    } finally {
+      if (this.isCurrentSkillsLoad(requestSeq, target)) this.skillsLoading = false;
+    }
+  }
+
+  /** The MCP servers of the selected machine, on the same read-again rule as the other sections. */
+  private async loadMcpForTarget(target = this.settingsTarget()): Promise<void> {
+    const requestSeq = ++this.mcpLoadRequestSeq;
+    this.mcpLoading = true;
+    this.mcpError = "";
+    try {
+      const result = await loadPiMcpData(target, (targetId) => piMcpApi.list(undefined, targetId));
+      if (!this.isCurrentMcpLoad(requestSeq, target)) return;
+
+      this.mcpResponse = result.mcpResponse;
+      this.mcpError = result.error;
+      this.afterRead("mcp", result.error === "" ? "answered" : "unanswered", () => this.loadMcpForTarget(target));
+    } finally {
+      if (this.isCurrentMcpLoad(requestSeq, target)) this.mcpLoading = false;
+    }
+  }
+
+  /**
    * A settings read that did not answer is read again by itself, sooner first and then no longer
    * than 15 s apart, while the dialog is open (B48: the reader is never told to press Reload).
    */
@@ -788,6 +885,97 @@ export class SettingsDialog extends LitElement {
     await this.runPiPackageMutation(source === undefined ? { kind: "update-all" } : { kind: "update", source }, "update Pi packages", target, () => piPackagesApi.update(source, target.id));
   }
 
+  /**
+   * A package that stays installed and contributes nothing (Pi's own package filter).
+   *
+   * The scope travels with the row: the same source can be configured at user and project scope, and
+   * only the row the reader pressed is written.
+   */
+  private async setPiPackageEnabled(source: string, scope: PiPackageScope, enabled: boolean): Promise<void> {
+    const target = this.packageTarget();
+    await this.runPiPackageMutation({ kind: "set-enabled", source, scope }, "change the Pi package's enabled state", target, () => piPackagesApi.setEnabled({ source, scope, enabled }, target.id));
+  }
+
+  /**
+   * One skill switch, written to the scope the row was read for.
+   *
+   * The answer is the whole skill list, so the rows the reader sees are the machine's answer to the
+   * write, and the message says what a running session has to do to pick the new list up.
+   */
+  private async setSkillEnabled(skill: PiSkillInfo, enabled: boolean): Promise<void> {
+    if (this.saving) return;
+    const target = this.settingsTarget();
+    const toggle = piSkillToggleRequest(skill, enabled, this.skillsResponse?.scopes ?? []);
+    const requestSeq = ++this.skillsMutationSeq;
+    this.skillsLoadRequestSeq += 1;
+    this.skillsLoading = false;
+    this.saving = true;
+    this.skillOperation = { name: toggle.name, scope: toggle.scope, enabled };
+    this.skillsError = "";
+    this.skillsMessage = "";
+    try {
+      const response = await piSkillsApi.setEnabled(toggle, target.id);
+      if (!this.isCurrentSkillsMutation(requestSeq, target)) return;
+      this.skillsResponse = response;
+      this.skillsMessage = piSkillMutationMessage(toggle.scope, toggle.name, enabled, target);
+    } catch (error) {
+      if (this.isCurrentSkillsMutation(requestSeq, target)) {
+        this.skillsError = `Failed to change the skill ${toggle.name} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
+      }
+    } finally {
+      if (this.skillsMutationSeq === requestSeq) {
+        this.skillOperation = undefined;
+        this.saving = false;
+      }
+    }
+  }
+
+  private async setMcpServerEnabled(server: PiMcpServerInfo, enabled: boolean): Promise<void> {
+    await this.runPiMcpMutation({ kind: "set-enabled", name: server.name, scope: server.scope }, `set the MCP server ${server.name} ${enabled ? "on" : "off"}`, () => piMcpApi.setEnabled(piMcpSetEnabledRequest(server, enabled), this.settingsTarget().id));
+  }
+
+  private async removeMcpServer(server: PiMcpServerInfo): Promise<void> {
+    await this.runPiMcpMutation({ kind: "remove", name: server.name, scope: server.scope }, `remove the MCP server ${server.name}`, () => piMcpApi.remove(piMcpRemoveRequest(server), this.settingsTarget().id));
+  }
+
+  /** A probe is a read that answers in seconds and changes nothing, so it carries no reload note. */
+  private async testMcpServer(server: PiMcpServerInfo): Promise<void> {
+    await this.runPiMcpMutation({ kind: "test", name: server.name, scope: server.scope }, `test the MCP server ${server.name}`, () => piMcpApi.test(piMcpTestRequest(server), this.settingsTarget().id));
+  }
+
+  /**
+   * One MCP write, answered by the whole list.
+   *
+   * A response from a machine the reader has left is dropped: its rows belong to that machine, not to
+   * the one now on screen.
+   */
+  private async runPiMcpMutation(operation: PiMcpOperationState, label: string, mutate: () => Promise<PiMcpMutationResponse>): Promise<void> {
+    if (this.saving) return;
+    const target = this.settingsTarget();
+    const requestSeq = ++this.mcpMutationSeq;
+    this.mcpLoadRequestSeq += 1;
+    this.mcpLoading = false;
+    this.saving = true;
+    this.mcpOperation = operation;
+    this.mcpError = "";
+    this.mcpMessage = "";
+    try {
+      const response = await mutate();
+      if (!this.isCurrentMcpMutation(requestSeq, target)) return;
+      this.mcpResponse = response;
+      this.mcpMessage = piMcpMutationMessage(response, target);
+    } catch (error) {
+      if (this.isCurrentMcpMutation(requestSeq, target)) {
+        this.mcpError = `Failed to ${label} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
+      }
+    } finally {
+      if (this.mcpMutationSeq === requestSeq) {
+        this.mcpOperation = undefined;
+        this.saving = false;
+      }
+    }
+  }
+
   private async runPiPackageMutation(operation: PiPackageOperationState, label: string, target: SettingsMachineTarget, mutate: () => Promise<PiPackageMutationResponse>): Promise<void> {
     if (this.saving) throw new Error("A settings operation is already running.");
     const requestSeq = ++this.packageMutationSeq;
@@ -874,6 +1062,30 @@ export class SettingsDialog extends LitElement {
     return requestSeq === this.packageMutationSeq && this.isCurrentPackageTarget(target);
   }
 
+  private isCurrentSkillsMutation(requestSeq: number, target: SettingsMachineTarget): boolean {
+    return requestSeq === this.skillsMutationSeq && this.isCurrentSkillsTarget(target);
+  }
+
+  private isCurrentSkillsLoad(requestSeq: number, target: SettingsMachineTarget): boolean {
+    return requestSeq === this.skillsLoadRequestSeq && this.isCurrentSkillsTarget(target);
+  }
+
+  private isCurrentMcpMutation(requestSeq: number, target: SettingsMachineTarget): boolean {
+    return requestSeq === this.mcpMutationSeq && this.isCurrentMcpTarget(target);
+  }
+
+  private isCurrentMcpLoad(requestSeq: number, target: SettingsMachineTarget): boolean {
+    return requestSeq === this.mcpLoadRequestSeq && this.isCurrentMcpTarget(target);
+  }
+
+  private isCurrentSkillsTarget(target: SettingsMachineTarget): boolean {
+    return this.settingsTarget().id === target.id;
+  }
+
+  private isCurrentMcpTarget(target: SettingsMachineTarget): boolean {
+    return this.settingsTarget().id === target.id;
+  }
+
   private isCurrentPackageTarget(target: SettingsMachineTarget): boolean {
     return this.packageTarget().id === target.id;
   }
@@ -909,6 +1121,31 @@ export class SettingsDialog extends LitElement {
     this.packageError = "";
     this.packagesResponse = undefined;
     if (hadPackageOperation) this.saving = false;
+  }
+
+  /** The skills of the machine the reader left are never the skills of the machine they entered. */
+  private resetSkillsStateForTargetChange(): void {
+    const hadSkillOperation = this.skillOperation !== undefined;
+    this.skillsLoadRequestSeq += 1;
+    this.skillsMutationSeq += 1;
+    this.skillsLoading = false;
+    this.skillOperation = undefined;
+    this.skillsMessage = "";
+    this.skillsError = "";
+    this.skillsResponse = undefined;
+    if (hadSkillOperation) this.saving = false;
+  }
+
+  private resetMcpStateForTargetChange(): void {
+    const hadMcpOperation = this.mcpOperation !== undefined;
+    this.mcpLoadRequestSeq += 1;
+    this.mcpMutationSeq += 1;
+    this.mcpLoading = false;
+    this.mcpOperation = undefined;
+    this.mcpMessage = "";
+    this.mcpError = "";
+    this.mcpResponse = undefined;
+    if (hadMcpOperation) this.saving = false;
   }
 
   private showSavedMessage(): void {
@@ -964,6 +1201,8 @@ export type SettingsPanelTag =
   | "settings-machines-panel"
   | "settings-general-panel"
   | "settings-packages-panel"
+  | "settings-skills-panel"
+  | "settings-mcp-panel"
   | "settings-plugins-panel"
   | "settings-appearance-panel"
   | "settings-notifications-panel"
@@ -987,6 +1226,10 @@ export function activeSettingsPanelTag(section: SettingsSection): SettingsPanelT
       return "settings-notifications-panel";
     case "packages":
       return "settings-packages-panel";
+    case "skills":
+      return "settings-skills-panel";
+    case "mcp":
+      return "settings-mcp-panel";
     case "plugins":
       return "settings-plugins-panel";
     case "shortcuts":

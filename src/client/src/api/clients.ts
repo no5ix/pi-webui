@@ -1,5 +1,5 @@
 import { isRecord } from "../../../shared/unknownValues";
-import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageUpdateRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
+import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageSetEnabledRequest, PiPackageUpdateRequest, PiMcpRemoveRequest, PiMcpSetEnabledRequest, PiMcpTestRequest, PiSkillSetEnabledRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
 import { parseProjectFolderListing } from "./projectFolderParser";
 import { resolveAppUrl } from "../appUrl";
 import { describeError } from "../notice";
@@ -40,6 +40,10 @@ import {
   parseOAuthFlowState,
   parsePiPackageMutationResponse,
   parsePiPackagesResponse,
+  parsePiMcpListResponse,
+  parsePiMcpMutationResponse,
+  parsePiSkillSetEnabledResponse,
+  parsePiSkillsResponse,
   parsePiWebConfigResponse,
   parsePiWebPluginsResponse,
   parsePiWebRuntimeResponse,
@@ -224,6 +228,21 @@ function piPackagePath(endpoint = "", machineId?: string): string {
   return endpoint === "" ? basePath : `${basePath}/${endpoint}`;
 }
 
+function piSkillPath(endpoint = "", machineId?: string): string {
+  const basePath = machineId === undefined ? "api/pi-skills" : `${machinePrefix(machineId)}/pi-skills`;
+  return endpoint === "" ? basePath : `${basePath}/${endpoint}`;
+}
+
+function piMcpPath(endpoint = "", machineId?: string): string {
+  const basePath = machineId === undefined ? "api/pi-mcp" : `${machinePrefix(machineId)}/pi-mcp`;
+  return endpoint === "" ? basePath : `${basePath}/${endpoint}`;
+}
+
+/** The project a settings read is about, as a query: the server resolves the id to its own path. */
+function projectIdQuery(projectId: string | undefined): string {
+  return projectId === undefined ? "" : `?${new URLSearchParams({ projectId }).toString()}`;
+}
+
 export const piPackagesApi = {
   packages: (machineId?: string) => request(piPackagePath("", machineId), parsePiPackagesResponse),
   install: (source: string, machineId?: string) => {
@@ -238,6 +257,38 @@ export const piPackagesApi = {
     const body: PiPackageUpdateRequest | undefined = source === undefined ? undefined : { source };
     return request(piPackagePath("update", machineId), parsePiPackageMutationResponse, { method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   },
+  /**
+   * Keeps a configured package installed while pi's filter stops it contributing anything. The
+   * answer carries the whole list again, because the filter of one package is what decides whether
+   * the skills, extensions and themes it owns show up in the other settings panels.
+   */
+  setEnabled: (setEnabled: PiPackageSetEnabledRequest, machineId?: string) => request(piPackagePath("set-enabled", machineId), parsePiPackageMutationResponse, { method: "POST", body: JSON.stringify(setEnabled) }),
+};
+
+/**
+ * Skills, as pi discovers them on the machine that answers, with PI WEB's saved preference on top.
+ *
+ * The list is a read of the machine's files, so it is asked for with the project it is about (a
+ * project scope the server cannot resolve is not read, and the response says so) and answered by the
+ * machine the settings dialog selected: a remote machine's skills are that machine's files.
+ */
+export const piSkillsApi = {
+  list: (projectId?: string, machineId?: string) => request(`${piSkillPath("", machineId)}${projectIdQuery(projectId)}`, parsePiSkillsResponse),
+  setEnabled: (setEnabled: PiSkillSetEnabledRequest, machineId?: string) => request(piSkillPath("set-enabled", machineId), parsePiSkillSetEnabledResponse, { method: "POST", body: JSON.stringify(setEnabled) }),
+};
+
+/**
+ * MCP servers, as pi's `mcp.json` files define them.
+ *
+ * A test is a probe of one server, answered by the machine whose config it reads, and no answer
+ * carries a header or environment value: the server redacts them, and the client has no way to show
+ * one even if an older machine sent it.
+ */
+export const piMcpApi = {
+  list: (projectId?: string, machineId?: string) => request(`${piMcpPath("", machineId)}${projectIdQuery(projectId)}`, parsePiMcpListResponse),
+  setEnabled: (setEnabled: PiMcpSetEnabledRequest, machineId?: string) => request(piMcpPath("set-enabled", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(setEnabled) }),
+  remove: (remove: PiMcpRemoveRequest, machineId?: string) => request(piMcpPath("remove", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(remove) }),
+  test: (test: PiMcpTestRequest, machineId?: string) => request(piMcpPath("test", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(test) }),
 };
 
 /**

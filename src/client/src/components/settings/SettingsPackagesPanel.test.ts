@@ -133,5 +133,5 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 function packageInfo(source: string): PiPackageInfo {
-  return { source, scope: "user", filtered: false, installedPath: `/pi/packages/${source}` };
+  return { source, scope: "user", filtered: false, installedPath: `/pi/packages/${source}`, disabled: false, enabled: true };
 }

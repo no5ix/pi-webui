@@ -1,11 +1,18 @@
-import type { PiPackageInfo, PiPackageMutationAction } from "../../api";
+import type { PiPackageInfo, PiPackageMutationAction, PiPackageScope } from "../../api";
 import { settingsMachineTarget, type SettingsMachineTarget } from "./settingsMachineTarget";
 
-export type PiPackageOperationKind = "install" | "update" | "update-all";
+export type PiPackageOperationKind = "install" | "update" | "update-all" | "set-enabled";
 
+/**
+ * The package operation the reader is waiting for.
+ *
+ * A scope travels with the source because the same source can be configured at user and project
+ * scope at once, and only the row that was pressed may show that it is working.
+ */
 export interface PiPackageOperationState {
   kind: PiPackageOperationKind;
   source?: string;
+  scope?: PiPackageScope;
 }
 
 export function shouldRefreshGatewayPluginsAfterPiPackageMutation(target: SettingsMachineTarget): boolean {
@@ -57,8 +64,32 @@ export function isPiPackageOperationPending(operation: PiPackageOperationState |
   return source === undefined || operation.source === source;
 }
 
+/**
+ * The state the enable/disable switch reports.
+ *
+ * Pi's package filter is what "off" means: the package stays installed and stays configured, and it
+ * contributes no extension, skill, prompt template, theme, or context file. A filtered package that
+ * is not switched off is a filter PI WEB did not write, so the two words stay apart.
+ */
+export function piPackageEnabledLabel(packageInfo: Pick<PiPackageInfo, "enabled" | "disabled" | "filtered">): string {
+  if (packageInfo.enabled) return "Enabled";
+  if (packageInfo.disabled) return "Turned off in Pi package settings";
+  return "Filtered by Pi package settings";
+}
+
+/**
+ * What turning a package on asks of a running session.
+ *
+ * A settings file that says "enabled" is not a session that has loaded the package: pi reads its
+ * packages when a session starts, and `/reload` is what re-runs that discovery.
+ */
+export function piPackageToggleReloadNote(target: SettingsMachineTarget = settingsMachineTarget(undefined)): string {
+  const sessionScope = target.kind === "local" ? "each idle PI WEB session" : `each idle PI WEB session on ${target.name}`;
+  return `Turning a package on or off writes Pi's package settings. A running session keeps what it loaded: type /reload in ${sessionScope} to load or drop its extensions, skills, prompt templates, themes, and context files.`;
+}
+
 export function piPackageMutationFollowUpMessage(action: PiPackageMutationAction, target = settingsMachineTarget(undefined)): string {
-  const verb = action === "install" ? "installed" : action === "remove" ? "removed" : "updated";
+  const verb = action === "install" ? "installed" : action === "remove" ? "removed" : action === "set-enabled" ? "enabled or disabled" : "updated";
   const targetSuffix = target.kind === "local" ? "" : ` on ${target.name}`;
   const sessionScope = target.kind === "local" ? "each idle PI WEB session" : `each idle PI WEB session on ${target.name}`;
   const pluginScope = target.kind === "local" ? "PI WEB browser plugin changes" : `PI WEB browser plugin changes served by ${target.name}`;

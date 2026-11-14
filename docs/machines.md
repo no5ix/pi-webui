@@ -100,10 +100,12 @@ After you select a machine, the rest of the app works in that machine's scope:
 - Pi sessions, transcripts, prompts, model controls and commands;
 - activity indicators and live updates;
 - terminals and terminal command runs;
-- Pi package list, install, remove and update in **Settings → Pi Packages**;
+- Pi package list, install, remove, update, and enable/disable in **Settings → Pi Packages**;
+- discovered Pi skills and their enable/disable preferences in **Settings → Skills**;
+- Pi's MCP servers, with connection tests, in **Settings → MCP Servers**;
 - the machine's own browser plugins and their server entries.
 
-Settings tabs name the machine they edit. Pi packages, PI WEB plugins, session daemon options, external file access, upload defaults, logs and the update command apply to the selected machine. Host, port, allowed hosts, the machine list and keyboard shortcuts stay with the PI WEB you opened. See the [configuration reference](config.md).
+Settings tabs name the machine they edit. Pi packages, Pi skills, MCP servers, PI WEB plugins, session daemon options, external file access, upload defaults, logs and the update command apply to the selected machine; see [skills, MCP servers, and Pi packages](pi-resources.md). Host, port, allowed hosts, the machine list and keyboard shortcuts stay with the PI WEB you opened. See the [configuration reference](config.md).
 
 ## Credentials stay on each machine
 

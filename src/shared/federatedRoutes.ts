@@ -13,6 +13,8 @@ export { WORKSPACE_REMOVAL_FEDERATION_TIMEOUT_MS } from "./workspaceRemovalProto
 export type FederatedHttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export const PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS = 5 * 60_000;
+/** A connection probe may take pi's whole 30 s to answer; the gateway outlives the probe it relays. */
+export const MCP_TEST_PROXY_TIMEOUT_MS = 40_000;
 export const SESSION_TREE_NAVIGATION_PROXY_TIMEOUT_MS = 5 * 60_000;
 export const SESSION_TREE_FORK_PROXY_TIMEOUT_MS = 5 * 60_000;
 export const WORKSPACE_FILE_PREVIEW_ROUTE_PATH = "/projects/:projectId/workspaces/:workspaceId/file/preview";
@@ -57,6 +59,13 @@ export const FEDERATED_HTTP_ROUTES = [
   { method: "POST", path: "/pi-packages/install", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
   { method: "POST", path: "/pi-packages/remove", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
   { method: "POST", path: "/pi-packages/update", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+  { method: "POST", path: "/pi-packages/set-enabled", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+  { method: "GET", path: "/pi-skills" },
+  { method: "POST", path: "/pi-skills/set-enabled", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+  { method: "GET", path: "/pi-mcp" },
+  { method: "POST", path: "/pi-mcp/set-enabled", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+  { method: "POST", path: "/pi-mcp/remove", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+  { method: "POST", path: "/pi-mcp/test", timeoutMs: MCP_TEST_PROXY_TIMEOUT_MS },
   { method: "GET", path: "/projects" },
   { method: "POST", path: "/projects" },
   { method: "POST", path: "/projects/order" },

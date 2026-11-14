@@ -386,11 +386,24 @@ export interface PiWebPluginsResponse {
 
 export type PiPackageScope = "user" | "project";
 
+/**
+ * A configured Pi package.
+ *
+ * Pi's own package filter is what "disabled" means here: a `packages` entry in its object form with
+ * `autoload: false` and no resource patterns contributes no extension, skill, prompt template or
+ * theme, while staying installed and staying configured. `filtered` is Pi's word for "the entry is
+ * an object", so a disabled package is always filtered and a filtered package is not necessarily
+ * disabled. `enabled` is the effective answer the switch shows.
+ */
 export interface PiPackageInfo {
   source: string;
   scope: PiPackageScope;
   filtered: boolean;
   installedPath?: string;
+  /** Pi's filter is set so that none of this package's resources load. */
+  disabled: boolean;
+  /** Configured and not filtered off: the state the enable/disable switch reports. */
+  enabled: boolean;
 }
 
 export interface PiPackagesResponse {
@@ -412,13 +425,220 @@ export interface PiPackageUpdateRequest {
   source?: string;
 }
 
-export type PiPackageMutationAction = "install" | "remove" | "update";
+export interface PiPackageSetEnabledRequest {
+  source: string;
+  scope: PiPackageScope;
+  enabled: boolean;
+}
+
+export type PiPackageMutationAction = "install" | "remove" | "update" | "set-enabled";
 
 export interface PiPackageMutationResponse extends PiPackagesResponse {
   action: PiPackageMutationAction;
   source?: string;
   scope?: PiPackageScope;
   removed?: boolean;
+  enabled?: boolean;
+  /**
+   * Whether a running session must reload (or restart) before the change reaches its runtime.
+   * A settings file that says "enabled" is not a session that has loaded the package.
+   */
+  requiresReload?: boolean;
+}
+
+/**
+ * Skills, as Pi discovers them, with PI WEB's saved preference on top.
+ *
+ * The states a reader needs are kept apart on purpose: what is configured (`preference`), what the
+ * runtime loads (`enabled`), and whether Pi accepted the file at all (`validation`). A skill can be
+ * configured enabled and still not reach the model, and the panel has to say so.
+ */
+export type PiSkillScope = "global" | "project";
+
+/** Where a skill came from: Pi's own skill folders, a Pi package, or a configured path. */
+export type PiSkillOrigin = "agent" | "project" | "package" | "path";
+
+/** The saved preference for one skill name. `default` means nothing has been written for it. */
+export type PiSkillPreference = "default" | "enabled" | "disabled";
+
+export type PiSkillValidation = "valid" | "warning";
+
+/**
+ * The saved skill preferences of one scope: the names a reader turned off, and the names it turned
+ * back on. A name in neither list has no preference, and Pi's own default (enabled) applies, so
+ * adding this file to an installation cannot disable a skill anybody already uses.
+ */
+export interface PiSkillPreferenceConfig {
+  version?: 1;
+  /** Skill names explicitly kept in the runtime list. */
+  enabled?: string[];
+  /** Skill names kept out of the runtime list. Their files are never touched. */
+  disabled?: string[];
+}
+
+export interface PiSkillInfo {
+  name: string;
+  description: string;
+  /** The skill file Pi reads, on the machine that answers the request. */
+  filePath: string;
+  baseDir: string;
+  scope: PiSkillScope;
+  origin: PiSkillOrigin;
+  /** Pi's own source label for the skill: `user`, `project`, `path`, or a package name. */
+  source: string;
+  /** The Pi package that supplies the skill, when a package does. */
+  packageSource?: string;
+  /** A package that is installed but filtered off supplies nothing, and its skills say so. */
+  ownerPackageDisabled?: boolean;
+  preference: PiSkillPreference;
+  /** Effective state of the list Pi is given: the preference, then Pi's own default of enabled. */
+  enabled: boolean;
+  /** A skill of this name from a stronger source is the one Pi keeps, so this one is not used. */
+  shadowed?: boolean;
+  validation: PiSkillValidation;
+  validationMessage?: string;
+  disableModelInvocation?: boolean;
+}
+
+export interface PiSkillsDiagnostic {
+  message: string;
+  path?: string;
+}
+
+export interface PiSkillsScopeInfo {
+  scope: PiSkillScope;
+  /** The directory Pi scans for this scope's own skills. */
+  skillsDir: string;
+  /** Where a preference for this scope is saved. */
+  configPath: string;
+  /** Project scope only: the project the request was read for, and whether Pi trusts it. */
+  projectId?: string;
+  projectPath?: string;
+  projectTrusted?: boolean;
+}
+
+export interface PiSkillsResponse {
+  skills: PiSkillInfo[];
+  diagnostics: PiSkillsDiagnostic[];
+  scopes: PiSkillsScopeInfo[];
+  /** Skill paths Pi could not read, with the reason, so the panel is not silently short. */
+  unreadablePaths?: PiSkillsDiagnostic[];
+}
+
+export interface PiSkillSetEnabledRequest {
+  name: string;
+  scope: PiSkillScope;
+  enabled: boolean;
+  /** Required for project scope: a project this machine has, resolved to its path by the server. */
+  projectId?: string;
+}
+
+export interface PiSkillSetEnabledResponse extends PiSkillsResponse {
+  /** A running session keeps the skills it loaded: the new list reaches it after a reload. */
+  requiresReload: boolean;
+}
+
+/**
+ * MCP servers, as Pi's `mcp.json` files define them.
+ *
+ * Configuration and connection are two facts, and only one of them is readable from a file. The
+ * panel therefore shows `configured` (enabled, disabled, invalid) and what a probe last answered;
+ * the live connection of a running session stays pi's to report, through its own `/mcp` manager.
+ */
+export type PiMcpScope = "global" | "project" | "extension";
+
+export type PiMcpTransport = "stdio" | "http";
+
+export type PiMcpExposure = "codemode" | "deferred" | "direct" | "hidden";
+
+export type PiMcpConfiguredState = "enabled" | "disabled" | "invalid";
+
+/** What a connection probe answered. `unprobed` means nobody has asked this server yet. */
+export type PiMcpProbeState = "unprobed" | "reachable" | "unreachable" | "needs-auth";
+
+export interface PiMcpProbe {
+  state: PiMcpProbeState;
+  /** A redacted one-line reason: never a header value, an env value, or a command's own output. */
+  message?: string;
+  /** The server's own name and version, from the `initialize` handshake. */
+  serverName?: string;
+  serverVersion?: string;
+  probedAt?: string;
+}
+
+export interface PiMcpServerInfo {
+  name: string;
+  scope: PiMcpScope;
+  transport: PiMcpTransport;
+  configured: PiMcpConfiguredState;
+  /** The `mcp.json` that defines the server. */
+  configPath: string;
+  /** The project `mcp.json` that overrides this global server's enabled / exposure keys. */
+  overridePath?: string;
+  /** A project entry that names no command or url: it only overrides a global server. */
+  overrideOnly?: boolean;
+  enabled: boolean;
+  exposure?: PiMcpExposure;
+  description?: string;
+  /** Seconds; pi's own default when it is not set. */
+  timeout?: number;
+  /** stdio only. */
+  command?: string;
+  cwd?: string;
+  /** stdio only: the names of the environment variables the server sets, never their values. */
+  envNames?: string[];
+  /** http only. */
+  url?: string;
+  /** http only: the header names the server sends, never their values. */
+  headerNames?: string[];
+  /** True when a header, env value, or command reference carries a value PI WEB does not read. */
+  usesSecrets?: boolean;
+  /** The server sends a pi provider's credential (`auth.provider`), which only global config may ask for. */
+  authProvider?: string;
+  oauthConfigured?: boolean;
+  probe?: PiMcpProbe;
+}
+
+export interface PiMcpListResponse {
+  servers: PiMcpServerInfo[];
+  /** pi's own configuration errors for the files it read. */
+  errors: string[];
+  globalConfigPath: string;
+  projectConfigPath?: string;
+  projectPath?: string;
+  projectTrusted: boolean;
+  /** False when the project scope was not read, so a reader never calls an absence an empty. */
+  projectScopeRead: boolean;
+}
+
+export interface PiMcpSetEnabledRequest {
+  name: string;
+  scope: PiMcpScope;
+  enabled: boolean;
+  /** Required for project scope: a project this machine has, resolved to its path by the server. */
+  projectId?: string;
+}
+
+export interface PiMcpRemoveRequest {
+  name: string;
+  scope: PiMcpScope;
+  projectId?: string;
+}
+
+export interface PiMcpTestRequest {
+  name: string;
+  scope: PiMcpScope;
+  projectId?: string;
+}
+
+export interface PiMcpMutationResponse extends PiMcpListResponse {
+  action: "set-enabled" | "remove" | "test";
+  name: string;
+  enabled?: boolean;
+  removed?: boolean;
+  probe?: PiMcpProbe;
+  /** A running session keeps the connections it opened: the change reaches it after a reload. */
+  requiresReload: boolean;
 }
 
 export interface PiWebConfigEnvOverrides {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PiPackagesResponse, PiWebConfigResponse, PiWebPluginsResponse } from "../../api";
-import { loadGatewaySettingsData, loadPiPackagesData } from "./settingsDataLoading";
+import type { PiMcpListResponse, PiPackagesResponse, PiSkillsResponse, PiWebConfigResponse, PiWebPluginsResponse } from "../../api";
+import { loadGatewaySettingsData, loadPiMcpData, loadPiPackagesData, loadPiSkillsData } from "./settingsDataLoading";
 
 const configResponse: PiWebConfigResponse = {
   path: "/home/test/.config/pi-web/config.json",
@@ -25,7 +25,7 @@ const pluginsResponse: PiWebPluginsResponse = {
     },
   },
 };
-const packagesResponse: PiPackagesResponse = { packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false }] };
+const packagesResponse: PiPackagesResponse = { packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, disabled: false, enabled: true }] };
 
 const remoteTarget = { id: "remote-a", name: "Lab Mac", kind: "remote" } as const;
 
@@ -65,5 +65,68 @@ describe("settings data loading helpers", () => {
     expect(success).toEqual({ packagesResponse, error: "" });
     expect(failure.packagesResponse).toBeUndefined();
     expect(failure.error).toBe("Failed to load Pi packages from Lab Mac (remote machine): Could not reach Lab Mac · trying again…");
+  });
+});
+
+const skillsResponse: PiSkillsResponse = {
+  skills: [{
+    name: "pdf",
+    description: "Work with PDF files",
+    filePath: "/pi/skills/pdf/SKILL.md",
+    baseDir: "/pi/skills/pdf",
+    scope: "global",
+    origin: "agent",
+    source: "user",
+    preference: "default",
+    enabled: true,
+    validation: "valid",
+  }],
+  diagnostics: [],
+  scopes: [{ scope: "global", skillsDir: "/pi/skills", configPath: "/pi-web/config.json" }],
+};
+
+const mcpResponse: PiMcpListResponse = {
+  servers: [{
+    name: "files",
+    scope: "global",
+    transport: "stdio",
+    configured: "enabled",
+    configPath: "/pi/mcp.json",
+    enabled: true,
+    command: "mcp-files",
+    probe: { state: "unprobed" },
+  }],
+  errors: [],
+  globalConfigPath: "/pi/mcp.json",
+  projectTrusted: false,
+  projectScopeRead: false,
+};
+
+describe("loading skills and MCP servers for a selected target", () => {
+  it("asks the machine that is selected, and hands back what that machine answered", async () => {
+    const requestedTargets: string[] = [];
+
+    const skills = await loadPiSkillsData(remoteTarget, (targetId) => {
+      requestedTargets.push(targetId);
+      return Promise.resolve(skillsResponse);
+    });
+    const mcp = await loadPiMcpData(remoteTarget, (targetId) => {
+      requestedTargets.push(targetId);
+      return Promise.resolve(mcpResponse);
+    });
+
+    expect(requestedTargets).toEqual(["remote-a", "remote-a"]);
+    expect(skills).toEqual({ skillsResponse, error: "" });
+    expect(mcp).toEqual({ mcpResponse, error: "" });
+  });
+
+  it("carries a failed read as an error naming the machine, and no rows to draw", async () => {
+    const skills = await loadPiSkillsData(remoteTarget, () => Promise.reject(new Error("Remote machine unavailable")));
+    const mcp = await loadPiMcpData(remoteTarget, () => Promise.reject(new Error("Remote machine unavailable")));
+
+    expect(skills.skillsResponse).toBeUndefined();
+    expect(mcp.mcpResponse).toBeUndefined();
+    expect(skills.error).toBe("Failed to load skills from Lab Mac (remote machine): Could not reach Lab Mac · trying again…");
+    expect(mcp.error).toBe("Failed to load MCP servers from Lab Mac (remote machine): Could not reach Lab Mac · trying again…");
   });
 });

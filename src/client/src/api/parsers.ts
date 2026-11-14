@@ -13,6 +13,17 @@ import { PI_WEB_PLUGIN_LIFECYCLE_VERSION, PROJECT_TRUST_DEFAULTS, EXTENSION_DIAL
 import { parseMachineStatusSnapshot, type MachineStatusSnapshot, type MachineStatusUiEvent } from "../../../shared/machineStatus";
 import type { ExtensionNoticeLevel, FileContentMediaType, JsonValue, MachineConnection, PiPackageInfo, PiPackageMutationAction, PiPackageMutationResponse, PiPackageScope, PiPackagesResponse, SessionActivity, SessionStartupProgressEvent, SessionsRevisionResponse, SessionTreeForkResult, SessionTreeNavigateResult, SessionTreeNode, SessionTreeNodeKind, SessionTreeSnapshot, WorkspaceProviderDiagnostic, WorkspaceProviderDiagnosticCode, WorkspaceProviderResolution, WorkspaceProviderResolutionStatus, WorkspaceProviderTier } from "../../../shared/apiTypes";
 import type { CommandResultState, OperationAppliedOutcome, OperationBatchAnswer, OperationResult, OperationStanding } from "../../../shared/apiTypes";
+import type {
+  PiMcpListResponse,
+  PiMcpMutationResponse,
+  PiMcpProbe,
+  PiMcpServerInfo,
+  PiSkillInfo,
+  PiSkillSetEnabledResponse,
+  PiSkillsDiagnostic,
+  PiSkillsResponse,
+  PiSkillsScopeInfo,
+} from "../../../shared/apiTypes";
 import type { ExtensionCompletionApplied, ExtensionCompletionSuggestions, ExtensionWidgetPlacement, PiWebFleetMachineIdentity, PiWebFleetReport, PiWebFleetRunResponse, PiWebFleetTargetOutcome, PiWebFleetTargetReport } from "../../../shared/apiTypes";
 import { parseKnownPiWebCapabilities } from "../../../shared/capabilities";
 import { parseDeprecatedAgentInputs } from "../../../shared/piWebStatusParsing";
@@ -2082,22 +2093,36 @@ export function parsePiPackageMutationResponse(value: unknown): PiPackageMutatio
   const source = optionalString(record, "source");
   const scope = record["scope"] === undefined ? undefined : parsePiPackageScope(record["scope"]);
   const removed = parseOptionalBoolean(record["removed"], "removed");
+  const enabled = parseOptionalBoolean(record["enabled"], "enabled");
+  const requiresReload = parseOptionalBoolean(record["requiresReload"], "requiresReload");
   return {
     action: parsePiPackageMutationAction(record["action"]),
     ...optionalField("source", source),
     ...optionalField("scope", scope),
     ...optionalField("removed", removed),
+    ...optionalField("enabled", enabled),
+    ...optionalField("requiresReload", requiresReload),
     packages: arrayOf(parsePiPackageInfo)(record["packages"]),
   };
 }
 
+/**
+ * A package card's state.
+ *
+ * `disabled` is read as false when the answer does not carry it, which is what a PI WEB old enough
+ * to have no switch means: the package was, and stays, enabled. A new browser must not turn a
+ * working install off because the server it reached is older.
+ */
 function parsePiPackageInfo(value: unknown): PiPackageInfo {
   const record = requireRecord(value);
+  const disabled = parseOptionalBoolean(record["disabled"], "disabled") ?? false;
   return {
     source: requireString(record, "source"),
     scope: parsePiPackageScope(record["scope"]),
     filtered: requireBoolean(record, "filtered"),
     ...optionalField("installedPath", optionalString(record, "installedPath")),
+    disabled,
+    enabled: parseOptionalBoolean(record["enabled"], "enabled") ?? !disabled,
   };
 }
 
@@ -2107,7 +2132,203 @@ function parsePiPackageScope(value: unknown): PiPackageScope {
 }
 
 function parsePiPackageMutationAction(value: unknown): PiPackageMutationAction {
-  if (value !== "install" && value !== "remove" && value !== "update") throw new Error("Invalid Pi package mutation action");
+  if (value !== "install" && value !== "remove" && value !== "update" && value !== "set-enabled") throw new Error("Invalid Pi package mutation action");
+  return value;
+}
+
+/**
+ * A value that must be one of a closed set of states.
+ *
+ * The skill and MCP shapes are strings the server picks out of a closed list, and a payload that
+ * names a state the client has not seen is malformed: the panel would render a word it cannot
+ * explain, so the read fails loudly at the boundary instead.
+ */
+function isOneOf<T extends string>(states: readonly T[], value: unknown): value is T {
+  const known: readonly string[] = states;
+  return typeof value === "string" && known.includes(value);
+}
+
+/**
+ * A collection an older machine may not answer for.
+ *
+ * A gateway written before the field existed sends nothing, and the client reads that as "not
+ * said": the collection is empty and the panel says so. A payload that names the field with the
+ * wrong shape is still a failed read.
+ */
+function arrayOrEmpty<T>(parse: (value: unknown) => T, value: unknown): T[] {
+  if (value === undefined) return [];
+  return arrayOf(parse)(value);
+}
+
+function parseState<T extends string>(states: readonly T[], value: unknown, what: string): T {
+  if (!isOneOf(states, value)) throw new Error(`Invalid ${what}`);
+  return value;
+}
+
+const PI_SKILL_SCOPES = ["global", "project"] as const;
+const PI_SKILL_ORIGINS = ["agent", "project", "package", "path"] as const;
+const PI_SKILL_PREFERENCES = ["default", "enabled", "disabled"] as const;
+const PI_SKILL_VALIDATIONS = ["valid", "warning"] as const;
+const PI_MCP_SCOPES = ["global", "project", "extension"] as const;
+const PI_MCP_TRANSPORTS = ["stdio", "http"] as const;
+const PI_MCP_CONFIGURED_STATES = ["enabled", "disabled", "invalid"] as const;
+const PI_MCP_EXPOSURES = ["codemode", "deferred", "direct", "hidden"] as const;
+const PI_MCP_PROBE_STATES = ["unprobed", "reachable", "unreachable", "needs-auth"] as const;
+const PI_MCP_MUTATION_ACTIONS = ["set-enabled", "remove", "test"] as const;
+
+/**
+ * Skills as this machine discovered them, with PI WEB's saved preferences applied.
+ *
+ * A scope the server did not read is simply absent from `scopes`, and this parser never invents a
+ * row for it: the panel reads that absence as "not read", never as "nothing configured".
+ *
+ * A gateway older than `scopes`, `diagnostics` and `unreadablePaths` answers without those fields,
+ * and each is read as "not said" - the empty collection - so a short answer from an older machine
+ * never reaches the panel as "this machine has none".
+ */
+export function parsePiSkillsResponse(value: unknown): PiSkillsResponse {
+  const record = requireRecord(value);
+  const unreadablePaths = record["unreadablePaths"] === undefined ? undefined : arrayOf(parsePiSkillsDiagnostic)(record["unreadablePaths"]);
+  return {
+    skills: arrayOf(parsePiSkillInfo)(record["skills"]),
+    diagnostics: arrayOrEmpty(parsePiSkillsDiagnostic, record["diagnostics"]),
+    scopes: arrayOrEmpty(parsePiSkillsScopeInfo, record["scopes"]),
+    ...optionalField("unreadablePaths", unreadablePaths),
+  };
+}
+
+export function parsePiSkillSetEnabledResponse(value: unknown): PiSkillSetEnabledResponse {
+  const record = requireRecord(value);
+  return { ...parsePiSkillsResponse(value), requiresReload: requireBoolean(record, "requiresReload") };
+}
+
+/**
+ * One skill row.
+ *
+ * A gateway older than the skill `description` sends rows without it, and the missing description
+ * is read as "not said" - an empty string, which the panel renders as nothing - while every field
+ * the older machine does answer for, including `origin`, `preference` and `validation`, stays
+ * required: a row that cannot say where a skill came from is a failed read, not a plain row.
+ */
+function parsePiSkillInfo(value: unknown): PiSkillInfo {
+  const record = requireRecord(value);
+  return {
+    name: requireString(record, "name"),
+    description: optionalString(record, "description") ?? "",
+    filePath: requireString(record, "filePath"),
+    baseDir: requireString(record, "baseDir"),
+    scope: parseState(PI_SKILL_SCOPES, record["scope"], "Pi skill scope"),
+    origin: parseState(PI_SKILL_ORIGINS, record["origin"], "Pi skill origin"),
+    source: requireString(record, "source"),
+    ...optionalField("packageSource", optionalString(record, "packageSource")),
+    ...optionalField("ownerPackageDisabled", parseOptionalBoolean(record["ownerPackageDisabled"], "ownerPackageDisabled")),
+    preference: parseState(PI_SKILL_PREFERENCES, record["preference"], "Pi skill preference"),
+    enabled: requireBoolean(record, "enabled"),
+    ...optionalField("shadowed", parseOptionalBoolean(record["shadowed"], "shadowed")),
+    validation: parseState(PI_SKILL_VALIDATIONS, record["validation"], "Pi skill validation"),
+    ...optionalField("validationMessage", optionalString(record, "validationMessage")),
+    ...optionalField("disableModelInvocation", parseOptionalBoolean(record["disableModelInvocation"], "disableModelInvocation")),
+  };
+}
+
+function parsePiSkillsScopeInfo(value: unknown): PiSkillsScopeInfo {
+  const record = requireRecord(value);
+  return {
+    scope: parseState(PI_SKILL_SCOPES, record["scope"], "Pi skill scope"),
+    skillsDir: requireString(record, "skillsDir"),
+    configPath: requireString(record, "configPath"),
+    ...optionalField("projectId", optionalString(record, "projectId")),
+    ...optionalField("projectPath", optionalString(record, "projectPath")),
+    ...optionalField("projectTrusted", parseOptionalBoolean(record["projectTrusted"], "projectTrusted")),
+  };
+}
+
+function parsePiSkillsDiagnostic(value: unknown): PiSkillsDiagnostic {
+  const record = requireRecord(value);
+  return {
+    message: requireString(record, "message"),
+    ...optionalField("path", optionalString(record, "path")),
+  };
+}
+
+/**
+ * MCP servers as pi's `mcp.json` files define them.
+ *
+ * A gateway older than `errors`, `globalConfigPath`, `projectTrusted` and `projectScopeRead`
+ * answers without those fields, and each is read as "not said": `errors` is the empty list, the
+ * global config path is empty so the panel shows no path, and a missing `projectScopeRead` stays
+ * false, which keeps the panel on its "the project scope was not read" line instead of letting a
+ * short answer read as "this machine has no servers". A per-server field the older machine did not
+ * send - `command`, `url`, `envNames`, `headerNames`, `probe` - stays absent, and the row
+ * says only what the machine did say about it.
+ */
+export function parsePiMcpListResponse(value: unknown): PiMcpListResponse {
+  const record = requireRecord(value);
+  return {
+    servers: arrayOf(parsePiMcpServerInfo)(record["servers"]),
+    errors: optionalStringList(record["errors"], "errors") ?? [],
+    globalConfigPath: optionalString(record, "globalConfigPath") ?? "",
+    ...optionalField("projectConfigPath", optionalString(record, "projectConfigPath")),
+    ...optionalField("projectPath", optionalString(record, "projectPath")),
+    projectTrusted: parseOptionalBoolean(record["projectTrusted"], "projectTrusted") ?? false,
+    projectScopeRead: parseOptionalBoolean(record["projectScopeRead"], "projectScopeRead") ?? false,
+  };
+}
+
+export function parsePiMcpMutationResponse(value: unknown): PiMcpMutationResponse {
+  const record = requireRecord(value);
+  const probe = record["probe"] === undefined ? undefined : parsePiMcpProbe(record["probe"]);
+  return {
+    ...parsePiMcpListResponse(value),
+    action: parseState(PI_MCP_MUTATION_ACTIONS, record["action"], "Pi MCP mutation action"),
+    name: requireString(record, "name"),
+    ...optionalField("enabled", parseOptionalBoolean(record["enabled"], "enabled")),
+    ...optionalField("removed", parseOptionalBoolean(record["removed"], "removed")),
+    ...optionalField("probe", probe),
+    requiresReload: requireBoolean(record, "requiresReload"),
+  };
+}
+
+function parsePiMcpServerInfo(value: unknown): PiMcpServerInfo {
+  const record = requireRecord(value);
+  return {
+    name: requireString(record, "name"),
+    scope: parseState(PI_MCP_SCOPES, record["scope"], "Pi MCP scope"),
+    transport: parseState(PI_MCP_TRANSPORTS, record["transport"], "Pi MCP transport"),
+    configured: parseState(PI_MCP_CONFIGURED_STATES, record["configured"], "Pi MCP configured state"),
+    configPath: requireString(record, "configPath"),
+    ...optionalField("overridePath", optionalString(record, "overridePath")),
+    ...optionalField("overrideOnly", parseOptionalBoolean(record["overrideOnly"], "overrideOnly")),
+    enabled: requireBoolean(record, "enabled"),
+    ...optionalField("exposure", record["exposure"] === undefined ? undefined : parseState(PI_MCP_EXPOSURES, record["exposure"], "Pi MCP exposure")),
+    ...optionalField("description", optionalString(record, "description")),
+    ...optionalField("command", optionalString(record, "command")),
+    ...optionalField("cwd", optionalString(record, "cwd")),
+    ...optionalField("envNames", optionalStringList(record["envNames"], "envNames")),
+    ...optionalField("url", optionalString(record, "url")),
+    ...optionalField("headerNames", optionalStringList(record["headerNames"], "headerNames")),
+    ...optionalField("timeout", optionalNumber(record, "timeout")),
+    ...optionalField("usesSecrets", parseOptionalBoolean(record["usesSecrets"], "usesSecrets")),
+    ...optionalField("authProvider", optionalString(record, "authProvider")),
+    ...optionalField("oauthConfigured", parseOptionalBoolean(record["oauthConfigured"], "oauthConfigured")),
+    ...optionalField("probe", record["probe"] === undefined ? undefined : parsePiMcpProbe(record["probe"])),
+  };
+}
+
+function parsePiMcpProbe(value: unknown): PiMcpProbe {
+  const record = requireRecord(value);
+  return {
+    state: parseState(PI_MCP_PROBE_STATES, record["state"], "Pi MCP probe state"),
+    ...optionalField("message", optionalString(record, "message")),
+    ...optionalField("serverName", optionalString(record, "serverName")),
+    ...optionalField("serverVersion", optionalString(record, "serverVersion")),
+    ...optionalField("probedAt", optionalString(record, "probedAt")),
+  };
+}
+
+function optionalStringList(value: unknown, field: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!isStringArray(value)) throw new Error(`Expected string array field: ${field}`);
   return value;
 }
 

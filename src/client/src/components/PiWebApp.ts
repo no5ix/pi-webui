@@ -88,7 +88,7 @@ import { workspaceViewTransition } from "../workspaceViewTransition";
 import { RealtimeSocket, type BrowserRealtimeEvent } from "../sessionSocket";
 import { refreshOnReturn, workspaceChangeVerdict, type WorkspaceScope } from "../workspaceChange";
 import type { PluginMachine, PluginProjectCreateInput, PluginPromptEditor, QualifiedContributionId, QualifiedThemeContribution, QualifiedThemePairContribution, QualifiedWorkspacePanelContribution, QualifiedGlobalPanelContribution, GlobalPanelContext, PluginRuntimeContext, QualifiedPluginAction, TerminalCommandRunsInternalRuntime, WorkspaceFiles, WorkspaceHost, WorkspaceLabelContext, WorkspaceLabelItem, WorkspacePanelContext, WorkspacePluginBinding, PluginDialog, PluginDialogHandle, NavSectionContext, PluginSettings } from "../plugins/types";
-import { CORE_MATERIAL_LIGHT_THEME_ID, isNativeThemeId, applyNativeMaterialLightTheme, CORE_MATERIAL_DARK_THEME_ID, DEFAULT_THEME_PREFERENCE, NATIVE_THEME_CHOICES, applyNativeMaterialDarkTheme, applyPiWebTheme, findThemePairForTheme, readStoredThemePreference, resolveThemePreference, resolvedThemePreferenceId, selectableThemeContributions, serializedThemePreference, writeStoredThemePreference, type ThemePreference, type ThemePreferenceResolution } from "../theme";
+import { CORE_MATERIAL_LIGHT_THEME_ID, isNativeThemeId, CORE_MATERIAL_DARK_THEME_ID, applyNativeThemeById, nativeThemePairContribution, resolveNativeThemePaint, DEFAULT_THEME_PREFERENCE, NATIVE_THEME_CHOICES, applyPiWebTheme, findThemePairForTheme, readStoredThemePreference, resolveThemePreference, resolvedThemePreferenceId, selectableThemeContributions, serializedThemePreference, writeStoredThemePreference, type NativeThemePaint, type ThemePreference, type ThemePreferenceResolution } from "../theme";
 import { corePlugin } from "../plugins/core";
 import { loadExternalPlugins, type ExternalPluginLoadResult } from "../plugins/external";
 import { createPluginLoadRetry } from "../plugins/pluginLoadRetry";
@@ -6044,16 +6044,14 @@ export class PiWebApp extends LitElement {
     if (theme === undefined) {
       const native = isNativeThemeId(this.themePreference.themeId);
       if (!native && !this.themePluginsSettled) return;
-      const followsSystem = this.themePreference.auto || !native;
-      const nativeId = followsSystem
-        ? (this.systemPrefersLight() ? CORE_MATERIAL_LIGHT_THEME_ID : CORE_MATERIAL_DARK_THEME_ID)
-        : (this.themePreference.themeId === CORE_MATERIAL_LIGHT_THEME_ID ? CORE_MATERIAL_LIGHT_THEME_ID : CORE_MATERIAL_DARK_THEME_ID);
-      if (this.activeThemeId === nativeId && this.paintedPreference === preference) return;
-      this.activeThemeId = nativeId;
+      const paint: NativeThemePaint = native
+        ? resolveNativeThemePaint(this.themePreference, this.systemPrefersLight())
+        : { themeId: this.systemPrefersLight() ? CORE_MATERIAL_LIGHT_THEME_ID : CORE_MATERIAL_DARK_THEME_ID, followsSystem: true };
+      if (this.activeThemeId === paint.themeId && this.paintedPreference === preference) return;
+      this.activeThemeId = paint.themeId;
       this.paintedPreference = preference;
-      if (nativeId === CORE_MATERIAL_LIGHT_THEME_ID) applyNativeMaterialLightTheme({ preference, followsSystem });
-      else applyNativeMaterialDarkTheme({ preference, followsSystem });
-      this.plugins.emit({ kind: "theme-applied", themeId: nativeId });
+      applyNativeThemeById(paint.themeId, { preference, followsSystem: paint.followsSystem });
+      this.plugins.emit({ kind: "theme-applied", themeId: paint.themeId });
       return;
     }
     if (theme.id === this.activeThemeId && this.paintedPreference === preference) return;
@@ -6079,7 +6077,7 @@ export class PiWebApp extends LitElement {
   }
 
   private themePairForTheme(themeId: QualifiedContributionId): QualifiedThemePairContribution | undefined {
-    return findThemePairForTheme(this.plugins.getThemePairs(), themeId);
+    return findThemePairForTheme(this.plugins.getThemePairs(), themeId) ?? nativeThemePairContribution(themeId);
   }
 
   private systemPrefersLight(): boolean {
@@ -6088,7 +6086,11 @@ export class PiWebApp extends LitElement {
 
   private autoThemeDescription(resolution: ThemePreferenceResolution): string {
     if (!this.themePreference.auto) return "Follow the system light/dark preference when the selected theme has a pair.";
-    if (resolution.selectedTheme === undefined) return "Follow the system light/dark preference when the selected theme has a pair.";
+    if (resolution.selectedTheme === undefined) {
+      const nativePair = nativeThemePairContribution(this.themePreference.themeId);
+      if (nativePair !== undefined) return `On · ${nativePair.name} follows the system ${this.systemPrefersLight() ? "light" : "dark"} preference.`;
+      return "Follow the system light/dark preference when the selected theme has a pair.";
+    }
     if (resolution.selectedThemePair === undefined) return "On, but the selected theme has no light/dark pair, so it will stay selected.";
     return `On · ${resolution.selectedThemePair.name} follows the system ${this.systemPrefersLight() ? "light" : "dark"} preference.`;
   }

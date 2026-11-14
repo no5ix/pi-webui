@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Workspace } from "../../../shared/apiTypes";
-import { FEDERATED_HTTP_ROUTES, FEDERATED_WEBSOCKET_ROUTES, SESSION_TREE_FORK_PROXY_TIMEOUT_MS, PLUGIN_BACKEND_FEDERATION_TIMEOUT_MS, SESSION_TREE_NAVIGATION_PROXY_TIMEOUT_MS, WORKSPACE_FILE_PREVIEW_ROUTE_PATH, WORKSPACE_REMOVAL_FEDERATION_TIMEOUT_MS, type FederatedHttpRouteSpec } from "../../../shared/federatedRoutes";
+import { FEDERATED_HTTP_ROUTES, FEDERATED_WEBSOCKET_ROUTES, SESSION_TREE_FORK_PROXY_TIMEOUT_MS, PLUGIN_BACKEND_FEDERATION_TIMEOUT_MS, SESSION_TREE_NAVIGATION_PROXY_TIMEOUT_MS, WORKSPACE_FILE_PREVIEW_ROUTE_PATH, WORKSPACE_REMOVAL_FEDERATION_TIMEOUT_MS, MCP_TEST_PROXY_TIMEOUT_MS, PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS, type FederatedHttpRouteSpec } from "../../../shared/federatedRoutes";
 import { MAX_INLINE_PREVIEW_BYTES } from "../../../shared/workspaceFiles";
 import { PLUGIN_BACKEND_REQUEST_BODY_MAX_BYTES, PLUGIN_BACKEND_RESPONSE_BODY_MAX_BYTES } from "../../../shared/pluginBackendProtocol";
-import { configApi, filesApi, machineStatusApi, piPackagesApi, piWebApi, pluginsApi, projectsApi, sessionPinsApi, sessionsApi, terminalsApi, trustApi, workspacesApi } from "./clients";
+import { configApi, filesApi, machineStatusApi, piMcpApi, piPackagesApi, piSkillsApi, piWebApi, pluginsApi, projectsApi, sessionPinsApi, sessionsApi, terminalsApi, trustApi, workspacesApi } from "./clients";
 import { machineTerminalSocket, realtimeEvents, sessionEvents, terminalSocket } from "./sockets";
 import { requestPluginBackend } from "./pluginBackends";
 import { workspaceFilePreviewUrl, workspaceFileStageUrl } from "./urls";
@@ -113,6 +113,27 @@ describe("federated route contract", () => {
     expect(FEDERATED_WEBSOCKET_ROUTES.some((path) => path.includes("trust"))).toBe(false);
   });
 
+  it("allowlists the skills and MCP routes on both scopes, and nothing beyond them", () => {
+    expect(FEDERATED_HTTP_ROUTES.filter((route) => route.path.includes("pi-skills"))).toEqual([
+      { method: "GET", path: "/pi-skills" },
+      { method: "POST", path: "/pi-skills/set-enabled", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+    ]);
+    expect(FEDERATED_HTTP_ROUTES.filter((route) => route.path.includes("pi-mcp"))).toEqual([
+      { method: "GET", path: "/pi-mcp" },
+      { method: "POST", path: "/pi-mcp/set-enabled", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+      { method: "POST", path: "/pi-mcp/remove", timeoutMs: PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS },
+      { method: "POST", path: "/pi-mcp/test", timeoutMs: MCP_TEST_PROXY_TIMEOUT_MS },
+    ]);
+    expect(FEDERATED_WEBSOCKET_ROUTES.some((path) => path.includes("pi-skills") || path.includes("pi-mcp"))).toBe(false);
+  });
+
+  it("gives a proxied connection test more room than a probe is allowed to take", () => {
+    // The probe's own ceiling (a server answer) is 30s of handshake plus a spawn; the proxy must not
+    // cut a probe that is answering inside its contract, so the route budget is strictly larger.
+    expect(MCP_TEST_PROXY_TIMEOUT_MS).toBeGreaterThan(35_000);
+    expect(PI_PACKAGE_MUTATION_PROXY_TIMEOUT_MS).toBeGreaterThan(MCP_TEST_PROXY_TIMEOUT_MS);
+  });
+
   it("allowlists the model catalog read and per-model enable edit without a new WebSocket", () => {
     expect(FEDERATED_HTTP_ROUTES.filter((route) => route.path.includes("/models"))).toEqual([
       { method: "GET", path: "/sessions/:sessionId/models" },
@@ -136,6 +157,16 @@ describe("federated route contract", () => {
       ignoreParseFailure(piPackagesApi.install("npm:@acme/tools", machineId)),
       ignoreParseFailure(piPackagesApi.remove("npm:@acme/tools", "user", machineId)),
       ignoreParseFailure(piPackagesApi.update("npm:@acme/tools", machineId)),
+      ignoreParseFailure(piPackagesApi.setEnabled({ source: "npm:@acme/tools", scope: "user", enabled: false }, machineId)),
+      ignoreParseFailure(piSkillsApi.list(undefined, machineId)),
+      ignoreParseFailure(piSkillsApi.list("p 1", machineId)),
+      ignoreParseFailure(piSkillsApi.setEnabled({ name: "pdf", scope: "global", enabled: false }, machineId)),
+      ignoreParseFailure(piSkillsApi.setEnabled({ name: "pdf", scope: "project", enabled: true, projectId: "p 1" }, machineId)),
+      ignoreParseFailure(piMcpApi.list(undefined, machineId)),
+      ignoreParseFailure(piMcpApi.list("p 1", machineId)),
+      ignoreParseFailure(piMcpApi.setEnabled({ name: "files", scope: "global", enabled: false }, machineId)),
+      ignoreParseFailure(piMcpApi.remove({ name: "files", scope: "project", projectId: "p 1" }, machineId)),
+      ignoreParseFailure(piMcpApi.test({ name: "files", scope: "global" }, machineId)),
       ignoreParseFailure(machineStatusApi.machineStatus(machineId)),
       ignoreParseFailure(projectsApi.projects(machineId)),
       ignoreParseFailure(projectsApi.addProject("/repo", "Repo", false, machineId)),

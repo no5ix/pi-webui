@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXTENSION_DIALOG_PROSE_MAX_LENGTH, EXTENSION_DIALOG_TEXT_MAX_LENGTH, SESSION_NOTIFICATION_LIMIT, SESSION_NOTIFICATION_MESSAGE_BYTES, SESSION_UNREAD_CATALOG_ID_MAX_LENGTH } from "../../../shared/apiTypes";
-import { parseAuthProvidersResponse, parseCommandResult, parseExtensionDialogCloseResponse, parseFileContentResponse, parseFileSuggestion, parseMachineRuntime, parseMessagePage, parseOAuthFlowState, parsePiPackageMutationResponse, parsePiPackagesResponse, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parsePiWebStatusResponse, parseSessionBulkArchiveResponse, parseSessionBulkDeleteArchivedResponse, parseSessionCleanupExecuteResponse, parseSessionCleanupPreviewResponse, parseSessionInfo, parseSessionModelCatalogResponse, parseSessionNotificationInboxEvent, parseSessionNotificationInboxSnapshot, parseSessionStartupProgressEvent, parseSessionStatus, parseSessionStreamSnapshot, parseSessionTreeForkResult, parseSessionTreeNavigateResult, parseSessionTreeSnapshot, parseSessionUnreadCatalogSnapshot, parseSessionUnreadEvent, parseSlashCommand, parseTerminalCommandRun, parseTerminalInfo, parseWorkspace, parseWorkspaceProviderResolution, parseSessionsRevisionResponse } from "./parsers";
+import { parseAuthProvidersResponse, parseCommandResult, parseExtensionDialogCloseResponse, parseFileContentResponse, parseFileSuggestion, parseMachineRuntime, parseMessagePage, parseOAuthFlowState, parsePiMcpListResponse, parsePiMcpMutationResponse, parsePiPackageMutationResponse, parsePiPackagesResponse, parsePiSkillSetEnabledResponse, parsePiSkillsResponse, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parsePiWebStatusResponse, parseSessionBulkArchiveResponse, parseSessionBulkDeleteArchivedResponse, parseSessionCleanupExecuteResponse, parseSessionCleanupPreviewResponse, parseSessionInfo, parseSessionModelCatalogResponse, parseSessionNotificationInboxEvent, parseSessionNotificationInboxSnapshot, parseSessionStartupProgressEvent, parseSessionStatus, parseSessionStreamSnapshot, parseSessionTreeForkResult, parseSessionTreeNavigateResult, parseSessionTreeSnapshot, parseSessionUnreadCatalogSnapshot, parseSessionUnreadEvent, parseSlashCommand, parseTerminalCommandRun, parseTerminalInfo, parseWorkspace, parseWorkspaceProviderResolution, parseSessionsRevisionResponse } from "./parsers";
 
 describe("API parsers", () => {
   it("preserves interactive API-key flow hints and defaults providers without one", () => {
@@ -187,11 +187,11 @@ describe("API parsers", () => {
 
   it("parses Pi package list and mutation responses", () => {
     const packages = [
-      { source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" },
-      { source: "../project-tools", scope: "project", filtered: true },
+      { source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools", disabled: false, enabled: true },
+      { source: "../project-tools", scope: "project", filtered: true, disabled: true, enabled: false },
     ];
 
-    expect(parsePiPackagesResponse({ packages })).toEqual({ packages });
+    expect(parsePiPackagesResponse({ packages: packages.map(({ disabled, enabled, ...row }) => ({ ...row, ...(disabled ? { disabled } : {}), ...(enabled ? { enabled } : {}) })) })).toEqual({ packages });
     expect(parsePiPackageMutationResponse({ action: "remove", source: "../project-tools", scope: "project", removed: true, packages })).toEqual({
       action: "remove",
       source: "../project-tools",
@@ -205,6 +205,119 @@ describe("API parsers", () => {
     expect(() => parsePiPackagesResponse({ packages: [{ source: "npm:@acme/tools", scope: "global", filtered: false }] })).toThrow("Invalid Pi package scope");
     expect(() => parsePiPackageMutationResponse({ action: "sync", packages: [] })).toThrow("Invalid Pi package mutation action");
     expect(() => parsePiPackagesResponse({ packages: [{ source: "npm:@acme/tools", scope: "user", filtered: "no" }] })).toThrow("Expected boolean field: filtered");
+  });
+
+  it("parses the package set-enabled mutation, with the reload answer it must not lose", () => {
+    expect(parsePiPackageMutationResponse({ action: "set-enabled", source: "npm:@acme/tools", scope: "user", enabled: false, requiresReload: true, packages: [{ source: "npm:@acme/tools", scope: "user", filtered: true, disabled: true, enabled: false }] })).toEqual({
+      action: "set-enabled",
+      source: "npm:@acme/tools",
+      scope: "user",
+      enabled: false,
+      requiresReload: true,
+      packages: [{ source: "npm:@acme/tools", scope: "user", filtered: true, disabled: true, enabled: false }],
+    });
+  });
+
+  it("parses the skill list, keeping the saved preference apart from what Pi loaded", () => {
+    const skill = {
+      name: "commit",
+      description: "Write a commit message",
+      filePath: "/pi/skills/commit/SKILL.md",
+      baseDir: "/pi/skills/commit",
+      scope: "global",
+      origin: "agent",
+      source: "user",
+      preference: "disabled",
+      enabled: false,
+      validation: "valid",
+    };
+    const scope = { scope: "global", skillsDir: "/pi/skills", configPath: "/config/pi-web/config.json" };
+
+    expect(parsePiSkillsResponse({ skills: [skill], diagnostics: [{ message: "name mismatch", path: "/pi/skills/commit/SKILL.md" }], scopes: [scope], unreadablePaths: [{ message: "not readable", path: "/pi/skills/gone" }] })).toEqual({
+      skills: [skill],
+      diagnostics: [{ message: "name mismatch", path: "/pi/skills/commit/SKILL.md" }],
+      scopes: [scope],
+      unreadablePaths: [{ message: "not readable", path: "/pi/skills/gone" }],
+    });
+
+    expect(parsePiSkillsResponse({ skills: [], diagnostics: [], scopes: [] })).toEqual({ skills: [], diagnostics: [], scopes: [] });
+  });
+
+  it("parses the package and project fields of a skill row", () => {
+    const parsed = parsePiSkillsResponse({
+      skills: [{ name: "deploy", description: "Deploy", filePath: "/pkg/skills/deploy/SKILL.md", baseDir: "/pkg/skills/deploy", scope: "project", origin: "package", source: "npm:@acme/tools", packageSource: "npm:@acme/tools", ownerPackageDisabled: true, preference: "default", enabled: false, shadowed: true, validation: "warning", validationMessage: "front matter is short", disableModelInvocation: true }],
+      diagnostics: [],
+      scopes: [{ scope: "project", skillsDir: "/repo/.pi/skills", configPath: "/repo/.pi-web/config.json", projectId: "p 1", projectPath: "/repo", projectTrusted: false }],
+    });
+
+    expect(parsed.skills[0]).toMatchObject({ packageSource: "npm:@acme/tools", ownerPackageDisabled: true, shadowed: true, validation: "warning", validationMessage: "front matter is short", disableModelInvocation: true });
+    expect(parsed.scopes[0]).toEqual({ scope: "project", skillsDir: "/repo/.pi/skills", configPath: "/repo/.pi-web/config.json", projectId: "p 1", projectPath: "/repo", projectTrusted: false });
+  });
+
+  it("requires the reload answer of a skill set-enabled response", () => {
+    expect(parsePiSkillSetEnabledResponse({ skills: [], diagnostics: [], scopes: [], requiresReload: true })).toEqual({ skills: [], diagnostics: [], scopes: [], requiresReload: true });
+    expect(() => parsePiSkillSetEnabledResponse({ skills: [], diagnostics: [], scopes: [] })).toThrow("Expected boolean field: requiresReload");
+  });
+
+  it("refuses a skills payload that does not carry the skills, and reads one from an older machine", () => {
+    const row = { name: "commit", description: "", filePath: "/p", baseDir: "/p", scope: "global", origin: "agent", source: "user", preference: "default", enabled: true, validation: "valid" };
+    expect(() => parsePiSkillsResponse({ skills: [{ ...row, scope: "machine" }], diagnostics: [], scopes: [] })).toThrow("Invalid Pi skill scope");
+    expect(() => parsePiSkillsResponse({ skills: [{ ...row, origin: "native" }], diagnostics: [], scopes: [] })).toThrow("Invalid Pi skill origin");
+    expect(() => parsePiSkillsResponse({ skills: [{ ...row, preference: "on" }], diagnostics: [], scopes: [] })).toThrow("Invalid Pi skill preference");
+    expect(() => parsePiSkillsResponse({ skills: [{ ...row, validation: "name-mismatch" }], diagnostics: [], scopes: [] })).toThrow("Invalid Pi skill validation");
+    expect(() => parsePiSkillsResponse({ skills: "pdf", diagnostics: [], scopes: [] })).toThrow("Expected array response");
+    expect(() => parsePiSkillsResponse({ skills: [], diagnostics: [{ message: 4 }], scopes: [] })).toThrow("Expected string field: message");
+
+    const older = parsePiSkillsResponse({ skills: [row] });
+    expect(older.scopes).toEqual([]);
+    expect(older.diagnostics).toEqual([]);
+    expect(older.unreadablePaths).toBeUndefined();
+  });
+
+  it("parses MCP servers as names, and requires the answer about the project scope", () => {
+    const stdio = { name: "acme", scope: "global", transport: "stdio", configured: "enabled", configPath: "/pi/mcp.json", enabled: true, exposure: "direct", command: "npx", cwd: "/repo", envNames: ["ACME_TOKEN"], usesSecrets: true, timeout: 5, probe: { state: "unprobed" } };
+    const http = { name: "remote", scope: "project", transport: "http", configured: "disabled", configPath: "/repo/.pi/mcp.json", overridePath: "/repo/.pi/mcp.json", overrideOnly: true, enabled: false, url: "https://mcp.example.test/mcp", headerNames: ["Authorization"], authProvider: "acme", oauthConfigured: true, probe: { state: "needs-auth", message: "sign in", serverName: "acme-mcp", serverVersion: "1.2.3", probedAt: "2026-07-01T00:00:00.000Z" } };
+
+    expect(parsePiMcpListResponse({ servers: [stdio, http], errors: ["bad entry"], globalConfigPath: "/pi/mcp.json", projectConfigPath: "/repo/.pi/mcp.json", projectPath: "/repo", projectTrusted: true, projectScopeRead: true })).toEqual({
+      servers: [stdio, http],
+      errors: ["bad entry"],
+      globalConfigPath: "/pi/mcp.json",
+      projectConfigPath: "/repo/.pi/mcp.json",
+      projectPath: "/repo",
+      projectTrusted: true,
+      projectScopeRead: true,
+    });
+  });
+
+  it("parses an MCP mutation by action, and rejects one that hides whether it wrote", () => {
+    const list = { servers: [], errors: [], globalConfigPath: "/pi/mcp.json", projectTrusted: false, projectScopeRead: false };
+
+    expect(parsePiMcpMutationResponse({ ...list, action: "set-enabled", name: "acme", enabled: false, requiresReload: true })).toEqual({ ...list, action: "set-enabled", name: "acme", enabled: false, requiresReload: true });
+    expect(parsePiMcpMutationResponse({ ...list, action: "remove", name: "acme", removed: false, requiresReload: true })).toEqual({ ...list, action: "remove", name: "acme", removed: false, requiresReload: true });
+    expect(parsePiMcpMutationResponse({ ...list, action: "test", name: "acme", probe: { state: "reachable", serverName: "acme-mcp" }, requiresReload: false })).toEqual({ ...list, action: "test", name: "acme", probe: { state: "reachable", serverName: "acme-mcp" }, requiresReload: false });
+    expect(() => parsePiMcpMutationResponse({ ...list, action: "install", name: "acme", requiresReload: true })).toThrow("Invalid Pi MCP mutation action");
+    expect(() => parsePiMcpMutationResponse({ ...list, action: "test", name: "acme" })).toThrow("Expected boolean field: requiresReload");
+  });
+
+  it("refuses a malformed MCP response, and reads one from an older machine that says nothing about the project scope", () => {
+    const row = { name: "acme", scope: "global", transport: "stdio", configured: "enabled", configPath: "/pi/mcp.json", enabled: true, command: "npx", probe: { state: "unprobed" } };
+    const list = { servers: [], errors: [], globalConfigPath: "/pi/mcp.json", projectTrusted: false, projectScopeRead: false };
+
+    const older = parsePiMcpListResponse({ servers: [row] });
+    expect(older.servers[0]?.name).toBe("acme");
+    expect(older.errors).toEqual([]);
+    expect(older.globalConfigPath).toBe("");
+    expect(older.projectConfigPath).toBeUndefined();
+    expect(older.projectTrusted).toBe(false);
+    expect(older.projectScopeRead).toBe(false);
+    expect(() => parsePiMcpListResponse({ ...list, servers: "acme" })).toThrow("Expected array response");
+    expect(() => parsePiMcpListResponse({ ...list, servers: [{ ...row, transport: "sse" }] })).toThrow("Invalid Pi MCP transport");
+    expect(() => parsePiMcpListResponse({ ...list, servers: [{ ...row, scope: "machine" }] })).toThrow("Invalid Pi MCP scope");
+    expect(() => parsePiMcpListResponse({ ...list, servers: [{ ...row, configured: "on" }] })).toThrow("Invalid Pi MCP configured state");
+    expect(() => parsePiMcpListResponse({ ...list, servers: [{ ...row, exposure: "public" }] })).toThrow("Invalid Pi MCP exposure");
+    expect(() => parsePiMcpListResponse({ ...list, servers: [{ ...row, probe: { state: "connected" } }] })).toThrow("Invalid Pi MCP probe state");
+    expect(() => parsePiMcpListResponse({ ...list, servers: [{ ...row, envNames: "ACME_TOKEN" }] })).toThrow("Expected string array field: envNames");
+    expect(() => parsePiMcpListResponse({ ...list, errors: [4] })).toThrow("Expected string array field: errors");
   });
 
   it("parses Docker PI WEB installation metadata", () => {

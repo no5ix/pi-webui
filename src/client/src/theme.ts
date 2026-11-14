@@ -1,11 +1,16 @@
 import { applyThemeFavicon } from "./themeFavicon";
+import { applyThemeMetaColor } from "./themeMetaColor";
 import type { QualifiedContributionId, QualifiedThemeContribution, QualifiedThemePairContribution, ThemeToken } from "./plugins/types";
 import { CORE_MATERIAL_DARK_THEME_ID, CORE_MATERIAL_DARK_TOKENS } from "./nativeDarkTheme";
 import { CORE_MATERIAL_LIGHT_THEME_ID, CORE_MATERIAL_LIGHT_TOKENS } from "./nativeLightTheme";
+import { CORE_BUILTIN_DARK_THEME_ID, CORE_BUILTIN_DARK_TOKENS } from "./builtinDarkTheme";
+import { CORE_BUILTIN_LIGHT_THEME_ID, CORE_BUILTIN_LIGHT_TOKENS } from "./builtinLightTheme";
 import { rememberPaintedTheme, type PaintScope } from "./themePaint";
 
 export { CORE_MATERIAL_DARK_THEME_ID } from "./nativeDarkTheme";
 export { CORE_MATERIAL_LIGHT_THEME_ID } from "./nativeLightTheme";
+export { CORE_BUILTIN_DARK_THEME_ID } from "./builtinDarkTheme";
+export { CORE_BUILTIN_LIGHT_THEME_ID } from "./builtinLightTheme";
 
 export interface ThemePreference {
   themeId: QualifiedContributionId;
@@ -28,9 +33,36 @@ export interface ThemePreferenceResolution {
 type NativeThemeChoice = Pick<QualifiedThemeContribution, "id" | "name" | "colorScheme" | "tokens"> & { description: string };
 
 /** The app's own looks, offered in the Actions theme picker as Settings → Appearance offers them. */
-export const NATIVE_THEME_CHOICES: readonly [NativeThemeChoice, NativeThemeChoice] = [
+export const NATIVE_THEME_CHOICES: readonly NativeThemeChoice[] = [
   { id: CORE_MATERIAL_DARK_THEME_ID, name: "Material Dark (native)", description: "The app's built-in dark palette.", colorScheme: "dark", tokens: CORE_MATERIAL_DARK_TOKENS },
   { id: CORE_MATERIAL_LIGHT_THEME_ID, name: "Material Light (native)", description: "The app's built-in light palette.", colorScheme: "light", tokens: CORE_MATERIAL_LIGHT_TOKENS },
+  { id: CORE_BUILTIN_DARK_THEME_ID, name: "Builtin Dark", description: "Neutral charcoal look: soft-white text, quiet surfaces, one restrained accent.", colorScheme: "dark", tokens: CORE_BUILTIN_DARK_TOKENS },
+  { id: CORE_BUILTIN_LIGHT_THEME_ID, name: "Builtin Light", description: "Neutral light look: a white page, near-white surfaces, subtle borders.", colorScheme: "light", tokens: CORE_BUILTIN_LIGHT_TOKENS },
+];
+
+/**
+ * A native theme pair, the core's own answer to "follow the system light/dark preference".
+ *
+ * Plugin themes declare pairs through the plugin API, and `resolveThemePreference` pairs them.
+ * The core's looks are not plugin contributions, so their pairs live here: a saved preference that
+ * asks to follow the system switches inside its own pair, and Material keeps switching between
+ * Material dark and light exactly as it always did.
+ */
+export interface NativeThemePair {
+  readonly name: string;
+  readonly dark: QualifiedContributionId;
+  readonly light: QualifiedContributionId;
+}
+
+/** What the native paint path answers: the look to paint, and whether it is following the system. */
+export interface NativeThemePaint {
+  readonly themeId: QualifiedContributionId;
+  readonly followsSystem: boolean;
+}
+
+export const NATIVE_THEME_PAIRS: readonly NativeThemePair[] = [
+  { name: "Material", dark: CORE_MATERIAL_DARK_THEME_ID, light: CORE_MATERIAL_LIGHT_THEME_ID },
+  { name: "Builtin", dark: CORE_BUILTIN_DARK_THEME_ID, light: CORE_BUILTIN_LIGHT_THEME_ID },
 ];
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = { themeId: CORE_MATERIAL_DARK_THEME_ID, auto: true };
@@ -136,19 +168,55 @@ function applyNativeTheme(theme: NativeThemeChoice, scope: PaintScope): void {
     }
   }
   rememberPaintedTheme({ ...scope, colorScheme: theme.colorScheme, properties });
-  applyThemeFavicon(collectStringTokens(theme.tokens), document);
+  const painted = collectStringTokens(theme.tokens);
+  applyThemeFavicon(painted, document);
+  applyThemeMetaColor(painted, document);
 }
 
-export function applyNativeMaterialDarkTheme(scope: PaintScope): void {
-  applyNativeTheme(NATIVE_THEME_CHOICES[0], scope);
-}
-
-export function applyNativeMaterialLightTheme(scope: PaintScope): void {
-  applyNativeTheme(NATIVE_THEME_CHOICES[1], scope);
+/** Paints one of the app's own looks by id; an unknown id leaves the page untouched. */
+export function applyNativeThemeById(themeId: QualifiedContributionId, scope: PaintScope): boolean {
+  const theme = nativeThemeChoice(themeId);
+  if (theme === undefined) return false;
+  applyNativeTheme(theme, scope);
+  return true;
 }
 
 export function isNativeThemeId(themeId: QualifiedContributionId): boolean {
-  return themeId === CORE_MATERIAL_DARK_THEME_ID || themeId === CORE_MATERIAL_LIGHT_THEME_ID;
+  return NATIVE_THEME_CHOICES.some((theme) => theme.id === themeId);
+}
+
+export function nativeThemeChoice(themeId: QualifiedContributionId): NativeThemeChoice | undefined {
+  return NATIVE_THEME_CHOICES.find((theme) => theme.id === themeId);
+}
+
+export function findNativeThemePair(themeId: QualifiedContributionId): NativeThemePair | undefined {
+  return NATIVE_THEME_PAIRS.find((pair) => pair.dark === themeId || pair.light === themeId);
+}
+
+/**
+ * The core's own pairs in the shape the plugin pairs use, so every surface that asks "does this
+ * theme have a light/dark pair?" answers for the built-in looks the same way it does for a pack.
+ */
+export function nativeThemePairContribution(themeId: QualifiedContributionId): QualifiedThemePairContribution | undefined {
+  const pair = findNativeThemePair(themeId);
+  if (pair === undefined) return undefined;
+  const localId = `${pair.name.toLowerCase()}-pair`;
+  return { id: `core:${localId}`, pluginId: "core", localId, name: pair.name, light: pair.light, dark: pair.dark };
+}
+
+/**
+ * Which native look to paint for a preference, and whether that paint follows the system.
+ *
+ * A preference that follows the system moves inside its own pair, so Builtin Dark and Builtin
+ * Light swap the way a paired plugin theme does. A preference that does not follow the system keeps
+ * exactly what was chosen. A native theme with no pair keeps Material's system swap, which is what
+ * the app did before pairs existed for more than one look.
+ */
+export function resolveNativeThemePaint(preference: ThemePreference, prefersLight: boolean): NativeThemePaint {
+  if (!preference.auto) return { themeId: preference.themeId, followsSystem: false };
+  const pair = findNativeThemePair(preference.themeId);
+  if (pair !== undefined) return { themeId: prefersLight ? pair.light : pair.dark, followsSystem: true };
+  return { themeId: prefersLight ? CORE_MATERIAL_LIGHT_THEME_ID : CORE_MATERIAL_DARK_THEME_ID, followsSystem: true };
 }
 
 export function applyPiWebTheme(theme: QualifiedThemeContribution, scope: PaintScope): void {
@@ -166,7 +234,9 @@ export function applyPiWebTheme(theme: QualifiedThemeContribution, scope: PaintS
     }
   }
   rememberPaintedTheme({ ...scope, colorScheme: theme.colorScheme, properties });
-  applyThemeFavicon(collectStringTokens(theme.tokens), document, theme.icon);
+  const painted = collectStringTokens(theme.tokens);
+  applyThemeFavicon(painted, document, theme.icon);
+  applyThemeMetaColor(painted, document);
 }
 
 function collectStringTokens(tokens: QualifiedThemeContribution["tokens"]): Record<string, string> {

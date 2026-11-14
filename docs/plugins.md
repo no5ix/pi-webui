@@ -26,6 +26,8 @@ Install the Pi package that carries it, on the machine that should run it:
 
 PI WEB installs into Pi's default package location, as `pi install <source>` does. When several machines are registered, **Settings → Pi Packages** acts on the machine selected in PI WEB and says which one that is.
 
+Each listed package has a switch. Turning it off uses Pi's own package filtering: the package stays installed and stays in Pi's settings, and supplies no extension, skill, prompt template, theme, or context file until it is switched back on. Removal is the control that takes a package out. See [skills, MCP servers, and Pi packages](pi-resources.md#pi-packages).
+
 After installing, removing or updating a package:
 
 - a plugin with only a browser half appears after you reload the PI WEB tab;

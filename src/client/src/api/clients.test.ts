@@ -136,13 +136,14 @@ describe("settings config and plugin APIs", () => {
 
 describe("Pi package API", () => {
   it("preserves the legacy local Pi package-management routes by default", async () => {
-    const packages = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" }];
+    const packages = [{ source: "npm:@acme/tools", scope: "user", filtered: false, disabled: false, enabled: true, installedPath: "/home/test/.pi/packages/tools" }];
     const fetchMock = stubSequenceFetch([
       jsonResponse({ packages }),
       jsonResponse({ action: "install", source: "npm:@acme/new-tools", packages }),
       jsonResponse({ action: "remove", source: "../project-tools", scope: "project", removed: true, packages }),
       jsonResponse({ action: "update", source: "npm:@acme/tools", packages }),
       jsonResponse({ action: "update", packages }),
+      jsonResponse({ action: "set-enabled", source: "npm:@acme/tools", enabled: false, requiresReload: true, packages }),
     ]);
 
     await expect(piPackagesApi.packages()).resolves.toEqual({ packages });
@@ -150,6 +151,7 @@ describe("Pi package API", () => {
     await piPackagesApi.remove("../project-tools", "project");
     await piPackagesApi.update("npm:@acme/tools");
     await piPackagesApi.update();
+    await expect(piPackagesApi.setEnabled({ source: "npm:@acme/tools", scope: "user", enabled: false })).resolves.toMatchObject({ action: "set-enabled", enabled: false, requiresReload: true });
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       "https://pi.example.test/api/pi-packages",
@@ -157,6 +159,7 @@ describe("Pi package API", () => {
       "https://pi.example.test/api/pi-packages/remove",
       "https://pi.example.test/api/pi-packages/update",
       "https://pi.example.test/api/pi-packages/update",
+      "https://pi.example.test/api/pi-packages/set-enabled",
     ]);
     expect(fetchCall(fetchMock, 1)[1]?.method).toBe("POST");
     expect(JSON.parse(requestBody(fetchCall(fetchMock, 1)[1]))).toEqual({ source: "npm:@acme/new-tools" });
@@ -166,7 +169,7 @@ describe("Pi package API", () => {
   });
 
   it("uses machine-scoped Pi package-management routes when a machine id is provided", async () => {
-    const packages = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/tools" }];
+    const packages = [{ source: "npm:@acme/tools", scope: "user", filtered: false, disabled: false, enabled: true, installedPath: "/home/test/.pi/packages/tools" }];
     const fetchMock = stubSequenceFetch([
       jsonResponse({ packages }),
       jsonResponse({ packages }),

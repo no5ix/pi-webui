@@ -16,8 +16,10 @@ import { MachineService } from "../../../pi-web-plugins/machines/server/machineS
 import { MachineStore } from "../../../pi-web-plugins/machines/server/machineStore.js";
 import { WorkspaceCatalogRequestError, type WorkspaceCatalog } from "../shared/workspaces/workspaceCatalog.js";
 import type { PiPackageService } from "./piPackageService.js";
+import type { PiSkillsService } from "./piSkillsService.js";
+import type { PiMcpService } from "./piMcpService.js";
 import type { SessionProxyDaemon } from "./sessionProxyRoutes.js";
-import type { ActiveAgentProfileDescriptor, PiPackageInfo, PiWebConfigResponse, PiWebConfigValues, WorkspaceListing, WorkspaceProviderAuthorityResolution } from "../../shared/apiTypes.js";
+import type { ActiveAgentProfileDescriptor, PiPackageInfo, PiMcpMutationResponse, PiMcpScope, PiMcpServerInfo, PiSkillInfo, PiSkillsResponse, PiWebConfigResponse, PiWebConfigValues, WorkspaceListing, WorkspaceProviderAuthorityResolution } from "../../shared/apiTypes.js";
 import type { SessionDaemonAgentProfileResult } from "../shared/sessiondClient/sessionDaemonClient.js";
 
 interface AppTestContext {
@@ -27,6 +29,8 @@ interface AppTestContext {
   remoteClient: MachineClient | undefined;
   readonly sessionDaemonRequests: CapturedSessionDaemonRequest[];
   readonly piPackageRequests: CapturedPiPackageRequest[];
+  readonly piSkillsRequests: CapturedPiSkillsRequest[];
+  readonly piMcpRequests: CapturedPiMcpRequest[];
   readonly workspaceCatalog: AppTestWorkspaceCatalog;
   piWebConfig: PiWebConfigValues;
   agentProfileResult: SessionDaemonAgentProfileResult;
@@ -39,6 +43,8 @@ let remoteClient: MachineClient | undefined;
 let machines: MachineService | undefined;
 let sessionDaemonRequests: CapturedSessionDaemonRequest[] = [];
 let piPackageRequests: CapturedPiPackageRequest[] = [];
+let piSkillsRequests: CapturedPiSkillsRequest[] = [];
+let piMcpRequests: CapturedPiMcpRequest[] = [];
 let workspaceCatalog: AppTestWorkspaceCatalog | undefined;
 let piWebConfig: PiWebConfigValues = {};
 let agentProfileResult: SessionDaemonAgentProfileResult = { status: "invalid", error: "App test harness was not initialized" };
@@ -68,6 +74,12 @@ export const appTestContext: AppTestContext = {
   get piPackageRequests() {
     return piPackageRequests;
   },
+  get piSkillsRequests() {
+    return piSkillsRequests;
+  },
+  get piMcpRequests() {
+    return piMcpRequests;
+  },
   get workspaceCatalog() {
     if (workspaceCatalog === undefined) throw new Error("App test workspace catalog was not initialized");
     return workspaceCatalog;
@@ -93,6 +105,8 @@ export function registerAppTestHooks(): void {
     remoteClient = undefined;
     sessionDaemonRequests = [];
     piPackageRequests = [];
+    piSkillsRequests = [];
+    piMcpRequests = [];
     piWebConfig = {};
     agentProfileResult = { status: "available", profile: appTestAgentProfile(join(tempDir, "agent")) };
     const projects = new ProjectService(new ProjectStore(join(tempDir, "projects.json")));
@@ -121,6 +135,8 @@ export function registerAppTestHooks(): void {
       agentProfileProvider: { getActiveAgentProfile: () => Promise.resolve(agentProfileResult) },
       config: fakeConfigService(),
       piPackages: fakePiPackageService(),
+      piSkills: fakePiSkillsService(),
+      piMcp: fakePiMcpService(),
       piWebPlugins: {
         manifest: () => Promise.resolve({ lifecycleVersion: 1, plugins: [{ id: "fake", module: "/pi-web-plugins/fake/plugin.js?v=1", source: "test", scope: "local", machineSpecific: false }] }),
         plugins: () => Promise.resolve({
@@ -312,10 +328,117 @@ export interface CapturedSessionDaemonRequest {
   body?: unknown;
 }
 
+interface CapturedPiSkillsRequest {
+  action: "list" | "set-enabled";
+  name?: string;
+  scope?: "global" | "project";
+  enabled?: boolean;
+  projectId?: string;
+}
+
+interface CapturedPiMcpRequest {
+  action: "list" | "set-enabled" | "remove" | "test";
+  name?: string;
+  scope?: PiMcpScope;
+  enabled?: boolean;
+  projectId?: string;
+}
+
 interface CapturedPiPackageRequest {
-  action: "list" | "install" | "remove" | "update";
+  action: "list" | "install" | "remove" | "update" | "set-enabled";
   source?: string;
   scope?: "user" | "project";
+  enabled?: boolean;
+}
+
+function appTestSkill(name: string): PiSkillInfo {
+  return {
+    name,
+    description: `What ${name} does`,
+    filePath: `/pi/skills/${name}/SKILL.md`,
+    baseDir: `/pi/skills/${name}`,
+    scope: "global",
+    origin: "agent",
+    source: "user",
+    preference: "default",
+    enabled: true,
+    validation: "valid",
+  };
+}
+
+function appTestSkillsResponse(): PiSkillsResponse {
+  return {
+    skills: [appTestSkill("pdf")],
+    diagnostics: [],
+    scopes: [{ scope: "global", skillsDir: "/pi/skills", configPath: "/pi-web/config.json" }],
+  };
+}
+
+function appTestMcpServer(name: string): PiMcpServerInfo {
+  return {
+    name,
+    scope: "global",
+    transport: "stdio",
+    configured: "enabled",
+    configPath: "/pi/mcp.json",
+    enabled: true,
+    command: "mcp-files",
+    envNames: ["FILES_TOKEN"],
+    usesSecrets: true,
+    probe: { state: "unprobed" },
+  };
+}
+
+function appTestMcpList(servers: PiMcpServerInfo[]) {
+  return {
+    servers,
+    errors: [],
+    globalConfigPath: "/pi/mcp.json",
+    projectTrusted: false,
+    projectScopeRead: false,
+  };
+}
+
+function fakePiSkillsService(): PiSkillsService {
+  return {
+    list: (request) => {
+      piSkillsRequests.push({ action: "list", ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      return Promise.resolve(appTestSkillsResponse());
+    },
+    setEnabled: (request) => {
+      piSkillsRequests.push({ action: "set-enabled", name: request.name, scope: request.scope, enabled: request.enabled, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      return Promise.resolve({ ...appTestSkillsResponse(), requiresReload: true });
+    },
+  };
+}
+
+function fakePiMcpService(): PiMcpService {
+  const servers = [appTestMcpServer("files")];
+  const mutation = (action: PiMcpMutationResponse["action"], name: string, overrides: Partial<PiMcpMutationResponse> = {}): PiMcpMutationResponse => ({
+    action,
+    name,
+    ...appTestMcpList(servers),
+    requiresReload: false,
+    ...overrides,
+  });
+  return {
+    list: (request) => {
+      piMcpRequests.push({ action: "list", ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      return Promise.resolve(appTestMcpList(servers));
+    },
+    setEnabled: (request) => {
+      piMcpRequests.push({ action: "set-enabled", name: request.name, scope: request.scope, enabled: request.enabled, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      return Promise.resolve(mutation("set-enabled", request.name, { requiresReload: true }));
+    },
+    remove: (request) => {
+      piMcpRequests.push({ action: "remove", name: request.name, scope: request.scope, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      return Promise.resolve(mutation("remove", request.name, { removed: true, requiresReload: true }));
+    },
+    test: (request) => {
+      piMcpRequests.push({ action: "test", name: request.name, scope: request.scope, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      return Promise.resolve(mutation("test", request.name, { probe: { state: "reachable" } }));
+    },
+  };
 }
 
 function fakeConfigService() {
@@ -384,7 +507,7 @@ function isMachineConfigWriteBody(value: unknown): value is MachineConfigWriteBo
 }
 
 function fakePiPackageService(): PiPackageService {
-  const packages: PiPackageInfo[] = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/tmp/pi-tools" }];
+  const packages: PiPackageInfo[] = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/tmp/pi-tools", disabled: false, enabled: true }];
   return {
     list: () => {
       piPackageRequests.push({ action: "list" });
@@ -400,7 +523,11 @@ function fakePiPackageService(): PiPackageService {
     },
     update: (source) => {
       piPackageRequests.push({ action: "update", ...(source === undefined ? {} : { source }) });
-      return Promise.resolve({ action: "update", ...(source === undefined ? {} : { source }), packages });
+      return Promise.resolve({ action: "update", ...(source === undefined ? {} : { source }), requiresReload: true, packages });
+    },
+    setEnabled: (source, scope, enabled) => {
+      piPackageRequests.push({ action: "set-enabled", source, scope, enabled });
+      return Promise.resolve({ action: "set-enabled", source, scope, enabled, requiresReload: true, packages });
     },
   };
 }

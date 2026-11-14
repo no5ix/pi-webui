@@ -1269,6 +1269,8 @@ export async function resolveWebProjectTrusted(resolution: WebProjectTrustResolu
  * and PI WEB's sections land after them. Returns `undefined` when there is
  * nothing to add, leaving the loader exactly as pi configures it.
  */
+import { piWebSkillsOverride } from "./piWebSkillPreferences.js";
+
 export function piWebResourceLoaderOptions(
   appendSystemPromptSections: readonly string[],
   extensionPaths: readonly string[] = [],
@@ -1287,6 +1289,7 @@ function createDefaultRuntimeFactory(
   appendSystemPromptSections: readonly string[] = [],
   extensionPaths: readonly string[] = [],
   extensionFactories: readonly InlineExtension[] = [],
+  log: PiSessionLogger = noopLogger,
 ): PiWebCreateAgentSessionRuntimeFactory {
   const resourceLoaderOptions = piWebResourceLoaderOptions(appendSystemPromptSections, extensionPaths, extensionFactories);
   return async ({ cwd, agentDir, sessionManager, sessionStartEvent, initialModel, initialThinkingLevel }) => {
@@ -1314,7 +1317,10 @@ function createDefaultRuntimeFactory(
       agentDir,
       modelRuntime,
       settingsManager,
-      ...(resourceLoaderOptions === undefined ? {} : { resourceLoaderOptions }),
+      resourceLoaderOptions: {
+        ...(resourceLoaderOptions ?? {}),
+        skillsOverride: piWebSkillsOverride(agentDir, cwd, log),
+      },
       ...(projectTrustRequiring
         ? {
             resourceLoaderReloadOptions: {
@@ -1713,6 +1719,7 @@ export class PiSessionService implements SessionRouteService {
       deps.hostContributions?.systemPromptSections ?? [],
       deps.hostContributions?.extensionPaths ?? [],
       [...(deps.hostContributions?.extensionFactories ?? []), newSessionSeamExtension((sessionId) => this.stopForNewSession(sessionId))],
+      this.logger,
     );
     this.createAgentRuntime = deps.createAgentRuntime ?? defaultCreateAgentRuntime;
     this.workspaceActivity = deps.workspaceActivity;

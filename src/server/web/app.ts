@@ -41,6 +41,11 @@ import { mountServerPluginRoutes } from "./plugins/serverPluginRouteMount.js";
 import { createStageHost } from "./media/stageHost.js";
 import { createActiveProfilePiPackageService, type PiPackageService } from "./piPackageService.js";
 import { registerPiPackageRoutes } from "./piPackageRoutes.js";
+import { createActiveProfilePiSkillsService, type PiSkillsService } from "./piSkillsService.js";
+import { registerPiSkillsRoutes } from "./piSkillsRoutes.js";
+import { createActiveProfilePiMcpService, type PiMcpService } from "./piMcpService.js";
+import { registerPiMcpRoutes } from "./piMcpRoutes.js";
+import { createSettingsProjectResolver } from "../shared/resources/settingsProjectResolver.js";
 import { createPiPackageUpdateCheck, type PiPackageUpdateCheck } from "./piPackageUpdateCheck.js";
 import { registerSessionPinRoutes } from "./sessionPinRoutes.js";
 import { registerNtfyRoutes } from "./notifications/ntfyRoutes.js";
@@ -86,6 +91,8 @@ export interface AppDependencies {
   /** Pre-activated web-process plugin runtime; assembled from the catalog when omitted. */
   serverPluginRuntime?: ServerPluginRuntime;
   piPackages?: PiPackageService;
+  piSkills?: PiSkillsService;
+  piMcp?: PiMcpService;
   /** The pi package update check behind the status; one that asks npm and git when omitted. */
   piPackageUpdates?: PiPackageUpdateCheck;
   sessionPins?: SessionPinStore;
@@ -283,6 +290,7 @@ function invalidatePiWebStatusOnPackageChange(service: PiPackageService, changed
     install: (source) => thenInvalidate(service.install(source)),
     remove: (source, scope) => thenInvalidate(service.remove(source, scope)),
     update: (source) => thenInvalidate(source === undefined ? service.update() : service.update(source)),
+    setEnabled: (source, scope, enabled) => thenInvalidate(service.setEnabled(source, scope, enabled)),
   };
 }
 
@@ -389,6 +397,17 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     piPackageUpdates.forgetListings();
     piWebStatusCache.invalidate();
   });
+  const settingsProjects = (agentDir: string) => createSettingsProjectResolver({
+    agentDir,
+    projects: {
+      getProject: async (projectId) => {
+        const project = await projects.requireProject(projectId).catch(() => null);
+        return project === null ? null : { realPath: project.path };
+      },
+    },
+  });
+  const piSkills = deps.piSkills ?? createActiveProfilePiSkillsService(agentProfileProvider, settingsProjects);
+  const piMcp = deps.piMcp ?? createActiveProfilePiMcpService(agentProfileProvider, settingsProjects);
   const firstPackageCheck = setTimeout(() => {
     piWebStatusCache.get().catch((error: unknown) => { app.log.warn({ err: error }, "The first pi package update check could not start"); });
   }, FIRST_PACKAGE_CHECK_DELAY_MS);
@@ -422,6 +441,10 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
   app.get("/api/machines/local/plugins", async (_request, reply) => withProfileDependency(reply, () => piWebPlugins.plugins()));
   registerPiPackageRoutes(app, piPackages);
   registerPiPackageRoutes(app, piPackages, "/api/machines/local");
+  registerPiSkillsRoutes(app, piSkills);
+  registerPiSkillsRoutes(app, piSkills, "/api/machines/local");
+  registerPiMcpRoutes(app, piMcp);
+  registerPiMcpRoutes(app, piMcp, "/api/machines/local");
   const pinsChanged = (): void => {
     nudgeChange(sessionDaemon, "pins").catch((error: unknown) => { app.log.warn({ err: error }, "Could not announce a pin change to the session daemon"); });
   };

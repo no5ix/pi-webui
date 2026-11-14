@@ -91,8 +91,15 @@ describe("settings-appearance-panel", () => {
       element.themes = [...element.themes, theme("from-a-plugin", { name: "From a plugin" })];
     });
 
-    expect(cards(panel).map((card) => card.querySelector(".theme-name")?.textContent)).toEqual(["Material Dark (native)",
-      "Material Light (native)", "pi-web-dark", "paper", "From a plugin"]);
+    expect(cards(panel).map((card) => card.querySelector(".theme-name")?.textContent)).toEqual([
+      "Material Dark (native)",
+      "Material Light (native)",
+      "Builtin Dark",
+      "Builtin Light",
+      "pi-web-dark",
+      "paper",
+      "From a plugin",
+    ]);
   });
 
   it("previews the colours a theme will apply rather than naming it alone", async () => {
@@ -100,7 +107,7 @@ describe("settings-appearance-panel", () => {
       element.themes = [theme("accented", { tokens: tokens({ "--pi-accent": "#ff0066", "--pi-bg": "#001122" }) })];
     });
 
-    const preview = cards(panel)[2]?.querySelector<HTMLElement>(".preview");
+    const preview = cards(panel)[4]?.querySelector<HTMLElement>(".preview");
     expect(preview?.getAttribute("style")).toContain("--preview-accent: #ff0066");
     expect(preview?.getAttribute("style")).toContain("--preview-bg: #001122");
   });
@@ -111,8 +118,8 @@ describe("settings-appearance-panel", () => {
       element.activeThemeId = themeId("paper");
     });
 
-    expect(cards(panel)[2]?.getAttribute("aria-pressed")).toBe("true");
-    expect(cards(panel)[3]?.textContent).toContain("in use");
+    expect(cards(panel)[4]?.getAttribute("aria-pressed")).toBe("true");
+    expect(cards(panel)[5]?.textContent).toContain("in use");
   });
 
   it("lists the native Material look first and selects it like any theme", async () => {
@@ -128,9 +135,27 @@ describe("settings-appearance-panel", () => {
     const onSelectTheme = vi.fn<(id: QualifiedContributionId) => void>();
     const panel = await mount((element) => { element.onSelectTheme = onSelectTheme; });
 
-    cards(panel)[3]?.click();
+    cards(panel)[5]?.click();
 
     expect(onSelectTheme).toHaveBeenCalledWith("themes:paper");
+  });
+
+  it("offers the two builtin looks by their own ids, each in its own scheme", async () => {
+    const onSelectTheme = vi.fn<(id: QualifiedContributionId) => void>();
+    const panel = await mount((element) => { element.onSelectTheme = onSelectTheme; });
+
+    const names = cards(panel).map((card) => card.querySelector(".theme-name")?.textContent);
+    expect(names).toContain("Builtin Dark");
+    expect(names).toContain("Builtin Light");
+    const dark = cards(panel)[2];
+    const light = cards(panel)[3];
+    expect(dark?.querySelector(".theme-scheme")?.textContent).toBe("Dark");
+    expect(light?.querySelector(".theme-scheme")?.textContent).toBe("Light");
+
+    dark?.click();
+    light?.click();
+    expect(onSelectTheme).toHaveBeenNthCalledWith(1, "core:builtin-dark");
+    expect(onSelectTheme).toHaveBeenNthCalledWith(2, "core:builtin-light");
   });
 
   it("offers following the system as a switch, not a hidden mode", async () => {
