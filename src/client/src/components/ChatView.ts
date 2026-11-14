@@ -334,7 +334,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .msg.command.failed .command-result { color: var(--pi-danger); }
   .msg.command .command-result.markdown { display: block; white-space: normal; }
   .msg.command .command-result.folded { display: grid; gap: var(--pi-space-2); white-space: normal; }
-  .command-fold > summary { display: flex; align-items: center; gap: var(--pi-space-4); min-height: var(--pi-control-height-compact, 24px); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text-secondary); font-weight: var(--pi-weight-medium); }
+  .command-fold > summary { box-sizing: border-box; display: flex; align-items: center; gap: var(--pi-space-4); min-height: var(--pi-control-height-compact, 24px); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text-secondary); font-weight: var(--pi-weight-medium); }
   .command-fold > summary .disclosure-icon { margin-inline-start: auto; color: var(--pi-muted); }
   @media (pointer: coarse) { .command-fold > summary { min-height: var(--pi-control-height-touch); } }
   .command-fold > formatted-text { display: block; }
