@@ -41,6 +41,11 @@ describe("the builtin palettes", () => {
     expect(DEFAULT_THEME_PREFERENCE).toEqual({ themeId: CORE_MATERIAL_DARK_THEME_ID, auto: true });
   });
 
+  it("are named Darkness and Lightness without changing their stable saved ids", () => {
+    expect(nativeThemeChoice(CORE_BUILTIN_DARK_THEME_ID)?.name).toBe("Darkness");
+    expect(nativeThemeChoice(CORE_BUILTIN_LIGHT_THEME_ID)?.name).toBe("Lightness");
+  });
+
   it("are each a dark and a light look", () => {
     expect(nativeThemeChoice(CORE_BUILTIN_DARK_THEME_ID)?.colorScheme).toBe("dark");
     expect(nativeThemeChoice(CORE_BUILTIN_LIGHT_THEME_ID)?.colorScheme).toBe("light");
