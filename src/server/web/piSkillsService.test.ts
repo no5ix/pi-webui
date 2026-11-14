@@ -186,6 +186,22 @@ describe("changing a skill's preference", () => {
     expect(response.skills[0]).toMatchObject({ name: "pdf", scope: "global", enabled: false, preference: "disabled" });
   });
 
+  it("turns on a globally disabled skill for one project and returns the effective state", async () => {
+    const { store, saved, writeGlobal, writeProject } = preferences({ version: 1, disabled: ["nestjs-code-audit"] });
+    const response = await service(discovery([skill("nestjs-code-audit")]), store).setEnabled({
+      name: "nestjs-code-audit", scope: "project", projectId: "p-1", enabled: true,
+    });
+
+    expect(writeProject).toHaveBeenCalledWith("/work/project", { version: 1, enabled: ["nestjs-code-audit"] });
+    expect(writeGlobal).not.toHaveBeenCalled();
+    expect(saved.global.disabled).toEqual(["nestjs-code-audit"]);
+    expect(response.skills[0]).toMatchObject({ name: "nestjs-code-audit", scope: "global", enabled: true, preference: "enabled" });
+    const projectRead = await service(discovery([skill("nestjs-code-audit")]), store).list({ projectId: "p-1" });
+    const globalRead = await service(discovery([skill("nestjs-code-audit")]), store).list({});
+    expect(projectRead.skills[0]).toMatchObject({ enabled: true, preference: "enabled" });
+    expect(globalRead.skills[0]).toMatchObject({ enabled: false, preference: "disabled" });
+  });
+
   it("writes the project scope for one project, and leaves the global file alone", async () => {
     const { store, writeGlobal, writeProject } = preferences();
 

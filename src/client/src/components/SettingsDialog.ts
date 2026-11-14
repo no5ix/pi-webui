@@ -988,13 +988,20 @@ export class SettingsDialog extends LitElement {
     this.skillsError = "";
     this.skillsMessage = "";
     try {
-      const response = await piSkillsApi.setEnabled(toggle, target.id);
+      await piSkillsApi.setEnabled(toggle, target.id);
       if (!this.isCurrentSkillsMutation(requestSeq, target, projectId)) return;
-      this.skillsResponse = response;
+      // Verify the effective state through the same project-scoped read used when opening the panel.
+      const refreshed = await piSkillsApi.list(projectId, target.id);
+      if (!this.isCurrentSkillsMutation(requestSeq, target, projectId)) return;
+      const savedSkill = refreshed.skills.find((entry) => entry.name === toggle.name);
+      if (savedSkill === undefined || savedSkill.enabled !== enabled) {
+        throw new Error("The preference write did not produce the requested effective skill state.");
+      }
+      this.skillsResponse = refreshed;
       this.skillsMessage = piSkillMutationMessage(toggle.scope, toggle.name, enabled, target);
     } catch (error) {
       if (this.isCurrentSkillsMutation(requestSeq, target, projectId)) {
-        this.skillsError = `Failed to change the skill ${toggle.name} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
+        this.skillsError = `Could not verify the skill ${toggle.name} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
       }
     } finally {
       if (this.skillsMutationSeq === requestSeq) {

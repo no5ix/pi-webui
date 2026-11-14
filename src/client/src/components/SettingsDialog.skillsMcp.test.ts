@@ -161,6 +161,7 @@ describe("the Skills and MCP sections", () => {
     await skillsPanel(dialog).onToggleSkill?.(skillInfo("pdf"), false);
     await settleRenderedDialog(dialog);
     expect(piSkillsApi.setEnabled).toHaveBeenCalledWith({ name: "pdf", scope: "project", projectId: "p-1", enabled: false }, "lab-mac");
+    expect(piSkillsApi.list).toHaveBeenLastCalledWith("p-1", "lab-mac");
   });
 
   it("switches a skill through the machine that is selected, and redraws from that machine's answer", async () => {
