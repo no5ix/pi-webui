@@ -1397,6 +1397,15 @@ export class AppNavigatePage extends LitElement {
     /* A list, not a stack of boxes: a row is a line on a divider, and the pointer
        and the selection are fills. Thirty sessions read by scanning, and a column of
        outlined rectangles makes the eye stop on every one of them. */
+    /* A row is a scan target, so its words never spill past the panel: the name keeps
+       its two lines, the path under it is one line with an ellipsis, and the row clips
+       what is left. A long session path used to run under the menu key and past the
+       panel edge on a phone. */
+    .row { overflow: hidden; }
+    .row-title { min-width: 0; }
+    .row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .row-path { min-width: 0; max-width: 100%; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-labels { min-width: 0; overflow: hidden; }
     .row { position: relative; box-sizing: border-box; display: grid; gap: var(--pi-space-2); width: 100%; min-height: calc(var(--pi-row-min-height, 48px) + var(--pi-space-6)); padding: var(--pi-space-4) calc(var(--tile-menu-size) + var(--pi-space-2)) var(--pi-space-4) var(--pi-space-5); border: 0; border-bottom: 1px solid var(--pi-divider); border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text); font: inherit; text-align: start; cursor: pointer; }
     .row:last-child { border-bottom: 0; }
     @media (hover: hover) { .row:hover:not(.current) { background: var(--pi-row-hover); } }
