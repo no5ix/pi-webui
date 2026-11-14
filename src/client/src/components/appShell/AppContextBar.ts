@@ -137,7 +137,7 @@ export class AppContextBar extends LitElement {
     /* The rail header and this bar sit either side of one vertical divider, so
        they share a height: 44px of control plus the 1px rule, measured 45 on
        the rail and 53 here before the padding was taken out of the equation. */
-    .context-bar { position: relative; flex: 0 0 auto; min-width: 0; box-sizing: border-box; min-height: var(--pi-panel-header-height); display: flex; align-items: center; gap: var(--pi-space-5); padding: 0 var(--pi-chat-gutter); border-bottom: 1px solid var(--pi-border); background: var(--pi-bg); }
+    .context-bar { position: relative; flex: 0 0 auto; min-width: 0; box-sizing: border-box; min-height: var(--pi-panel-header-height); display: flex; align-items: center; gap: var(--pi-space-5); padding: 0 var(--pi-chat-gutter); border-bottom: 1px solid var(--pi-divider); background: var(--pi-bg); }
     /* Every bar that can hold a corner key (this one, the navigation page's header, the page
        column's bar, a sheet dropped over this bar) keeps its keys the conversation's gutter from
        the edge, on every layout: a key that moves from bar to bar as a panel opens stands on the
