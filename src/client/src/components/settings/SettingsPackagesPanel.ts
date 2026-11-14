@@ -223,7 +223,6 @@ export class SettingsPackagesPanel extends LitElement {
     .action-note { margin-bottom: var(--pi-space-5); font-size: var(--pi-text-xs); }
     .package-list { display: grid; gap: var(--pi-space-5); }
     .package-card:last-child { border-bottom: 0; }
-    .package-card.filtered { opacity: .72; }
     .package-card.filtered { opacity: .82; }
     .package-main strong, .package-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .package-actions { display: flex; align-items: center; gap: var(--pi-space-4); }
