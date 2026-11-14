@@ -1,4 +1,4 @@
-import type { PiMcpExposure, PiMcpListResponse, PiMcpMutationResponse, PiMcpProbeState, PiMcpRemoveRequest, PiMcpScope, PiMcpServerInfo, PiMcpSetEnabledRequest, PiMcpTestRequest, PiMcpTransport } from "../../api";
+import type { PiMcpExposure, PiMcpListResponse, PiMcpMutationResponse, PiMcpProbeState, PiMcpRemoveRequest, PiMcpScope, PiMcpServerInfo, PiMcpSetEnabledRequest, PiMcpTestRequest, PiMcpTransport, PiMcpWriteKind, PiMcpWriteTarget } from "../../api";
 import type { SettingsMachineTarget } from "./settingsMachineTarget";
 
 /**
@@ -13,7 +13,8 @@ import type { SettingsMachineTarget } from "./settingsMachineTarget";
 export interface PiMcpOperationState {
   kind: PiMcpOperationKind;
   name: string;
-  scope: PiMcpScope;
+  /** The entry the write is aimed at, so an in-flight override change does not grey out the definition's buttons. */
+  target?: PiMcpWriteKind;
 }
 
 export type PiMcpOperationKind = "set-enabled" | "remove" | "test";
@@ -159,24 +160,106 @@ export function piMcpProjectScopeNote(response: PiMcpListResponse): string {
   return "Project scope not read: PI WEB Settings has no project selected, so only this machine's global MCP servers are listed.";
 }
 
-export function piMcpSetEnabledRequest(server: Pick<PiMcpServerInfo, "name" | "scope">, enabled: boolean, projectId?: string): PiMcpSetEnabledRequest {
-  return { name: server.name, scope: server.scope, enabled, ...projectIdPart(projectId) };
+/**
+ * The entry a row's switch writes.
+ *
+ * A row is not one thing to write. A global server that the selected project overrides has a
+ * definition file and an override file, and "turn this server off" means the override while a project
+ * is being managed - the global answer belongs to the machine, and the panel says which file a press
+ * opens. With no project selected, the switch writes the definition, because that is the only answer
+ * in view.
+ */
+export function piMcpSwitchTarget(server: Pick<PiMcpServerInfo, "targets">, projectSelected: boolean): PiMcpWriteTarget | undefined {
+  const override = server.targets.find((target) => target.kind === "override");
+  if (projectSelected && override !== undefined) return override;
+  return server.targets.find((target) => target.kind === "definition");
 }
 
-export function piMcpRemoveRequest(server: Pick<PiMcpServerInfo, "name" | "scope">, projectId?: string): PiMcpRemoveRequest {
-  return { name: server.name, scope: server.scope, ...projectIdPart(projectId) };
+/** The entry a row can be written to, by the kind of entry the reader chose. */
+export function piMcpWriteTarget(server: Pick<PiMcpServerInfo, "targets">, kind: PiMcpWriteKind): PiMcpWriteTarget | undefined {
+  return server.targets.find((target) => target.kind === kind);
 }
 
-export function piMcpTestRequest(server: Pick<PiMcpServerInfo, "name" | "scope">, projectId?: string): PiMcpTestRequest {
-  return { name: server.name, scope: server.scope, ...projectIdPart(projectId) };
+export function piMcpSetEnabledRequest(server: Pick<PiMcpServerInfo, "name">, target: PiMcpWriteTarget, enabled: boolean, projectId?: string): PiMcpSetEnabledRequest {
+  return { name: server.name, target: target.kind, scope: target.scope, enabled, ...projectIdPart(projectId) };
+}
+
+export function piMcpRemoveRequest(server: Pick<PiMcpServerInfo, "name">, target: PiMcpWriteTarget, projectId?: string): PiMcpRemoveRequest {
+  return { name: server.name, target: target.kind, scope: target.scope, ...projectIdPart(projectId) };
+}
+
+export function piMcpTestRequest(server: Pick<PiMcpServerInfo, "name">, projectId?: string): PiMcpTestRequest {
+  return { name: server.name, ...projectIdPart(projectId) };
+}
+
+/** Where the server's own definition lives. */
+export function piMcpDefinitionLine(server: PiMcpServerInfo): string {
+  const target = piMcpWriteTarget(server, "definition");
+  const scopeLabel = server.scope === "project" ? "Project definition" : server.scope === "extension" ? "Extension registration" : "Global definition";
+  return `${scopeLabel}: ${target?.configPath ?? server.configPath}`;
+}
+
+/**
+ * The project's override, in words.
+ *
+ * A row that carries an override says so with the file, because that is the entry the project's switch
+ * writes. A row without one, in a project context, says the project follows the global answer: an
+ * absence in the project file is a fact about the project, not a missing value.
+ */
+export function piMcpOverrideLine(server: PiMcpServerInfo, projectSelected: boolean): string | undefined {
+  const overridePath = server.overridePath;
+  if (overridePath !== undefined) return `Overridden for this project: ${overridePath}`;
+  if (!projectSelected || server.scope !== "global") return undefined;
+  const override = piMcpWriteTarget(server, "override");
+  return override === undefined ? undefined : `No project override: this project follows the global answer, and a change here writes ${override.configPath}.`;
+}
+
+/** Which file the switch on this row opens, said before the press rather than after it. */
+export function piMcpSwitchTargetLine(target: PiMcpWriteTarget | undefined): string | undefined {
+  if (target === undefined) return undefined;
+  return target.kind === "override"
+    ? `This switch writes the project's override in ${target.configPath}.`
+    : `This switch writes the ${target.scope === "project" ? "project" : "global"} definition in ${target.configPath}.`;
+}
+
+/** The switch's target in the few words an accessible name carries. */
+export function piMcpSwitchTargetNote(server: Pick<PiMcpServerInfo, "targets">, projectSelected: boolean): string {
+  const target = piMcpSwitchTarget(server, projectSelected);
+  if (target === undefined) return "no entry PI WEB may write";
+  return target.kind === "override" ? "writes this project's override" : `writes the ${target.scope} definition`;
+}
+
+/**
+ * The project chooser's own line.
+ *
+ * A list that has not arrived is not a machine with no projects, and a machine with no projects is not
+ * a list that failed: the chooser says which of the two it is, because the choice decides which file
+ * every switch on the page writes.
+ */
+export function piMcpProjectChooserNote(projectsLoading: boolean, projectCount: number, selection: string | undefined, projectsError = ""): string {
+  if (projectsError !== "") return projectsError;
+  if (projectsLoading) return "Loading this machine's projects…";
+  if (projectCount === 0) return "This machine has no projects, so only its global servers are managed here.";
+  return selection === undefined
+    ? "No project selected: the switches write the machine's global config, and a project's own file is not read."
+    : "A project selected: the switches write that project's override, and its own servers are listed beside the global ones.";
+}
+
+export function piMcpRemovalLabel(kind: PiMcpWriteKind): string {
+  return kind === "override" ? "Remove project override" : "Remove definition";
+}
+
+export function piMcpRemovalQuestion(name: string, target: PiMcpWriteTarget): string {
+  const what = target.kind === "override" ? "project override" : "definition";
+  return `Remove the ${what} of ${name} from ${target.configPath}?`;
 }
 
 function projectIdPart(projectId: string | undefined): { projectId?: string } {
   return projectId === undefined || projectId === "" ? {} : { projectId };
 }
 
-export function isPiMcpOperationPending(operation: PiMcpOperationState | undefined, kind: PiMcpOperationKind, server: Pick<PiMcpServerInfo, "name" | "scope">): boolean {
-  return operation?.kind === kind && operation.name === server.name && operation.scope === server.scope;
+export function isPiMcpOperationPending(operation: PiMcpOperationState | undefined, kind: PiMcpOperationKind, server: Pick<PiMcpServerInfo, "name">, target?: PiMcpWriteKind): boolean {
+  return operation?.kind === kind && operation.name === server.name && operation.target === target;
 }
 
 /**

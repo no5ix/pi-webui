@@ -110,9 +110,9 @@ describe("listing MCP servers", () => {
     writeJson(projectMcpConfigPath(projectPath), { mcpServers: { "project-server": { command: "sh", args: ["-c", "true"] } } });
     projects = { ...projects, isProjectTrusted: () => false };
 
-    await expect(service().test({ name: "project-server", scope: "project", projectId: "p-1" })).rejects.toThrow("not trusted");
-    await expect(service().setEnabled({ name: "project-server", scope: "project", projectId: "p-1", enabled: true })).rejects.toThrow("not trusted");
-    await expect(service().remove({ name: "project-server", scope: "project", projectId: "p-1" })).rejects.toThrow("not trusted");
+    await expect(service().test({ name: "project-server", projectId: "p-1" })).rejects.toThrow("not trusted");
+    await expect(service().setEnabled({ name: "project-server", target: "definition", projectId: "p-1", enabled: true })).rejects.toThrow("not trusted");
+    await expect(service().remove({ name: "project-server", target: "definition", projectId: "p-1" })).rejects.toThrow("not trusted");
 
     expect(probe.probe).not.toHaveBeenCalled();
     expect(existsSync(projectMcpConfigPath(projectPath))).toBe(true);
@@ -137,7 +137,7 @@ describe("listing MCP servers", () => {
     const broken = `{ "mcpServers": { "files": { "command": "mcp-files" }, } }`;
     writeFileSync(path, broken, "utf8");
 
-    await expect(service().setEnabled({ name: "files", scope: "global", enabled: false })).rejects.toThrow(/not valid JSON|No MCP server/);
+    await expect(service().setEnabled({ name: "files", target: "definition", enabled: false })).rejects.toThrow(/not valid JSON|No MCP server/);
 
     expect(readFileSync(path, "utf8")).toBe(broken);
   });
@@ -174,7 +174,7 @@ describe("changing an MCP server", () => {
   });
 
   it("turns a global server off in the global file, and says a reload is needed", async () => {
-    const response = await service().setEnabled({ name: "files", scope: "global", enabled: false });
+    const response = await service().setEnabled({ name: "files", target: "definition", enabled: false });
 
     expect(serversIn(globalMcpConfigPath(agentDir))["files"]).toEqual({ command: "mcp-files", env: { TOKEN: SECRET }, enabled: false });
     expect(response).toMatchObject({ action: "set-enabled", name: "files", enabled: false, requiresReload: true });
@@ -182,8 +182,8 @@ describe("changing an MCP server", () => {
   });
 
   it("turns it back on by removing the key, which is pi's default", async () => {
-    await service().setEnabled({ name: "files", scope: "global", enabled: false });
-    const response = await service().setEnabled({ name: "files", scope: "global", enabled: true });
+    await service().setEnabled({ name: "files", target: "definition", enabled: false });
+    const response = await service().setEnabled({ name: "files", target: "definition", enabled: true });
 
     expect(serversIn(globalMcpConfigPath(agentDir))["files"]).toEqual({ command: "mcp-files", env: { TOKEN: SECRET } });
     expect(response.servers.find((entry) => entry.name === "files")?.enabled).toBe(true);
@@ -192,7 +192,7 @@ describe("changing an MCP server", () => {
   it("turns a global server off for one project by writing that project's override, never the global file", async () => {
     const globalBefore = readFileSync(globalMcpConfigPath(agentDir), "utf8");
 
-    const response = await service().setEnabled({ name: "files", scope: "project", projectId: "p-1", enabled: false });
+    const response = await service().setEnabled({ name: "files", target: "override", projectId: "p-1", enabled: false });
 
     expect(readFileSync(globalMcpConfigPath(agentDir), "utf8")).toBe(globalBefore);
     expect(serversIn(projectMcpConfigPath(projectPath))["files"]).toEqual({ enabled: false });
@@ -202,14 +202,14 @@ describe("changing an MCP server", () => {
   it("refuses to write a global change for a server only the project defines", async () => {
     writeJson(projectMcpConfigPath(projectPath), { mcpServers: { local: { command: "mcp-local" } } });
 
-    await expect(service().setEnabled({ name: "local", scope: "global", enabled: false, projectId: "p-1" })).rejects.toBeInstanceOf(PiMcpRequestError);
+    await expect(service().setEnabled({ name: "local", target: "definition", scope: "global", enabled: false, projectId: "p-1" })).rejects.toBeInstanceOf(PiMcpRequestError);
     expect(serversIn(globalMcpConfigPath(agentDir))).toEqual({ files: { command: "mcp-files", env: { TOKEN: SECRET } } });
   });
 
   it("removes a server from the file that defines it, and restores the global server when that file was an override", async () => {
     writeJson(projectMcpConfigPath(projectPath), { mcpServers: { files: { enabled: false } } });
 
-    const response = await service().remove({ name: "files", scope: "project", projectId: "p-1" });
+    const response = await service().remove({ name: "files", target: "override", projectId: "p-1" });
 
     expect(serversIn(projectMcpConfigPath(projectPath))).toEqual({});
     expect(response.removed).toBe(true);
@@ -220,7 +220,7 @@ describe("changing an MCP server", () => {
   });
 
   it("says a removal did nothing when the file the named scope owns has no such server", async () => {
-    const response = await service().remove({ name: "files", scope: "project", projectId: "p-1" });
+    const response = await service().remove({ name: "files", target: "override", projectId: "p-1" });
 
     expect(response.removed).toBe(false);
     expect(serversIn(globalMcpConfigPath(agentDir))).toHaveProperty("files");
@@ -228,12 +228,12 @@ describe("changing an MCP server", () => {
   });
 
   it("answers a server that is not configured with a 404-shaped problem", async () => {
-    await expect(service().setEnabled({ name: "gone", scope: "global", enabled: false })).rejects.toBeInstanceOf(PiMcpServerErrorNotFound);
+    await expect(service().setEnabled({ name: "gone", target: "definition", enabled: false })).rejects.toBeInstanceOf(PiMcpServerErrorNotFound);
   });
 
   it("refuses to edit a server an extension registered, which pi owns", async () => {
-    await expect(service().setEnabled({ name: "files", scope: "extension", enabled: false })).rejects.toBeInstanceOf(PiMcpRequestError);
-    await expect(service().remove({ name: "files", scope: "extension" })).rejects.toBeInstanceOf(PiMcpRequestError);
+    await expect(service().setEnabled({ name: "files", target: "definition", scope: "extension", enabled: false })).rejects.toBeInstanceOf(PiMcpRequestError);
+    await expect(service().remove({ name: "files", target: "definition", scope: "extension" })).rejects.toBeInstanceOf(PiMcpRequestError);
   });
 });
 
@@ -242,7 +242,7 @@ describe("testing a connection", () => {
     writeJson(globalMcpConfigPath(agentDir), { mcpServers: { files: { command: "mcp-files", timeout: 4 } } });
     const before = readFileSync(globalMcpConfigPath(agentDir), "utf8");
 
-    const response = await service().test({ name: "files", scope: "global" });
+    const response = await service().test({ name: "files" });
 
     expect(probe.probe).toHaveBeenCalledWith("files", { command: "mcp-files", timeout: 4 }, process.cwd(), 4);
     expect(readFileSync(globalMcpConfigPath(agentDir), "utf8")).toBe(before);
@@ -252,13 +252,13 @@ describe("testing a connection", () => {
   it("probes a project server in the project's own directory", async () => {
     writeJson(projectMcpConfigPath(projectPath), { mcpServers: { local: { command: "mcp-local" } } });
 
-    await service().test({ name: "local", scope: "project", projectId: "p-1" });
+    await service().test({ name: "local", projectId: "p-1" });
 
     expect(probe.probe).toHaveBeenCalledWith("local", { command: "mcp-local" }, projectPath, undefined);
   });
 
   it("answers a probe of a server that is not configured with a 404-shaped problem", async () => {
-    await expect(service().test({ name: "gone", scope: "global" })).rejects.toBeInstanceOf(PiMcpServerErrorNotFound);
+    await expect(service().test({ name: "gone" })).rejects.toBeInstanceOf(PiMcpServerErrorNotFound);
     expect(probe.probe).not.toHaveBeenCalled();
   });
 
@@ -266,7 +266,7 @@ describe("testing a connection", () => {
     writeJson(globalMcpConfigPath(agentDir), { mcpServers: { files: { command: "mcp-files" }, search: { url: "https://example.test/mcp" } } });
     probe = { probe: vi.fn(() => Promise.resolve({ state: "unreachable", message: "fetch failed", probedAt: "2026-07-01T00:00:00.000Z" } satisfies PiMcpProbe)) };
 
-    const response = await service().test({ name: "search", scope: "global" });
+    const response = await service().test({ name: "search" });
 
     const tested = response.servers.find((server) => server.name === "search");
     const other = response.servers.find((server) => server.name === "files");
@@ -279,7 +279,7 @@ describe("testing a connection", () => {
     writeJson(globalMcpConfigPath(agentDir), { mcpServers: { files: { command: "mcp-files" }, search: { url: "https://example.test/mcp" } } });
     probe = { probe: vi.fn(() => Promise.resolve({ state: "needs-auth", message: "The server answered 401; sign in through pi's /mcp manager." } satisfies PiMcpProbe)) };
 
-    const response = await service().test({ name: "files", scope: "global" });
+    const response = await service().test({ name: "files" });
 
     const listed = response.servers.find((entry) => entry.name === "files");
     const other = response.servers.find((entry) => entry.name === "search");
@@ -287,5 +287,147 @@ describe("testing a connection", () => {
     expect(listed.probe).toMatchObject({ state: "needs-auth", message: "The server answered 401; sign in through pi's /mcp manager." });
     expect(other.probe).toEqual({ state: "unprobed" });
     expect(response.probe).toMatchObject({ state: "needs-auth" });
+  });
+});
+
+describe("a project's override of a global server", () => {
+  const globalFile = () => globalMcpConfigPath(agentDir);
+  const projectFile = () => projectMcpConfigPath(projectPath);
+  let projectB: string;
+
+  beforeEach(() => {
+    projectB = join(root, "project-b");
+    mkdirSync(join(projectB, ".pi"), { recursive: true });
+    projects = {
+      requireProjectPath: (projectId: string): Promise<string> => {
+        if (projectId === "p-1") return Promise.resolve(projectPath);
+        if (projectId === "p-2") return Promise.resolve(projectB);
+        throw new SettingsProjectError(404, `Project ${projectId} was not found`);
+      },
+      isProjectTrusted: () => true,
+    };
+  });
+
+  it("answers an override with the global definition, the override file, and both entries it offers to write", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example" }, other: { command: "mcp-other" } } });
+    writeJson(projectFile(), { mcpServers: { example: { enabled: false } } });
+
+    const listed = await service().list({ projectId: "p-1" });
+
+    const row = listed.servers.find((server) => server.name === "example");
+    expect(row).toMatchObject({
+      scope: "global",
+      configPath: globalFile(),
+      overridePath: projectFile(),
+      enabled: false,
+      configured: "disabled",
+    });
+    expect(row?.targets).toEqual([
+      { kind: "definition", scope: "global", configPath: globalFile() },
+      { kind: "override", scope: "project", configPath: projectFile() },
+    ]);
+  });
+
+  it("disables a global server for one project, and leaves the global file, the other entries, and the next project alone", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example", env: { TOKEN: SECRET } }, other: { command: "mcp-other" } } });
+    const globalBefore = readFileSync(globalFile(), "utf8");
+
+    const inA = await service().setEnabled({ name: "example", target: "override", enabled: false, projectId: "p-1" });
+
+    expect(readFileSync(globalFile(), "utf8")).toBe(globalBefore);
+    expect(serversIn(projectFile())).toEqual({ example: { enabled: false } });
+    expect(inA.servers.find((server) => server.name === "example")?.enabled).toBe(false);
+    expect(inA.servers.find((server) => server.name === "other")).toMatchObject({ enabled: true });
+
+    const inB = await service().list({ projectId: "p-2" });
+    const inBrow = inB.servers.find((server) => server.name === "example");
+    expect(inBrow).toMatchObject({ enabled: true });
+    expect(inBrow).not.toHaveProperty("overridePath");
+    expect(inB.servers.find((server) => server.name === "example")?.targets).toEqual([
+      { kind: "definition", scope: "global", configPath: globalFile() },
+      { kind: "override", scope: "project", configPath: projectMcpConfigPath(projectB) },
+    ]);
+  });
+
+  it("enables a globally disabled server for one project, and the global answer and the next project stay disabled", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example", enabled: false } } });
+
+    const inA = await service().setEnabled({ name: "example", target: "override", enabled: true, projectId: "p-1" });
+
+    expect(serversIn(globalFile())["example"]).toEqual({ command: "mcp-example", enabled: false });
+    expect(serversIn(projectFile())["example"]).toEqual({ enabled: true });
+    expect(inA.servers.find((server) => server.name === "example")?.enabled).toBe(true);
+
+    const inB = await service().list({ projectId: "p-2" });
+    expect(inB.servers.find((server) => server.name === "example")?.enabled).toBe(false);
+  });
+
+  it("removing the override leaves the global definition in place and restores the global answer", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example" } } });
+    writeJson(projectFile(), { mcpServers: { example: { enabled: false }, own: { command: "mcp-own" } } });
+
+    const response = await service().remove({ name: "example", target: "override", projectId: "p-1" });
+
+    expect(response.removed).toBe(true);
+    expect(serversIn(projectFile())).toEqual({ own: { command: "mcp-own" } });
+    expect(serversIn(globalFile())).toEqual({ example: { command: "mcp-example" } });
+    expect(response.servers.find((server) => server.name === "example")).toMatchObject({ enabled: true, scope: "global" });
+  });
+
+  it("removing the definition takes the server out of the global file, and the project's override file is not touched", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example" }, other: { command: "mcp-other" } } });
+    writeJson(projectFile(), { mcpServers: { example: { enabled: false } } });
+
+    const response = await service().remove({ name: "example", target: "definition", projectId: "p-1" });
+
+    expect(response.removed).toBe(true);
+    expect(serversIn(globalFile())).toEqual({ other: { command: "mcp-other" } });
+    expect(serversIn(projectFile())).toEqual({ example: { enabled: false } });
+    expect(response.servers.find((server) => server.name === "example")).toBeUndefined();
+  });
+
+  it("a removal asked for as a project change on a project-defined server writes that project's file, not the global one", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example" } } });
+    writeJson(projectFile(), { mcpServers: { own: { command: "mcp-own" } } });
+
+    const response = await service().remove({ name: "own", target: "definition", projectId: "p-1" });
+
+    expect(response.removed).toBe(true);
+    expect(serversIn(projectFile())).toEqual({});
+    expect(serversIn(globalFile())).toEqual({ example: { command: "mcp-example" } });
+  });
+
+  it("refuses to edit one project's server while a different project is the scope", async () => {
+    writeJson(projectFile(), { mcpServers: { own: { command: "mcp-own" } } });
+
+    await expect(service().setEnabled({ name: "own", target: "definition", enabled: false, projectId: "p-2" })).rejects.toBeInstanceOf(PiMcpServerErrorNotFound);
+    await expect(service().remove({ name: "own", target: "definition", projectId: "p-2" })).rejects.toBeInstanceOf(PiMcpServerErrorNotFound);
+    expect(existsSync(projectMcpConfigPath(projectB))).toBe(false);
+    expect(serversIn(projectFile())).toEqual({ own: { command: "mcp-own" } });
+  });
+
+  it("refuses an override write with no project, and a global-scope request is never answered in a project file", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example" } } });
+
+    await expect(service().setEnabled({ name: "example", target: "override", enabled: false })).rejects.toBeInstanceOf(PiMcpRequestError);
+    await expect(service().setEnabled({ name: "example", target: "definition", enabled: false, projectId: "p-1", scope: "project" })).rejects.toBeInstanceOf(PiMcpRequestError);
+    expect(existsSync(projectFile())).toBe(false);
+  });
+
+  it("an untrusted project is not read, and every project write and probe for it is refused", async () => {
+    writeJson(globalFile(), { mcpServers: { example: { command: "mcp-example" } } });
+    writeJson(projectFile(), { mcpServers: { own: { command: "mcp-own" } } });
+    projects = { ...projects, isProjectTrusted: () => false };
+
+    const listed = await service().list({ projectId: "p-1" });
+
+    expect(listed.projectScopeRead).toBe(false);
+    expect(listed.servers.find((server) => server.name === "own")).toBeUndefined();
+    expect(listed.servers.find((server) => server.name === "example")?.targets).toEqual([{ kind: "definition", scope: "global", configPath: globalFile() }]);
+
+    await expect(service().setEnabled({ name: "example", target: "override", enabled: false, projectId: "p-1" })).rejects.toThrow(/not trusted/);
+    await expect(service().remove({ name: "own", target: "definition", projectId: "p-1" })).rejects.toThrow(/not trusted/);
+    await expect(service().test({ name: "own", projectId: "p-1" })).rejects.toThrow(/not trusted/);
+    expect(serversIn(projectFile())).toEqual({ own: { command: "mcp-own" } });
   });
 });

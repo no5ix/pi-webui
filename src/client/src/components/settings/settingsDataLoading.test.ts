@@ -92,6 +92,7 @@ const mcpResponse: PiMcpListResponse = {
     transport: "stdio",
     configured: "enabled",
     configPath: "/pi/mcp.json",
+    targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }],
     enabled: true,
     command: "mcp-files",
     probe: { state: "unprobed" },

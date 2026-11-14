@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { PiMcpRemoveRequest, PiMcpScope, PiMcpSetEnabledRequest, PiMcpTestRequest } from "../../shared/apiTypes.js";
+import type { PiMcpRemoveRequest, PiMcpScope, PiMcpSetEnabledRequest, PiMcpTestRequest, PiMcpWriteKind } from "../../shared/apiTypes.js";
 import { ActiveAgentProfileAccessError } from "./activeAgentProfileProvider.js";
 import { PiMcpRequestError, PiMcpServerErrorNotFound, type PiMcpService } from "./piMcpService.js";
 import { McpConfigWriteError } from "../shared/resources/mcpConfig.js";
@@ -17,6 +17,10 @@ class PiMcpRequestValidationError extends Error {}
  * A request names a project by id, never by path: the machine that answers owns the project store,
  * and on a remote machine the project's folders are that machine's. A server name is validated
  * before anything reads a file, because the name is the key inside `mcp.json`.
+ *
+ * A write names the entry it aims at (`target`), and `scope` beside it for a PI WEB old enough to
+ * know only the scope: the service reads both through one rule, so a browser and a machine that were
+ * not released together agree on which file opens.
  */
 export function registerPiMcpRoutes(app: FastifyInstance, service: PiMcpService, prefix = "/api"): void {
   const routePrefix = normalizeRoutePrefix(prefix);
@@ -64,21 +68,35 @@ function parseSetEnabledRequest(body: unknown): PiMcpSetEnabledRequest {
   const fields = parseServerRequest(body);
   const enabled = fields["enabled"];
   if (typeof enabled !== "boolean") throw new PiMcpRequestValidationError("MCP enabled must be true or false");
-  const scope = parseScope(fields["scope"]);
-  if (scope === "extension") throw new PiMcpRequestValidationError("A server an extension registered is not editable from Settings");
-  return { name: fields.name, scope, enabled, ...fields.project };
+  return { name: fields.name, ...parseWriteFields(fields, "editable"), enabled, ...fields.project };
 }
 
 function parseRemoveRequest(body: unknown): PiMcpRemoveRequest {
   const fields = parseServerRequest(body);
-  const scope = parseScope(fields["scope"]);
-  if (scope === "extension") throw new PiMcpRequestValidationError("A server an extension registered is not removable from Settings");
-  return { name: fields.name, scope, ...fields.project };
+  return { name: fields.name, ...parseWriteFields(fields, "removable"), ...fields.project };
 }
 
 function parseTestRequest(body: unknown): PiMcpTestRequest {
   const fields = parseServerRequest(body);
-  return { name: fields.name, scope: parseScope(fields["scope"]), ...fields.project };
+  return { name: fields.name, ...fields.project };
+}
+
+/** The entry a write aims at, as the body words it: `target` for a new browser, `scope` for an old one. */
+function parseWriteFields(fields: Record<string, unknown>, verb: "editable" | "removable"): { target: PiMcpWriteKind; scope?: PiMcpScope } {
+  const target = parseWriteKind(fields["target"]);
+  const scope = fields["scope"] === undefined ? undefined : parseScope(fields["scope"]);
+  if (scope === "extension") throw new PiMcpRequestValidationError(`A server an extension registered is not ${verb} from Settings`);
+  if (target === undefined && scope === undefined) {
+    throw new PiMcpRequestValidationError('An MCP write must name its target: "definition" or "override"');
+  }
+  const resolved = target ?? (scope === "project" ? "override" : "definition");
+  return scope === undefined ? { target: resolved } : { target: resolved, scope };
+}
+
+function parseWriteKind(value: unknown): PiMcpWriteKind | undefined {
+  if (value === undefined) return undefined;
+  if (value !== "definition" && value !== "override") throw new PiMcpRequestValidationError('MCP target must be "definition" or "override"');
+  return value;
 }
 
 function parseServerRequest(body: unknown): { name: string; project: { projectId?: string }; [key: string]: unknown } {
@@ -87,7 +105,7 @@ function parseServerRequest(body: unknown): { name: string; project: { projectId
   if (typeof name !== "string" || name.trim() === "") throw new PiMcpRequestValidationError("MCP server name must be a non-empty string");
   if (!MCP_SERVER_NAME.test(name.trim())) throw new PiMcpRequestValidationError("MCP server name may use only letters, digits, \"_\" and \"-\"");
   const projectId = parseOptionalProjectId(body["projectId"]);
-  if (projectId !== undefined && parseScope(body["scope"]) === "extension") {
+  if (projectId !== undefined && body["scope"] === "extension") {
     throw new PiMcpRequestValidationError("An extension-scope server is not project scoped");
   }
   return {

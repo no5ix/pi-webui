@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { configApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi } from "../api";
+import { configApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi, projectsApi } from "../api";
 import { requiredElement, settleRenderedDialog } from "./modalSurfaceTestSupport";
 import { SettingsDialog } from "./SettingsDialog";
-import { configResponse, mcpListResponse, mcpServerInfo, pluginsResponse, skillInfo, skillsResponse } from "./SettingsDialog.testSupport";
+import { configResponse, mcpListResponse, mcpServerInfo, pluginsResponse, settingsProject, skillInfo, skillsResponse, stubProjectsApi } from "./SettingsDialog.testSupport";
 import type { SettingsSkillsPanel } from "./settings/SettingsSkillsPanel";
 import type { SettingsMcpPanel } from "./settings/SettingsMcpPanel";
 import type { Machine, PiMcpServerInfo, PiSkillInfo } from "../api";
@@ -34,6 +34,8 @@ beforeEach(() => {
   vi.spyOn(piSkillsApi, "setEnabled").mockResolvedValue({ ...skillsResponse([skillInfo("pdf")]), requiresReload: true });
   vi.spyOn(piMcpApi, "test").mockResolvedValue({ ...mcpListResponse([mcpServerInfo("files")]), action: "test", name: "files", probe: { state: "reachable" }, requiresReload: false });
   vi.spyOn(piMcpApi, "remove").mockResolvedValue({ ...mcpListResponse([mcpServerInfo("files")]), action: "remove", name: "files", removed: true, requiresReload: true });
+  vi.spyOn(piMcpApi, "setEnabled").mockResolvedValue({ ...mcpListResponse([mcpServerInfo("files")]), action: "set-enabled", name: "files", enabled: false, requiresReload: true });
+  stubProjectsApi([settingsProject()]);
   vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } })));
 });
 
@@ -158,15 +160,99 @@ describe("the Skills and MCP sections", () => {
     const panel = mcpPanel(dialog);
     if (panel.onTestServer === undefined || panel.onRemoveServer === undefined) throw new Error("Expected the MCP panel to be wired to the dialog");
 
-    await panel.onTestServer(mcpServerInfo("files"));
-    await panel.onRemoveServer(mcpServerInfo("files"));
+    const row = mcpServerInfo("files");
+    const definition = row.targets[0];
+    if (definition === undefined) throw new Error("Expected the fixture row to name the entry it writes");
+    await panel.onTestServer(row);
+    await panel.onRemoveServer(row, definition);
     await settleRenderedDialog(dialog);
 
-    expect(piMcpApi.test).toHaveBeenCalledWith({ name: "files", scope: "global" }, "lab-mac");
-    expect(piMcpApi.remove).toHaveBeenCalledWith({ name: "files", scope: "global" }, "lab-mac");
+    expect(piMcpApi.test).toHaveBeenCalledWith({ name: "files" }, "lab-mac");
+    expect(piMcpApi.remove).toHaveBeenCalledWith({ name: "files", target: "definition", scope: "global" }, "lab-mac");
     const redrawn = mcpPanel(dialog).mcpResponse;
     expect(redrawn?.servers).toEqual([]);
     expect(dialogText(dialog)).toContain("was removed");
+  });
+
+  it("reads the global scope until a project is chosen, then reads the scope of the project it chose", async () => {
+    const dialog = await open("mcp", labMac);
+    const panel = mcpPanel(dialog);
+    if (panel.onSelectProject === undefined) throw new Error("Expected the MCP panel to be wired to the dialog");
+
+    expect(piMcpApi.list).toHaveBeenLastCalledWith(undefined, "lab-mac");
+    expect(panel.projects.map((project) => project.id)).toEqual(["p-1"]);
+    expect(panel.projectSelection).toBeUndefined();
+
+    void panel.onSelectProject("p-1");
+    await settleRenderedDialog(dialog);
+
+    expect(piMcpApi.list).toHaveBeenLastCalledWith("p-1", "lab-mac");
+    expect(mcpPanel(dialog).projectSelection).toBe("p-1");
+  });
+
+  it("writes a project's override of a global server with the project, the entry, and the answer's project", async () => {
+    const row = mcpServerInfo("files", {
+      enabled: true,
+      overridePath: "/work/project/.pi/mcp.json",
+      targets: [
+        { kind: "definition", scope: "global", configPath: "/pi/mcp.json" },
+        { kind: "override", scope: "project", configPath: "/work/project/.pi/mcp.json" },
+      ],
+    });
+    vi.mocked(piMcpApi.list).mockResolvedValue(mcpListResponse([row], {
+      projectPath: "/work/project",
+      projectConfigPath: "/work/project/.pi/mcp.json",
+      projectTrusted: true,
+      projectScopeRead: true,
+    }));
+
+    const dialog = await open("mcp", labMac);
+    void mcpPanel(dialog).onSelectProject?.("p-1");
+    await settleRenderedDialog(dialog);
+
+    const shown = mcpPanel(dialog).mcpResponse;
+    const shownRow = shown?.servers.find((server) => server.name === "files");
+    const override = shownRow?.targets.find((target) => target.kind === "override");
+    if (shownRow === undefined || override === undefined) throw new Error("Expected the answer to offer the project's override");
+
+    const toggle = mcpPanel(dialog).onToggleServer;
+    if (toggle === undefined) throw new Error("Expected the MCP panel to be wired to the dialog");
+    await toggle(shownRow, override, false);
+    await settleRenderedDialog(dialog);
+
+    expect(piMcpApi.setEnabled).toHaveBeenLastCalledWith(
+      { name: "files", target: "override", scope: "project", projectId: "p-1", enabled: false },
+      "lab-mac",
+    );
+  });
+
+  it("says a project that is not trusted, and stops the panel offering to write into it", async () => {
+    vi.mocked(piMcpApi.list).mockResolvedValue(mcpListResponse([mcpServerInfo("files")], {
+      projectPath: "/work/project",
+      projectConfigPath: "/work/project/.pi/mcp.json",
+      projectTrusted: false,
+      projectScopeRead: false,
+    }));
+
+    const dialog = await open("mcp", labMac);
+    void mcpPanel(dialog).onSelectProject?.("p-1");
+    await settleRenderedDialog(dialog);
+
+    const text = dialogText(dialog);
+    expect(text).toContain("Project scope not read");
+    expect(text).toContain("not trusted");
+    expect(text).not.toContain("Remove project override");
+  });
+
+  it("says the projects that did not load, and keeps the rows it has for the scope it read", async () => {
+    vi.spyOn(projectsApi, "projects").mockRejectedValue(new Error("Remote machine unavailable"));
+
+    const dialog = await open("mcp", labMac);
+    await settleRenderedDialog(dialog);
+
+    expect(mcpPanel(dialog).projectsError).toContain("did not load");
+    expect(dialogText(dialog)).toContain("did not load");
+    expect(mcpPanel(dialog).mcpResponse?.servers.map((server) => server.name)).toEqual(["files"]);
   });
 
   it("says on the panel which machine a failed read came from", async () => {

@@ -54,6 +54,28 @@ that names only `enabled` overrides that setting for a global server of the same
 one project turns a shared server off without touching the machine's file, and removing the override
 restores the global server.
 
+**The project is named, never assumed.** The panel offers the selected machine's projects, and
+opens on *No project*: with no project named, PI WEB reads and writes only `<agentDir>/mcp.json`.
+Naming a project adds its file to the read — that project's own servers, and its overrides of the
+machine's servers — and the panel says which file each answer came from and which project the page
+is answering for. The choice belongs to one machine, because a project's `mcp.json` is one machine's
+file: switching machines drops the rows, the selection, and the messages of the machine left, and
+offers the projects of the machine entered. A project the machine no longer has is dropped from the
+page rather than kept as a selection.
+
+**Each control says which entry it writes.** A row's switch writes the entry that the chosen scope
+owns, and the row says which file that is: with no project named it writes the definition in
+`<agentDir>/mcp.json`, and with a project named it writes that project's override in
+`<project>/.pi/mcp.json`. Removal names both entries when a project has both — *Remove project
+override* leaves the global definition in place, and *Remove definition* takes the server out of the
+file that defines it and leaves a project's override untouched. A server the project itself defines
+has only its definition — there is no override to write — and the row says so, and a global
+server with no override says that the project follows the global answer and that the next change
+writes the project's file. A server a Pi package supplies has no file for Settings to write, and
+is listed with the package's answer. Removal is armed by a first press that names which of the two
+it removes, and the arm belongs to that entry, that project, and that machine: choosing another of any
+of them drops it.
+
 The panel keeps two facts apart:
 
 - **what the config says** — enabled, disabled, or invalid, with the file the answer came from, the
@@ -77,7 +99,8 @@ servers; it does not copy their secrets to the browser.
 
 **A project's servers need the project's trust.** Connecting a project's server runs what the
 project's file names, so an untrusted project's `mcp.json` is not read, not changed, and never
-connected; the panel says the project scope was not read. A file that is not valid JSON is reported
+connected; the panel says the project scope was not read and offers no write into it, and a server
+that only that project's file names cannot be probed. A file that is not valid JSON is reported
 as broken, with its position, and never with the text around the break; PI WEB refuses to write into
 such a file, so a typo cannot be answered by overwriting the file that holds the secrets.
 

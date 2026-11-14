@@ -36,35 +36,47 @@ describe("buildApp Pi MCP routes", () => {
     const response = await appTestContext.app.inject({
       method: "POST",
       url: "/api/pi-mcp/set-enabled",
-      payload: { name: "files", scope: "global", enabled: true },
+      payload: { name: "files", target: "definition", scope: "global", enabled: true },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ action: "set-enabled", requiresReload: true });
-    expect(appTestContext.piMcpRequests).toEqual([{ action: "set-enabled", name: "files", scope: "global", enabled: true }]);
+    expect(appTestContext.piMcpRequests).toEqual([{ action: "set-enabled", name: "files", target: "definition", enabled: true }]);
+  });
+
+  it("writes a project's override through the local machine alias, with the project it names", async () => {
+    const response = await appTestContext.app.inject({
+      method: "POST",
+      url: "/api/machines/local/pi-mcp/set-enabled",
+      payload: { name: "files", target: "override", scope: "project", projectId: "p-1", enabled: false },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(appTestContext.piMcpRequests).toEqual([{ action: "set-enabled", name: "files", target: "override", projectId: "p-1", enabled: false }]);
   });
 
   it("probes a server through the local machine alias", async () => {
     const response = await appTestContext.app.inject({
       method: "POST",
       url: "/api/machines/local/pi-mcp/test",
-      payload: { name: "files", scope: "global" },
+      payload: { name: "files", projectId: "p-1" },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ action: "test", probe: { state: "reachable" } });
-    expect(appTestContext.piMcpRequests).toEqual([{ action: "test", name: "files", scope: "global" }]);
+    expect(appTestContext.piMcpRequests).toEqual([{ action: "test", name: "files", projectId: "p-1" }]);
   });
 
   it("removes a server and reports the reload that takes its tools away", async () => {
     const response = await appTestContext.app.inject({
       method: "POST",
       url: "/api/pi-mcp/remove",
-      payload: { name: "files", scope: "global" },
+      payload: { name: "files", target: "definition", scope: "global" },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ action: "remove", removed: true, requiresReload: true });
+    expect(appTestContext.piMcpRequests).toEqual([{ action: "remove", name: "files", target: "definition" }]);
   });
 
   it("refuses a request that names no server, before the service sees it", async () => {

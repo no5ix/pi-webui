@@ -17,7 +17,9 @@ import type {
   PiMcpListResponse,
   PiMcpMutationResponse,
   PiMcpProbe,
+  PiMcpScope,
   PiMcpServerInfo,
+  PiMcpWriteTarget,
   PiSkillInfo,
   PiSkillSetEnabledResponse,
   PiSkillsDiagnostic,
@@ -2170,6 +2172,7 @@ const PI_SKILL_ORIGINS = ["agent", "project", "package", "path"] as const;
 const PI_SKILL_PREFERENCES = ["default", "enabled", "disabled"] as const;
 const PI_SKILL_VALIDATIONS = ["valid", "warning"] as const;
 const PI_MCP_SCOPES = ["global", "project", "extension"] as const;
+const PI_MCP_WRITE_KINDS = ["definition", "override"] as const;
 const PI_MCP_TRANSPORTS = ["stdio", "http"] as const;
 const PI_MCP_CONFIGURED_STATES = ["enabled", "disabled", "invalid"] as const;
 const PI_MCP_EXPOSURES = ["codemode", "deferred", "direct", "hidden"] as const;
@@ -2291,13 +2294,17 @@ export function parsePiMcpMutationResponse(value: unknown): PiMcpMutationRespons
 
 function parsePiMcpServerInfo(value: unknown): PiMcpServerInfo {
   const record = requireRecord(value);
+  const scope = parseState(PI_MCP_SCOPES, record["scope"], "Pi MCP scope");
+  const configPath = requireString(record, "configPath");
+  const overridePath = optionalString(record, "overridePath");
   return {
     name: requireString(record, "name"),
-    scope: parseState(PI_MCP_SCOPES, record["scope"], "Pi MCP scope"),
+    scope,
     transport: parseState(PI_MCP_TRANSPORTS, record["transport"], "Pi MCP transport"),
     configured: parseState(PI_MCP_CONFIGURED_STATES, record["configured"], "Pi MCP configured state"),
-    configPath: requireString(record, "configPath"),
-    ...optionalField("overridePath", optionalString(record, "overridePath")),
+    configPath,
+    targets: parsePiMcpWriteTargets(record["targets"], scope, configPath, overridePath),
+    ...optionalField("overridePath", overridePath),
     ...optionalField("overrideOnly", parseOptionalBoolean(record["overrideOnly"], "overrideOnly")),
     enabled: requireBoolean(record, "enabled"),
     ...optionalField("exposure", record["exposure"] === undefined ? undefined : parseState(PI_MCP_EXPOSURES, record["exposure"], "Pi MCP exposure")),
@@ -2312,6 +2319,30 @@ function parsePiMcpServerInfo(value: unknown): PiMcpServerInfo {
     ...optionalField("authProvider", optionalString(record, "authProvider")),
     ...optionalField("oauthConfigured", parseOptionalBoolean(record["oauthConfigured"], "oauthConfigured")),
     ...optionalField("probe", record["probe"] === undefined ? undefined : parsePiMcpProbe(record["probe"])),
+  };
+}
+
+/**
+ * The entries a row can be written to.
+ *
+ * A machine that knows the targets sends them. One that does not is read through the fields it does
+ * send - the file that defines the server, and the project file that overrides it - so a row on an
+ * older machine stays usable, and the browser never names a file it was not told about.
+ */
+function parsePiMcpWriteTargets(value: unknown, scope: PiMcpScope, configPath: string, overridePath: string | undefined): PiMcpWriteTarget[] {
+  if (value !== undefined) return arrayOf(parsePiMcpWriteTarget)(value);
+  if (scope === "extension") return [];
+  const definition: PiMcpWriteTarget = { kind: "definition", scope, configPath };
+  if (scope === "global" && overridePath !== undefined) return [definition, { kind: "override", scope: "project", configPath: overridePath }];
+  return [definition];
+}
+
+function parsePiMcpWriteTarget(value: unknown): PiMcpWriteTarget {
+  const record = requireRecord(value);
+  return {
+    kind: parseState(PI_MCP_WRITE_KINDS, record["kind"], "Pi MCP write kind"),
+    scope: parseState(PI_MCP_SCOPES, record["scope"], "Pi MCP scope"),
+    configPath: requireString(record, "configPath"),
   };
 }
 

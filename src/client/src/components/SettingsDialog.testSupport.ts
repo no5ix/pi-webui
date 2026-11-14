@@ -1,5 +1,6 @@
 import { vi } from "vitest";
-import type { Machine, PiMcpListResponse, PiMcpServerInfo, PiPackageInfo, PiPackageMutationResponse, PiSkillInfo, PiSkillsResponse, PiSkillsScopeInfo, PiWebConfigResponse, PiWebConfigValues, PiWebPluginInfo, PiWebPluginsResponse } from "../api";
+import { projectsApi } from "../api";
+import type { Machine, PiMcpListResponse, PiMcpScope, PiMcpServerInfo, PiMcpWriteTarget, Project, PiPackageInfo, PiPackageMutationResponse, PiSkillInfo, PiSkillsResponse, PiSkillsScopeInfo, PiWebConfigResponse, PiWebConfigValues, PiWebPluginInfo, PiWebPluginsResponse } from "../api";
 import { SettingsDialog } from "./SettingsDialog";
 
 export const remoteMachine: Machine = {
@@ -129,19 +130,42 @@ export function skillsResponse(skills: PiSkillInfo[], scopes: PiSkillsScopeInfo[
 }
 
 /** One MCP server, with the redacted shape the API answers: names, never values. */
+/** The entries a row offers to write, derived the way the service derives them. */
+export function mcpWriteTargets(scope: PiMcpScope, configPath: string, overridePath: string | undefined): PiMcpWriteTarget[] {
+  if (scope === "extension") return [];
+  const definition: PiMcpWriteTarget = { kind: "definition", scope, configPath };
+  return overridePath === undefined ? [definition] : [definition, { kind: "override", scope: "project", configPath: overridePath }];
+}
+
 export function mcpServerInfo(name: string, overrides: Partial<PiMcpServerInfo> = {}): PiMcpServerInfo {
-  return {
+  const row: PiMcpServerInfo = {
     name,
     scope: "global",
     transport: "stdio",
     configured: "enabled",
     configPath: "/pi/mcp.json",
+    targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }],
     enabled: true,
     command: "npx",
     envNames: ["ACME_TOKEN"],
     probe: { state: "unprobed" },
     ...overrides,
   };
+  return { ...row, targets: overrides.targets ?? mcpWriteTargets(row.scope, row.configPath, row.overridePath) };
+}
+
+export function settingsProject(overrides: Partial<Project> = {}): Project {
+  return { id: "p-1", name: "Work", path: "/work/project", createdAt: "2026-01-01T00:00:00.000Z", ...overrides };
+}
+
+/**
+ * The projects the dialog reads for the machine it is on.
+ *
+ * Every mounted dialog reads them, so every dialog test answers that read: a test that wants a
+ * machine with no projects, a second project, or a project list that failed, says so here.
+ */
+export function stubProjectsApi(projects: Project[] = [settingsProject()]): void {
+  vi.spyOn(projectsApi, "projects").mockResolvedValue(projects);
 }
 
 export function mcpListResponse(servers: PiMcpServerInfo[], overrides: Partial<PiMcpListResponse> = {}): PiMcpListResponse {

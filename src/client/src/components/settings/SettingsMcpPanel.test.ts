@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PiMcpListResponse, PiMcpServerInfo } from "../../api";
+import type { PiMcpListResponse, PiMcpScope, PiMcpServerInfo, PiMcpWriteTarget, Project } from "../../api";
 import { SettingsMcpPanel } from "./SettingsMcpPanel";
 import type { SettingsMachineTarget } from "./settingsMachineTarget";
 
@@ -23,13 +23,20 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/**
+ * A row as the service sends one.
+ *
+ * `targets` is what the machine offers to write, so the fixture derives it from the files the row
+ * names - the same rule the server follows - and a test that wants a row without a target says so.
+ */
 function server(name: string, overrides: Partial<PiMcpServerInfo> = {}): PiMcpServerInfo {
-  return {
+  const row: PiMcpServerInfo = {
     name,
     scope: "global",
     transport: "stdio",
     configured: "enabled",
     configPath: "/pi/mcp.json",
+    targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }],
     enabled: true,
     command: "mcp-files",
     envNames: ["FILES_TOKEN"],
@@ -37,7 +44,16 @@ function server(name: string, overrides: Partial<PiMcpServerInfo> = {}): PiMcpSe
     probe: { state: "unprobed" },
     ...overrides,
   };
+  return { ...row, targets: overrides.targets ?? writeTargetsFor(row.scope, row.configPath, row.overridePath) };
 }
+
+function writeTargetsFor(scope: PiMcpScope, configPath: string, overridePath: string | undefined): PiMcpWriteTarget[] {
+  if (scope === "extension") return [];
+  const definition: PiMcpWriteTarget = { kind: "definition", scope, configPath };
+  return overridePath === undefined ? [definition] : [definition, { kind: "override", scope: "project", configPath: overridePath }];
+}
+
+const project: Project = { id: "p-1", name: "Work", path: "/work/project", createdAt: "2026-01-01T00:00:00.000Z" };
 
 function response(servers: PiMcpServerInfo[], overrides: Partial<PiMcpListResponse> = {}): PiMcpListResponse {
   return {
@@ -81,6 +97,18 @@ function switches(panel: SettingsMcpPanel): HTMLInputElement[] {
 function buttons(root: Element | ShadowRoot | null, label: string): HTMLButtonElement[] {
   if (root === null) return [];
   return Array.from(root.querySelectorAll<HTMLButtonElement>("button")).filter((button) => button.textContent.trim() === label);
+}
+
+function firstSwitch(panel: SettingsMcpPanel): HTMLInputElement {
+  const input = switches(panel)[0];
+  if (input === undefined) throw new Error("Expected the panel to offer a switch on the server row");
+  return input;
+}
+
+function projectSelect(panel: SettingsMcpPanel): HTMLSelectElement {
+  const select = panel.shadowRoot?.querySelector<HTMLSelectElement>("select#mcp-project") ?? null;
+  if (select === null) throw new Error("Expected the panel to offer the project scope");
+  return select;
 }
 
 function flip(input: HTMLInputElement, checked: boolean): void {
@@ -184,10 +212,116 @@ describe("settings-mcp-panel", () => {
     expect(text).not.toContain("not known");
   });
 
-  it("turns a server off with the switch, naming the server and its scope", async () => {
-    const onToggleServer = vi.fn<(server: PiMcpServerInfo, enabled: boolean) => void>();
+  it("writes the project's override, and names it, when a project is the scope being managed", async () => {
+    const targets: PiMcpWriteTarget[] = [];
     const panel = await mount((element) => {
-      element.mcpResponse = response([server("files"), server("search", { scope: "project" })]);
+      element.mcpResponse = response([server("files", { overridePath: "/work/project/.pi/mcp.json", targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }, { kind: "override", scope: "project", configPath: "/work/project/.pi/mcp.json" }] })], { projectPath: "/work/project", projectConfigPath: "/work/project/.pi/mcp.json", projectTrusted: true, projectScopeRead: true });
+      element.projects = [project];
+      element.projectSelection = "p-1";
+      element.onToggleServer = (_server: PiMcpServerInfo, target: PiMcpWriteTarget) => { targets.push(target); };
+    });
+
+    flip(firstSwitch(panel), false);
+    await panel.updateComplete;
+
+    expect(targets).toEqual([{ kind: "override", scope: "project", configPath: "/work/project/.pi/mcp.json" }]);
+    const text = panelText(panel);
+    expect(text).toContain("Overridden for this project: /work/project/.pi/mcp.json");
+    expect(text).toContain("This switch writes the project's override in /work/project/.pi/mcp.json.");
+  });
+
+  it("writes the global definition when no project is the scope, and says so on the row", async () => {
+    const targets: PiMcpWriteTarget[] = [];
+    const panel = await mount((element) => {
+      element.mcpResponse = response([server("files")]);
+      element.projects = [project];
+      element.onToggleServer = (_server: PiMcpServerInfo, target: PiMcpWriteTarget) => { targets.push(target); };
+    });
+
+    flip(firstSwitch(panel), false);
+    await panel.updateComplete;
+
+    expect(targets).toEqual([{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }]);
+    expect(panelText(panel)).toContain("This switch writes the global definition in /pi/mcp.json.");
+  });
+
+  it("offers the override's removal and the definition's removal as two acts, each naming the file it opens", async () => {
+    const removed: PiMcpWriteTarget[] = [];
+    const panel = await mount((element) => {
+      element.mcpResponse = response([server("files", { overridePath: "/work/project/.pi/mcp.json", targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }, { kind: "override", scope: "project", configPath: "/work/project/.pi/mcp.json" }] })], { projectPath: "/work/project", projectConfigPath: "/work/project/.pi/mcp.json", projectTrusted: true, projectScopeRead: true });
+      element.projects = [project];
+      element.projectSelection = "p-1";
+      element.onRemoveServer = (_server: PiMcpServerInfo, target: PiMcpWriteTarget) => { removed.push(target); };
+    });
+
+    const removalButtons = buttons(panel.shadowRoot, "Remove project override").concat(buttons(panel.shadowRoot, "Remove definition"));
+    expect(removalButtons.map((button) => (button.textContent || "").trim())).toEqual(["Remove project override", "Remove definition"]);
+
+    buttons(panel.shadowRoot, "Remove project override")[0]?.click();
+    await panel.updateComplete;
+    const armed = panelText(panel);
+    expect(armed).toContain("Remove the project override of files from /work/project/.pi/mcp.json?");
+
+    buttons(panel.shadowRoot, "Confirm remove")[0]?.click();
+    await panel.updateComplete;
+    expect(removed).toEqual([{ kind: "override", scope: "project", configPath: "/work/project/.pi/mcp.json" }]);
+  });
+
+  it("offers only the definition's removal for a global server with no project override", async () => {
+    const panel = await mount((element) => {
+      element.mcpResponse = response([server("files", { targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }, { kind: "override", scope: "project", configPath: "/work/project/.pi/mcp.json" }] })], { projectPath: "/work/project", projectConfigPath: "/work/project/.pi/mcp.json", projectTrusted: true, projectScopeRead: true });
+      element.projects = [project];
+      element.projectSelection = "p-1";
+    });
+
+    const labels = Array.from(panel.shadowRoot?.querySelectorAll("button") ?? []).filter((button) => (button.textContent || "").startsWith("Remove")).map((button) => (button.textContent || "").trim());
+    expect(labels).toEqual(["Remove definition"]);
+    expect(panelText(panel)).toContain("No project override: this project follows the global answer");
+  });
+
+  it("offers the projects this machine has, with no project as a real choice, and the machine's own projects on a remote machine", async () => {
+    const chosen: (string | undefined)[] = [];
+    const panel = await mount((element) => {
+      element.mcpResponse = response([server("files")]);
+      element.projects = [project];
+      element.onSelectProject = (projectId: string | undefined) => { chosen.push(projectId); };
+    });
+
+    const select = projectSelect(panel);
+    const options = Array.from(select.options).map((option) => option.textContent.trim());
+    expect(options[0]).toContain("No project");
+    expect(options).toContain("Work");
+
+    select.value = "p-1";
+    select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await panel.updateComplete;
+    expect(chosen).toEqual(["p-1"]);
+
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await panel.updateComplete;
+    expect(chosen).toEqual(["p-1", undefined]);
+  });
+
+  it("says a project list that did not load did not load, and never that the machine has no projects", async () => {
+    const failed = await mount((element) => {
+      element.mcpResponse = response([server("files")]);
+      element.projectsError = "The projects of Lab Mac did not load: gateway unreachable";
+    });
+    expect(panelText(failed)).toContain("did not load: gateway unreachable");
+    expect(panelText(failed)).not.toContain("has no projects");
+
+    const empty = await mount((element) => {
+      element.mcpResponse = response([server("files")]);
+      element.projects = [];
+    });
+    expect(panelText(empty)).toContain("has no projects");
+  });
+
+  it("turns a server off with the switch, naming the server and its scope", async () => {
+    const onToggleServer = vi.fn<(server: PiMcpServerInfo, target: PiMcpWriteTarget, enabled: boolean) => void>();
+    const panel = await mount((element) => {
+      element.mcpResponse = response([server("files"), server("search", { scope: "project", configPath: "/work/project/.pi/mcp.json" })]);
       element.onToggleServer = onToggleServer;
     });
 
@@ -195,7 +329,11 @@ describe("settings-mcp-panel", () => {
     if (searchSwitch === undefined) throw new Error("Expected a switch on the second server row");
     flip(searchSwitch, false);
 
-    expect(onToggleServer).toHaveBeenCalledWith(expect.objectContaining({ name: "search", scope: "project" }), false);
+    expect(onToggleServer).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "search", scope: "project" }),
+      { kind: "definition", scope: "project", configPath: "/work/project/.pi/mcp.json" },
+      false,
+    );
   });
 
   it("probes one server, and only that one", async () => {
@@ -215,24 +353,24 @@ describe("settings-mcp-panel", () => {
   });
 
   it("asks before it removes, and names the file the entry leaves", async () => {
-    const onRemoveServer = vi.fn<(server: PiMcpServerInfo) => void>();
+    const onRemoveServer = vi.fn<(server: PiMcpServerInfo, target: PiMcpWriteTarget) => void>();
     const panel = await mount((element) => {
       element.mcpResponse = response([server("files", { configPath: "/work/project/.pi/mcp.json", scope: "project" })]);
       element.onRemoveServer = onRemoveServer;
     });
 
-    const first = buttons(panel.shadowRoot, "Remove")[0];
-    if (first === undefined) throw new Error("Expected a Remove button");
+    const first = buttons(panel.shadowRoot, "Remove definition")[0];
+    if (first === undefined) throw new Error("Expected a Remove definition button");
     first.click();
     await panel.updateComplete;
 
     const confirm = buttons(panel.shadowRoot, "Confirm remove")[0];
-    expect(panelText(panel)).toContain("/work/project/.pi/mcp.json");
+    expect(panelText(panel)).toContain("Remove the definition of files from /work/project/.pi/mcp.json?");
     expect(onRemoveServer).not.toHaveBeenCalled();
     if (confirm === undefined) throw new Error("Expected a confirmation step");
     confirm.click();
 
-    expect(onRemoveServer).toHaveBeenCalledWith(expect.objectContaining({ name: "files", scope: "project" }));
+    expect(onRemoveServer).toHaveBeenCalledWith(expect.objectContaining({ name: "files", scope: "project" }), { kind: "definition", scope: "project", configPath: "/work/project/.pi/mcp.json" });
   });
 
   it("refuses to edit a server an extension registered, which pi owns", async () => {

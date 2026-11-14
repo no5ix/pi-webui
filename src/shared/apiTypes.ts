@@ -547,6 +547,26 @@ export interface PiSkillSetEnabledResponse extends PiSkillsResponse {
  */
 export type PiMcpScope = "global" | "project" | "extension";
 
+/**
+ * Which entry an MCP write is aimed at.
+ *
+ * A server's `scope` answers where its **definition** lives, and that is a fact about the files; it
+ * is not an instruction about where a change goes. A global server that a project overrides has two
+ * writable entries - the definition and the project's override - and picking a file by the first of
+ * those numbers is how a "turn this off for this project" press ends up editing the machine's config.
+ * A write therefore names its target, and the answer to a row names the targets it offers.
+ */
+export type PiMcpWriteKind = "definition" | "override";
+
+/** One entry a row can be written to, with the file that will change. */
+export interface PiMcpWriteTarget {
+  kind: PiMcpWriteKind;
+  /** The scope the write goes to, which is the scope pi's rules key on. */
+  scope: PiMcpScope;
+  /** The `mcp.json` this write opens. The panel names it, so a reader sees the file before pressing. */
+  configPath: string;
+}
+
 export type PiMcpTransport = "stdio" | "http";
 
 export type PiMcpExposure = "codemode" | "deferred" | "direct" | "hidden";
@@ -573,6 +593,8 @@ export interface PiMcpServerInfo {
   configured: PiMcpConfiguredState;
   /** The `mcp.json` that defines the server. */
   configPath: string;
+  /** The entries this row can be written to, for the scope the answer was read for. */
+  targets: PiMcpWriteTarget[];
   /** The project `mcp.json` that overrides this global server's enabled / exposure keys. */
   overridePath?: string;
   /** A project entry that names no command or url: it only overrides a global server. */
@@ -613,21 +635,28 @@ export interface PiMcpListResponse {
 
 export interface PiMcpSetEnabledRequest {
   name: string;
-  scope: PiMcpScope;
+  /** The entry to write: the server's definition, or this project's override of it. */
+  target: PiMcpWriteKind;
   enabled: boolean;
-  /** Required for project scope: a project this machine has, resolved to its path by the server. */
+  /** Required for an override: a project this machine has, resolved to its path by the server. */
   projectId?: string;
+  /**
+   * The scope the write lands in, sent beside `target` so a PI WEB old enough to know only `scope`
+   * still answers a request it can check. The target is what the server acts on.
+   */
+  scope?: PiMcpScope;
 }
 
 export interface PiMcpRemoveRequest {
   name: string;
-  scope: PiMcpScope;
+  target: PiMcpWriteKind;
   projectId?: string;
+  scope?: PiMcpScope;
 }
 
 export interface PiMcpTestRequest {
   name: string;
-  scope: PiMcpScope;
+  /** A probe reads the effective config, so it needs no write target. */
   projectId?: string;
 }
 

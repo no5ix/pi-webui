@@ -22,6 +22,7 @@ function response(): PiMcpListResponse {
         name: "files",
         scope: "global",
         transport: "stdio",
+        targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }],
         configured: "enabled",
         configPath: "/home/test/.pi/mcp.json",
         enabled: true,
@@ -71,18 +72,18 @@ describe("registerPiMcpRoutes", () => {
   });
 
   it("turns a server off in the scope that defines it", async () => {
-    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/set-enabled", payload: { name: "files", scope: "global", enabled: false } });
+    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/set-enabled", payload: { name: "files", target: "definition", scope: "global", enabled: false } });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ action: "set-enabled", name: "files", enabled: false, requiresReload: true });
-    expect(mocks.setEnabled).toHaveBeenCalledWith({ name: "files", scope: "global", enabled: false });
+    expect(mocks.setEnabled).toHaveBeenCalledWith({ name: "files", target: "definition", scope: "global", enabled: false });
   });
 
   it("removes a server from one file", async () => {
-    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/remove", payload: { name: "files", scope: "project", projectId: "p-1" } });
+    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/remove", payload: { name: "files", target: "override", scope: "project", projectId: "p-1" } });
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.remove).toHaveBeenCalledWith({ name: "files", scope: "project", projectId: "p-1" });
+    expect(mocks.remove).toHaveBeenCalledWith({ name: "files", target: "override", scope: "project", projectId: "p-1" });
   });
 
   it("probes a server without claiming a reload", async () => {
@@ -133,6 +134,48 @@ describe("registerPiMcpRoutes", () => {
     mocks.list.mockRejectedValueOnce(new SettingsProjectError(404, "Project p-9 was not found"));
 
     expect((await app.inject({ method: "GET", url: "/api/pi-mcp?projectId=p-9" })).statusCode).toBe(404);
+  });
+
+  it("writes a project's override with the project it names", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/set-enabled", payload: { name: "files", target: "override", scope: "project", projectId: "p-1", enabled: false } });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.setEnabled).toHaveBeenCalledWith({ name: "files", target: "override", scope: "project", projectId: "p-1", enabled: false });
+  });
+
+  it("answers a PI WEB old enough to send only the scope, resolving the entry from the scope it named", async () => {
+    const globalRequest = await app.inject({ method: "POST", url: "/api/pi-mcp/set-enabled", payload: { name: "files", scope: "global", enabled: true } });
+    const projectRequest = await app.inject({ method: "POST", url: "/api/pi-mcp/remove", payload: { name: "files", scope: "project", projectId: "p-1" } });
+
+    expect(globalRequest.statusCode).toBe(200);
+    expect(mocks.setEnabled).toHaveBeenLastCalledWith({ name: "files", target: "definition", scope: "global", enabled: true });
+    expect(projectRequest.statusCode).toBe(200);
+    expect(mocks.remove).toHaveBeenLastCalledWith({ name: "files", target: "override", scope: "project", projectId: "p-1" });
+  });
+
+  it("refuses a write that names no entry to write, and a target that is not one of pi's two", async () => {
+    const noTarget = await app.inject({ method: "POST", url: "/api/pi-mcp/set-enabled", payload: { name: "files", enabled: false } });
+    const globalTarget = await app.inject({ method: "POST", url: "/api/pi-mcp/remove", payload: { name: "files", target: "global" } });
+    const extensionTarget = await app.inject({ method: "POST", url: "/api/pi-mcp/set-enabled", payload: { name: "files", target: "extension", enabled: false } });
+
+    expect(noTarget.statusCode).toBe(400);
+    expect(JSON.stringify(noTarget.json())).toContain("target");
+    expect(globalTarget.statusCode).toBe(400);
+    expect(extensionTarget.statusCode).toBe(400);
+  });
+
+  it("probes a server with no write target, because a probe reads the effective config", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/test", payload: { name: "files", projectId: "p-1" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.test).toHaveBeenCalledWith({ name: "files", projectId: "p-1" });
+  });
+
+  it("reads the project scope named in the query, and asks the service for that project", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/pi-mcp?projectId=p-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.list).toHaveBeenLastCalledWith({ projectId: "p-1" });
   });
 
   it("answers a machine with no active agent profile with 503", async () => {

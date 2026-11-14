@@ -9,6 +9,8 @@ import type {
   PiMcpRemoveRequest,
   PiMcpTestRequest,
   PiMcpTransport,
+  PiMcpWriteKind,
+  PiMcpWriteTarget,
 } from "../../shared/apiTypes.js";
 import {
   globalMcpConfigPath,
@@ -60,6 +62,12 @@ export interface McpProbePort {
   probe: (name: string, config: McpServerConfig, cwd: string, timeoutSeconds: number | undefined) => Promise<PiMcpProbe>;
 }
 
+/** The project a request is answering for, and whether its own config may be touched at all. */
+export interface McpScopeContext {
+  projectPath: string | undefined;
+  projectTrusted: boolean;
+}
+
 export interface PiMcpService {
   list(request: { projectId?: string }): Promise<PiMcpListResponse>;
   setEnabled(request: PiMcpSetEnabledRequest): Promise<PiMcpMutationResponse>;
@@ -94,32 +102,30 @@ export class DefaultPiMcpService implements PiMcpService {
 
   async setEnabled(request: PiMcpSetEnabledRequest): Promise<PiMcpMutationResponse> {
     const name = requireName(request.name);
-    const scope = requireScope(request.scope);
-    if (scope === "extension") throw new PiMcpRequestError("A server an extension registered is not editable from Settings; pi's /mcp manager is");
+    const kind = requireWriteKind(request.target, request.scope);
     const scopeContext = await this.scope(request.projectId);
-    if (scope === "project" && scopeContext.projectPath === undefined) throw new PiMcpRequestError("A project-scope MCP change needs a project");
     requireTrustedProject(scopeContext);
     return await this.enqueueMutation(async () => {
       const read = await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted);
-      const entry = requireEntry(read, name, scope);
-      const target = writeTarget(read, entry, scope, scopeContext.projectPath);
-      await this.config.patch(target, name, { enabled: request.enabled }, { override: scope === "project" && entry.scope !== "project" });
+      const entry = requireEntry(read, name);
+      const target = writeTarget(read, entry, kind, scopeContext);
+      requireLegacyScope(request.scope, target.scope);
+      await this.config.patch(target.path, name, { enabled: request.enabled }, { override: kind === "override" });
       return { ...this.describe(await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted), scopeContext), action: "set-enabled", name, enabled: request.enabled, requiresReload: true };
     });
   }
 
   async remove(request: PiMcpRemoveRequest): Promise<PiMcpMutationResponse> {
     const name = requireName(request.name);
-    const scope = requireScope(request.scope);
-    if (scope === "extension") throw new PiMcpRequestError("A server an extension registered is not removable from Settings; the extension that registers it owns it");
+    const kind = requireWriteKind(request.target, request.scope);
     const scopeContext = await this.scope(request.projectId);
-    if (scope === "project" && scopeContext.projectPath === undefined) throw new PiMcpRequestError("A project-scope MCP removal needs a project");
     requireTrustedProject(scopeContext);
     return await this.enqueueMutation(async () => {
       const read = await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted);
-      const entry = requireEntry(read, name, scope);
-      const target = writeTarget(read, entry, scope, scopeContext.projectPath);
-      const removed = await this.config.remove(target, name);
+      const entry = requireEntry(read, name);
+      const target = writeTarget(read, entry, kind, scopeContext);
+      requireLegacyScope(request.scope, target.scope);
+      const removed = await this.config.remove(target.path, name);
       return { ...this.describe(await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted), scopeContext), action: "remove", name, removed, requiresReload: true };
     });
   }
@@ -159,9 +165,9 @@ export class DefaultPiMcpService implements PiMcpService {
   }
 
   /** The list the answer carries: what the files say now, plus the scope the request was about. */
-  private describe(read: McpConfigRead, scopeContext: { projectPath: string | undefined; projectTrusted: boolean }): PiMcpListResponse {
+  private describe(read: McpConfigRead, scopeContext: McpScopeContext): PiMcpListResponse {
     return {
-      servers: read.servers.map((entry) => describeMcpServer(entry)),
+      servers: read.servers.map((entry) => describeMcpServer(entry, scopeContext)),
       errors: read.errors,
       globalConfigPath: read.globalConfigPath,
       ...(read.projectConfigPath === undefined ? {} : { projectConfigPath: read.projectConfigPath }),
@@ -184,23 +190,64 @@ function requireTrustedProject(scopeContext: { projectPath: string | undefined; 
   throw new PiMcpRequestError("This project is not trusted, so its MCP servers are not read, changed, or connected. Trust the project in pi first.");
 }
 
-/** The file a scope's change belongs to: a project never rewrites the global file. */
-function writeTarget(read: McpConfigRead, entry: McpServerEntry, scope: PiMcpScope, projectPath: string | undefined): string {
-  if (scope === "project") {
-    const path = projectPath === undefined ? read.projectConfigPath : projectMcpConfigPath(projectPath);
-    if (path === undefined) throw new PiMcpRequestError("A project-scope MCP change needs a project");
-    return path;
+/**
+ * The file a write is aimed at, and the reason a project's press can never open the global file.
+ *
+ * Two rules do the protecting. An override write resolves through the project the request named - the
+ * entry's own override when one exists, that project's `mcp.json` when the press is creating one - and
+ * a path that would land on the global file is refused rather than taken. A definition write resolves
+ * through the entry, and a project-defined entry is only writable for the project that is answering, so
+ * a request naming one project cannot edit a server that lives in another project's file.
+ */
+function writeTarget(read: McpConfigRead, entry: McpServerEntry, kind: PiMcpWriteKind, scopeContext: McpScopeContext): { path: string; scope: PiMcpScope } {
+  if (kind === "override") {
+    if (scopeContext.projectPath === undefined) throw new PiMcpRequestError("Writing a project's override of an MCP server needs a project");
+    if (entry.scope === "project") {
+      throw new PiMcpRequestError(`MCP server "${entry.name}" is defined by this project, so there is no override to write: change the definition`);
+    }
+    const path = entry.override ?? projectMcpConfigPath(scopeContext.projectPath);
+    if (path === read.globalConfigPath) {
+      throw new PiMcpRequestError(`A project's override cannot be written to ${path}, which is the global config`);
+    }
+    return { path, scope: "project" };
   }
-  if (entry.scope === "global") return read.globalConfigPath;
-  throw new PiMcpRequestError(`MCP server "${entry.name}" is defined by the project only; change it in the project, not globally`);
+  if (entry.scope === "global") return { path: read.globalConfigPath, scope: "global" };
+  const projectFile = scopeContext.projectPath === undefined ? undefined : projectMcpConfigPath(scopeContext.projectPath);
+  if (projectFile === undefined || entry.source !== projectFile) {
+    throw new PiMcpRequestError(`MCP server "${entry.name}" is defined in ${entry.source}, which this request's project does not own`);
+  }
+  return { path: entry.source, scope: "project" };
 }
 
-function requireEntry(read: McpConfigRead, name: string, scope: PiMcpScope): McpServerEntry {
+/**
+ * The scope a PI WEB old enough to send only `scope` asked for, checked against the entry the write
+ * resolved to. A request that says "global" is not allowed to land in a project's file, and one that
+ * says "project" is not allowed to land in the global one - which is the promise `target` makes
+ * explicit and this check keeps.
+ */
+function requireLegacyScope(requested: PiMcpScope | undefined, resolved: PiMcpScope): void {
+  if (requested === undefined || requested === resolved) return;
+  throw new PiMcpRequestError(`The entry this write resolved to is a ${resolved} one, not the ${requested} scope the request named`);
+}
+
+function requireEntry(read: McpConfigRead, name: string): McpServerEntry {
   const entry = findEntry(read, name);
-  if (entry === undefined) {
-    throw new PiMcpServerErrorNotFound(`No MCP server named "${name}" is configured${scope === "project" ? " for this project" : " on this machine"}`);
-  }
+  if (entry === undefined) throw new PiMcpServerErrorNotFound(`No MCP server named "${name}" is configured`);
   return entry;
+}
+
+/**
+ * The entry a write is aimed at.
+ *
+ * `target` is the request's own word for it. A PI WEB old enough to send only `scope` is read through
+ * the same rule - a project-scope write has always meant the project's file - so both senders land on
+ * one meaning and neither can pick the global file by accident.
+ */
+function requireWriteKind(target: PiMcpWriteKind | undefined, scope: PiMcpScope | undefined): PiMcpWriteKind {
+  if (target === "definition" || target === "override") return target;
+  if (scope === "project") return "override";
+  if (scope === "global") return "definition";
+  throw new PiMcpRequestError('An MCP write must name its target: "definition" or "override"');
 }
 
 function findEntry(read: McpConfigRead, name: string): McpServerEntry | undefined {
@@ -213,11 +260,21 @@ function requireName(value: string): string {
   return name;
 }
 
-const mcpScopes: readonly PiMcpScope[] = ["global", "project", "extension"];
-
-function requireScope(value: PiMcpScope): PiMcpScope {
-  if (!mcpScopes.includes(value)) throw new PiMcpRequestError("MCP scope must be \"global\", \"project\", or \"extension\"");
-  return value;
+/**
+ * The entries a row can be written to, for the project the answer is about.
+ *
+ * A row is not one thing to write: a global server that a project overrides has a definition file and
+ * an override file, and the two answers mean different things. The row carries both targets, each
+ * naming its file, so the panel can show the difference and a press can be honest about what it opens.
+ * Nothing reads an extension's registrations as file entries, so every entry here is a file's own.
+ */
+export function mcpWriteTargets(entry: McpServerEntry, scopeContext: McpScopeContext): PiMcpWriteTarget[] {
+  if (entry.scope === "project") return [{ kind: "definition", scope: "project", configPath: entry.source }];
+  const targets: PiMcpWriteTarget[] = [{ kind: "definition", scope: "global", configPath: entry.source }];
+  if (scopeContext.projectPath !== undefined && scopeContext.projectTrusted) {
+    targets.push({ kind: "override", scope: "project", configPath: entry.override ?? projectMcpConfigPath(scopeContext.projectPath) });
+  }
+  return targets;
 }
 
 /**
@@ -226,7 +283,7 @@ function requireScope(value: PiMcpScope): PiMcpScope {
  * The summary carries names, not values: a header's name, an environment variable's name, a URL
  * without a credential in it. pi's own config is not copied out of the machine.
  */
-export function describeMcpServer(entry: McpServerEntry): PiMcpServerInfo {
+export function describeMcpServer(entry: McpServerEntry, scopeContext: McpScopeContext): PiMcpServerInfo {
   const config = entry.config;
   const stdio = "command" in config ? config : undefined;
   const http = "url" in config ? config : undefined;
@@ -242,6 +299,7 @@ export function describeMcpServer(entry: McpServerEntry): PiMcpServerInfo {
     transport,
     configured,
     configPath: entry.source,
+    targets: mcpWriteTargets(entry, scopeContext),
     ...(entry.override === undefined ? {} : { overridePath: entry.override }),
     ...(overrideOnly ? { overrideOnly: true } : {}),
     enabled,

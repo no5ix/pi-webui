@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { configApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi } from "../api";
+import { configApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi, projectsApi } from "../api";
 import { settleRenderedDialog } from "./modalSurfaceTestSupport";
 import { SettingsDialog } from "./SettingsDialog";
-import { configResponse, mcpListResponse, mcpServerInfo, pluginsResponse, skillInfo, skillsResponse } from "./SettingsDialog.testSupport";
+import { configResponse, mcpListResponse, mcpServerInfo, pluginsResponse, settingsProject, skillInfo, skillsResponse, stubProjectsApi } from "./SettingsDialog.testSupport";
 import type { Machine, PiMcpListResponse, PiPackagesResponse, PiSkillsResponse } from "../api";
 
 /**
@@ -73,9 +73,22 @@ function stubSection(section: Section): { resolveDesk: () => void } {
   return { resolveDesk: () => { desk.resolve({ packages: [] }); } };
 }
 
+function mcpProjectSelect(): HTMLSelectElement {
+  const select = panel("mcp").querySelector<HTMLSelectElement>("select#mcp-project");
+  if (select === null) throw new Error("Expected the MCP panel to offer a project scope");
+  return select;
+}
+
+function chooseMcpProject(projectId: string): void {
+  const select = mcpProjectSelect();
+  select.value = projectId;
+  select.dispatchEvent(new Event("change"));
+}
+
 beforeEach(() => {
   vi.spyOn(configApi, "config").mockResolvedValue(configResponse({}));
   vi.spyOn(pluginsApi, "plugins").mockResolvedValue(pluginsResponse([]));
+  stubProjectsApi();
   vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(new Response("{}", { status: 200, headers: { "content-type": "application/json" } })));
 });
 
@@ -211,5 +224,54 @@ describe("the MCP removal confirmation across a machine switch", () => {
     expect(panelText("mcp")).toContain("Confirm remove");
     expect(removed).toEqual([]);
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("the MCP project scope across a machine switch", () => {
+  /**
+   * A project's `mcp.json` is one machine's file, so the project a reader chose is a machine's own
+   * choice. The rows of the machine left are dropped, the read of the machine entered names no
+   * project of the other machine, and the project list on screen is the machine entered's.
+   */
+  it("carries no project to the machine a reader switched to, and returns to the one that machine remembers", async () => {
+    const desk = pending<PiMcpListResponse>();
+    const labRows = mcpListResponse([mcpServerInfo("files")], { projectPath: "/lab/work", projectConfigPath: "/lab/work/.pi/mcp.json", projectTrusted: true, projectScopeRead: true });
+    const deskRows = mcpListResponse([mcpServerInfo("search")], { projectPath: "/desk/work", projectConfigPath: "/desk/work/.pi/mcp.json", projectTrusted: true, projectScopeRead: true });
+    vi.spyOn(piMcpApi, "list").mockImplementation((projectId, machineId) => {
+      if (machineId === deskMac.id) return desk.promise;
+      return Promise.resolve(projectId === undefined ? mcpListResponse([mcpServerInfo("files")]) : labRows);
+    });
+    vi.spyOn(projectsApi, "projects").mockImplementation((machineId?: string) => Promise.resolve(
+      machineId === deskMac.id ? [settingsProject({ id: "desk-p", name: "Desk Work", path: "/desk/work" })] : [settingsProject()],
+    ));
+
+    const dialog = await open("mcp");
+    expect(Array.from(mcpProjectSelect().options).map((option) => option.value)).toEqual(["", "p-1"]);
+
+    chooseMcpProject("p-1");
+    await flushLoads();
+    expect(piMcpApi.list).toHaveBeenLastCalledWith("p-1", labMac.id);
+    expect(panelText("mcp")).toContain("/lab/work/.pi/mcp.json");
+
+    dialog.machine = deskMac;
+    await settleRenderedDialog(dialog);
+
+    expect(rowTags("mcp")).toEqual([]);
+    expect(piMcpApi.list).toHaveBeenLastCalledWith(undefined, deskMac.id);
+
+    desk.resolve(deskRows);
+    await flushLoads();
+
+    const deskSelect = mcpProjectSelect();
+    expect(Array.from(deskSelect.options).map((option) => option.value)).toEqual(["", "desk-p"]);
+    expect(deskSelect.value).toBe("");
+    expect(panelText("mcp")).not.toContain("/lab/work/.pi/mcp.json");
+
+    dialog.machine = labMac;
+    await settleRenderedDialog(dialog);
+    await flushLoads();
+
+    expect(piMcpApi.list).toHaveBeenLastCalledWith("p-1", labMac.id);
+    expect(mcpProjectSelect().value).toBe("p-1");
   });
 });

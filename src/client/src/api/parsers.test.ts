@@ -275,8 +275,8 @@ describe("API parsers", () => {
   });
 
   it("parses MCP servers as names, and requires the answer about the project scope", () => {
-    const stdio = { name: "acme", scope: "global", transport: "stdio", configured: "enabled", configPath: "/pi/mcp.json", enabled: true, exposure: "direct", command: "npx", cwd: "/repo", envNames: ["ACME_TOKEN"], usesSecrets: true, timeout: 5, probe: { state: "unprobed" } };
-    const http = { name: "remote", scope: "project", transport: "http", configured: "disabled", configPath: "/repo/.pi/mcp.json", overridePath: "/repo/.pi/mcp.json", overrideOnly: true, enabled: false, url: "https://mcp.example.test/mcp", headerNames: ["Authorization"], authProvider: "acme", oauthConfigured: true, probe: { state: "needs-auth", message: "sign in", serverName: "acme-mcp", serverVersion: "1.2.3", probedAt: "2026-07-01T00:00:00.000Z" } };
+    const stdio = { name: "acme", scope: "global", transport: "stdio", configured: "enabled", configPath: "/pi/mcp.json", targets: [{ kind: "definition" as const, scope: "global" as const, configPath: "/pi/mcp.json" }, { kind: "override" as const, scope: "project" as const, configPath: "/repo/.pi/mcp.json" }], enabled: true, exposure: "direct", command: "npx", cwd: "/repo", envNames: ["ACME_TOKEN"], usesSecrets: true, timeout: 5, probe: { state: "unprobed" } };
+    const http = { name: "remote", scope: "project", transport: "http", configured: "disabled", configPath: "/repo/.pi/mcp.json", targets: [{ kind: "definition" as const, scope: "project" as const, configPath: "/repo/.pi/mcp.json" }], overridePath: "/repo/.pi/mcp.json", overrideOnly: true, enabled: false, url: "https://mcp.example.test/mcp", headerNames: ["Authorization"], authProvider: "acme", oauthConfigured: true, probe: { state: "needs-auth", message: "sign in", serverName: "acme-mcp", serverVersion: "1.2.3", probedAt: "2026-07-01T00:00:00.000Z" } };
 
     expect(parsePiMcpListResponse({ servers: [stdio, http], errors: ["bad entry"], globalConfigPath: "/pi/mcp.json", projectConfigPath: "/repo/.pi/mcp.json", projectPath: "/repo", projectTrusted: true, projectScopeRead: true })).toEqual({
       servers: [stdio, http],
@@ -297,6 +297,20 @@ describe("API parsers", () => {
     expect(parsePiMcpMutationResponse({ ...list, action: "test", name: "acme", probe: { state: "reachable", serverName: "acme-mcp" }, requiresReload: false })).toEqual({ ...list, action: "test", name: "acme", probe: { state: "reachable", serverName: "acme-mcp" }, requiresReload: false });
     expect(() => parsePiMcpMutationResponse({ ...list, action: "install", name: "acme", requiresReload: true })).toThrow("Invalid Pi MCP mutation action");
     expect(() => parsePiMcpMutationResponse({ ...list, action: "test", name: "acme" })).toThrow("Expected boolean field: requiresReload");
+  });
+
+  it("reads an older machine's MCP rows by deriving the entries it named, and refuses a target it cannot name", () => {
+    const older = { name: "files", scope: "global", transport: "stdio", configured: "enabled", configPath: "/pi/mcp.json", overridePath: "/repo/.pi/mcp.json", enabled: false, command: "mcp-files", probe: { state: "unprobed" } };
+
+    const parsed = parsePiMcpListResponse({ servers: [older], errors: [], globalConfigPath: "/pi/mcp.json" });
+
+    expect(parsed.servers[0]?.targets).toEqual([
+      { kind: "definition", scope: "global", configPath: "/pi/mcp.json" },
+      { kind: "override", scope: "project", configPath: "/repo/.pi/mcp.json" },
+    ]);
+
+    expect(() => parsePiMcpListResponse({ servers: [{ ...older, targets: [{ kind: "everywhere", scope: "global", configPath: "/pi/mcp.json" }] }], errors: [], globalConfigPath: "/pi/mcp.json" })).toThrow();
+    expect(() => parsePiMcpListResponse({ servers: [{ ...older, targets: [{ kind: "definition", scope: "global" }] }], errors: [], globalConfigPath: "/pi/mcp.json" })).toThrow();
   });
 
   it("refuses a malformed MCP response, and reads one from an older machine that says nothing about the project scope", () => {

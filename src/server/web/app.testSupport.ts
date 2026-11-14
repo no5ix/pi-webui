@@ -19,7 +19,7 @@ import type { PiPackageService } from "./piPackageService.js";
 import type { PiSkillsService } from "./piSkillsService.js";
 import type { PiMcpService } from "./piMcpService.js";
 import type { SessionProxyDaemon } from "./sessionProxyRoutes.js";
-import type { ActiveAgentProfileDescriptor, PiPackageInfo, PiMcpMutationResponse, PiMcpScope, PiMcpServerInfo, PiSkillInfo, PiSkillsResponse, PiWebConfigResponse, PiWebConfigValues, WorkspaceListing, WorkspaceProviderAuthorityResolution } from "../../shared/apiTypes.js";
+import type { ActiveAgentProfileDescriptor, PiPackageInfo, PiMcpMutationResponse, PiMcpScope, PiMcpServerInfo, PiMcpWriteKind, PiSkillInfo, PiSkillsResponse, PiWebConfigResponse, PiWebConfigValues, WorkspaceListing, WorkspaceProviderAuthorityResolution } from "../../shared/apiTypes.js";
 import type { SessionDaemonAgentProfileResult } from "../shared/sessiondClient/sessionDaemonClient.js";
 
 interface AppTestContext {
@@ -339,6 +339,7 @@ interface CapturedPiSkillsRequest {
 interface CapturedPiMcpRequest {
   action: "list" | "set-enabled" | "remove" | "test";
   name?: string;
+  target?: PiMcpWriteKind;
   scope?: PiMcpScope;
   enabled?: boolean;
   projectId?: string;
@@ -381,6 +382,7 @@ function appTestMcpServer(name: string): PiMcpServerInfo {
     transport: "stdio",
     configured: "enabled",
     configPath: "/pi/mcp.json",
+    targets: [{ kind: "definition", scope: "global", configPath: "/pi/mcp.json" }],
     enabled: true,
     command: "mcp-files",
     envNames: ["FILES_TOKEN"],
@@ -427,15 +429,15 @@ function fakePiMcpService(): PiMcpService {
       return Promise.resolve(appTestMcpList(servers));
     },
     setEnabled: (request) => {
-      piMcpRequests.push({ action: "set-enabled", name: request.name, scope: request.scope, enabled: request.enabled, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      piMcpRequests.push({ action: "set-enabled", name: request.name, target: request.target, enabled: request.enabled, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
       return Promise.resolve(mutation("set-enabled", request.name, { requiresReload: true }));
     },
     remove: (request) => {
-      piMcpRequests.push({ action: "remove", name: request.name, scope: request.scope, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      piMcpRequests.push({ action: "remove", name: request.name, target: request.target, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
       return Promise.resolve(mutation("remove", request.name, { removed: true, requiresReload: true }));
     },
     test: (request) => {
-      piMcpRequests.push({ action: "test", name: request.name, scope: request.scope, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
+      piMcpRequests.push({ action: "test", name: request.name, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
       return Promise.resolve(mutation("test", request.name, { probe: { state: "reachable" } }));
     },
   };

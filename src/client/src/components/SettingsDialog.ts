@@ -6,7 +6,7 @@ import { renderBackIcon, renderCrossIcon, uiIconStyle } from "./uiIcons.js";
 import { disclosureIconStyle, renderDisclosureIcon } from "./disclosureIcon.js";
 import { customElement, property, state } from "lit/decorators.js";
 import type { AppAction } from "../actions";
-import { configApi, notificationsApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi, type Machine, type MachineRuntime, type PiMcpListResponse, type PiMcpMutationResponse, type PiMcpServerInfo, type PiPackageMutationResponse, type PiPackageScope, type PiPackagesResponse, type PiSkillInfo, type PiSkillsResponse, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
+import { configApi, notificationsApi, piMcpApi, piPackagesApi, piSkillsApi, pluginsApi, projectsApi, type Machine, type MachineRuntime, type PiMcpListResponse, type PiMcpMutationResponse, type PiMcpServerInfo, type PiMcpWriteTarget, type Project, type PiPackageMutationResponse, type PiPackageScope, type PiPackagesResponse, type PiSkillInfo, type PiSkillsResponse, type PiWebConfigResponse, type PiWebConfigValues, type PiWebPluginsResponse } from "../api";
 import type { NtfyConfig, NtfyStatus } from "../../../shared/ntfy";
 import type { MachineReachabilityView } from "../machineReachability";
 import type { PiWebFleetReport, PiWebFleetRunResponse } from "../../../shared/apiTypes";
@@ -125,6 +125,10 @@ export class SettingsDialog extends LitElement {
   @state() private packagesResponse: PiPackagesResponse | undefined;
   @state() private skillsResponse: PiSkillsResponse | undefined;
   @state() private mcpResponse: PiMcpListResponse | undefined;
+  @state() private mcpProjects: Project[] = [];
+  @state() private mcpProjectSelection: string | undefined;
+  @state() private mcpProjectsLoading = true;
+  @state() private mcpProjectsError = "";
   @state() private loading = true;
   @state() private accessLoading = true;
   @state() private pluginLoading = true;
@@ -155,6 +159,15 @@ export class SettingsDialog extends LitElement {
   private skillsMutationSeq = 0;
   private mcpLoadRequestSeq = 0;
   private mcpMutationSeq = 0;
+  /**
+   * The project each machine's MCP panel is managing, remembered per machine for the open dialog.
+   *
+   * A project's `mcp.json` is one machine's file, so a selection cannot travel between machines; and a
+   * read is answered for the scope it was asked for, so the scope is part of every fence that decides
+   * whether an answer may paint.
+   */
+  private readonly mcpProjectSelections = new Map<string, string | undefined>();
+  private mcpProjectsLoadSeq = 0;
   private readonly readAttempts = new Map<SettingsRead, number>();
   private readonly readAgainTimers = new Map<SettingsRead, ReturnType<typeof setTimeout>>();
 
@@ -173,6 +186,7 @@ export class SettingsDialog extends LitElement {
     void this.loadPluginsForTarget();
     void this.loadPackagesForTarget();
     void this.loadSkillsForTarget();
+    void this.loadMcpProjectsForTarget();
     void this.loadMcpForTarget();
   }
 
@@ -228,6 +242,7 @@ export class SettingsDialog extends LitElement {
         this.resetSkillsStateForTargetChange();
         if (this.isConnected) void this.loadSkillsForTarget(currentTarget);
         this.resetMcpStateForTargetChange();
+        if (this.isConnected) void this.loadMcpProjectsForTarget(currentTarget);
         if (this.isConnected) void this.loadMcpForTarget(currentTarget);
         return;
       }
@@ -478,9 +493,14 @@ export class SettingsDialog extends LitElement {
           .operation=${this.mcpOperation}
           .error=${this.mcpError}
           .operationMessage=${this.mcpMessage}
-          .onReload=${() => this.loadMcpForTarget()}
-          .onToggleServer=${(server: PiMcpServerInfo, enabled: boolean) => this.setMcpServerEnabled(server, enabled)}
-          .onRemoveServer=${(server: PiMcpServerInfo) => this.removeMcpServer(server)}
+          .onReload=${() => { void this.loadMcpProjectsForTarget(); void this.loadMcpForTarget(); }}
+          .projects=${this.mcpProjects}
+          .projectSelection=${this.mcpProjectSelection}
+          .projectsLoading=${this.mcpProjectsLoading}
+          .projectsError=${this.mcpProjectsError}
+          .onSelectProject=${(projectId: string | undefined) => { this.selectMcpProject(projectId); }}
+          .onToggleServer=${(server: PiMcpServerInfo, target: PiMcpWriteTarget, enabled: boolean) => this.setMcpServerEnabled(server, target, enabled)}
+          .onRemoveServer=${(server: PiMcpServerInfo, target: PiMcpWriteTarget) => this.removeMcpServer(server, target)}
           .onTestServer=${(server: PiMcpServerInfo) => this.testMcpServer(server)}
         ></settings-mcp-panel>
       `;
@@ -714,21 +734,65 @@ export class SettingsDialog extends LitElement {
     }
   }
 
-  /** The MCP servers of the selected machine, on the same read-again rule as the other sections. */
-  private async loadMcpForTarget(target = this.settingsTarget()): Promise<void> {
+  /**
+   * The MCP servers of the selected machine, for the project the panel is managing.
+   *
+   * The project is part of the request, so the answer carries that project's own servers and its
+   * overrides, and it is part of the fence, so an answer for the project the reader left cannot paint
+   * over the one now on screen.
+   */
+  private async loadMcpForTarget(target = this.settingsTarget(), projectId = this.mcpProjectSelection): Promise<void> {
     const requestSeq = ++this.mcpLoadRequestSeq;
     this.mcpLoading = true;
     this.mcpError = "";
     try {
-      const result = await loadPiMcpData(target, (targetId) => piMcpApi.list(undefined, targetId));
-      if (!this.isCurrentMcpLoad(requestSeq, target)) return;
+      const result = await loadPiMcpData(target, (targetId) => piMcpApi.list(projectId, targetId));
+      if (!this.isCurrentMcpLoad(requestSeq, target, projectId)) return;
 
       this.mcpResponse = result.mcpResponse;
       this.mcpError = result.error;
-      this.afterRead("mcp", result.error === "" ? "answered" : "unanswered", () => this.loadMcpForTarget(target));
+      this.afterRead("mcp", result.error === "" ? "answered" : "unanswered", () => this.loadMcpForTarget(target, projectId));
     } finally {
-      if (this.isCurrentMcpLoad(requestSeq, target)) this.mcpLoading = false;
+      if (this.isCurrentMcpLoad(requestSeq, target, projectId)) this.mcpLoading = false;
     }
+  }
+
+  /** The projects this machine has, which is what the MCP panel is allowed to name as a scope. */
+  private async loadMcpProjectsForTarget(target = this.settingsTarget()): Promise<void> {
+    const requestSeq = ++this.mcpProjectsLoadSeq;
+    this.mcpProjectsLoading = true;
+    this.mcpProjectsError = "";
+    try {
+      const projects = await projectsApi.projects(target.id);
+      if (!this.isCurrentMcpTarget(target, requestSeq)) return;
+      this.mcpProjects = projects;
+      const selected = this.mcpProjectSelection;
+      if (selected !== undefined && !projects.some((project) => project.id === selected)) {
+        this.mcpProjectSelection = undefined;
+        this.mcpProjectSelections.set(target.id, undefined);
+        void this.loadMcpForTarget(target, undefined);
+      }
+    } catch (error) {
+      if (!this.isCurrentMcpTarget(target, requestSeq)) return;
+      this.mcpProjectsError = `The projects of ${settingsMachineTargetLabel(target)} did not load: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
+    } finally {
+      if (this.isCurrentMcpTarget(target, requestSeq)) this.mcpProjectsLoading = false;
+    }
+  }
+
+  /**
+   * Changing the project scope the MCP panel manages.
+   *
+   * The rows of the project just left are dropped before the new read starts, and the reads and writes
+   * in flight are fenced by the scope they were asked for, so a project's answer lands on its own page.
+   */
+  private selectMcpProject(projectId: string | undefined): void {
+    const target = this.settingsTarget();
+    if (this.mcpProjectSelection === projectId) return;
+    this.mcpProjectSelections.set(target.id, projectId);
+    this.mcpProjectSelection = projectId;
+    this.resetMcpScopeState();
+    if (this.isConnected) void this.loadMcpForTarget(target, projectId);
   }
 
   /**
@@ -930,17 +994,21 @@ export class SettingsDialog extends LitElement {
     }
   }
 
-  private async setMcpServerEnabled(server: PiMcpServerInfo, enabled: boolean): Promise<void> {
-    await this.runPiMcpMutation({ kind: "set-enabled", name: server.name, scope: server.scope }, `set the MCP server ${server.name} ${enabled ? "on" : "off"}`, () => piMcpApi.setEnabled(piMcpSetEnabledRequest(server, enabled), this.settingsTarget().id));
+  private async setMcpServerEnabled(server: PiMcpServerInfo, target: PiMcpWriteTarget, enabled: boolean): Promise<void> {
+    const projectId = this.mcpProjectSelection;
+    await this.runPiMcpMutation({ kind: "set-enabled", name: server.name, target: target.kind }, `set the MCP server ${server.name} ${enabled ? "on" : "off"}`, projectId, () => piMcpApi.setEnabled(piMcpSetEnabledRequest(server, target, enabled, projectId), this.settingsTarget().id));
   }
 
-  private async removeMcpServer(server: PiMcpServerInfo): Promise<void> {
-    await this.runPiMcpMutation({ kind: "remove", name: server.name, scope: server.scope }, `remove the MCP server ${server.name}`, () => piMcpApi.remove(piMcpRemoveRequest(server), this.settingsTarget().id));
+  private async removeMcpServer(server: PiMcpServerInfo, target: PiMcpWriteTarget): Promise<void> {
+    const projectId = this.mcpProjectSelection;
+    const what = target.kind === "override" ? "project override of the MCP server" : "MCP server";
+    await this.runPiMcpMutation({ kind: "remove", name: server.name, target: target.kind }, `remove the ${what} ${server.name}`, projectId, () => piMcpApi.remove(piMcpRemoveRequest(server, target, projectId), this.settingsTarget().id));
   }
 
   /** A probe is a read that answers in seconds and changes nothing, so it carries no reload note. */
   private async testMcpServer(server: PiMcpServerInfo): Promise<void> {
-    await this.runPiMcpMutation({ kind: "test", name: server.name, scope: server.scope }, `test the MCP server ${server.name}`, () => piMcpApi.test(piMcpTestRequest(server), this.settingsTarget().id));
+    const projectId = this.mcpProjectSelection;
+    await this.runPiMcpMutation({ kind: "test", name: server.name }, `test the MCP server ${server.name}`, projectId, () => piMcpApi.test(piMcpTestRequest(server, projectId), this.settingsTarget().id));
   }
 
   /**
@@ -949,7 +1017,7 @@ export class SettingsDialog extends LitElement {
    * A response from a machine the reader has left is dropped: its rows belong to that machine, not to
    * the one now on screen.
    */
-  private async runPiMcpMutation(operation: PiMcpOperationState, label: string, mutate: () => Promise<PiMcpMutationResponse>): Promise<void> {
+  private async runPiMcpMutation(operation: PiMcpOperationState, label: string, projectId: string | undefined, mutate: () => Promise<PiMcpMutationResponse>): Promise<void> {
     if (this.saving) return;
     const target = this.settingsTarget();
     const requestSeq = ++this.mcpMutationSeq;
@@ -961,11 +1029,11 @@ export class SettingsDialog extends LitElement {
     this.mcpMessage = "";
     try {
       const response = await mutate();
-      if (!this.isCurrentMcpMutation(requestSeq, target)) return;
+      if (!this.isCurrentMcpMutation(requestSeq, target, projectId)) return;
       this.mcpResponse = response;
       this.mcpMessage = piMcpMutationMessage(response, target);
     } catch (error) {
-      if (this.isCurrentMcpMutation(requestSeq, target)) {
+      if (this.isCurrentMcpMutation(requestSeq, target, projectId)) {
         this.mcpError = `Failed to ${label} on ${settingsMachineTargetLabel(target)}: ${friendlySelectedMachineSettingsErrorMessage(describeError(error), target)}`;
       }
     } finally {
@@ -1070,19 +1138,23 @@ export class SettingsDialog extends LitElement {
     return requestSeq === this.skillsLoadRequestSeq && this.isCurrentSkillsTarget(target);
   }
 
-  private isCurrentMcpMutation(requestSeq: number, target: SettingsMachineTarget): boolean {
-    return requestSeq === this.mcpMutationSeq && this.isCurrentMcpTarget(target);
+  private isCurrentMcpMutation(requestSeq: number, target: SettingsMachineTarget, projectId: string | undefined): boolean {
+    return requestSeq === this.mcpMutationSeq && this.isCurrentMcpScope(target, projectId);
   }
-
-  private isCurrentMcpLoad(requestSeq: number, target: SettingsMachineTarget): boolean {
-    return requestSeq === this.mcpLoadRequestSeq && this.isCurrentMcpTarget(target);
+  private isCurrentMcpLoad(requestSeq: number, target: SettingsMachineTarget, projectId: string | undefined): boolean {
+    return requestSeq === this.mcpLoadRequestSeq && this.isCurrentMcpScope(target, projectId);
+  }
+  /** An MCP answer belongs to the machine and the project it was read for, not to the screen. */
+  private isCurrentMcpScope(target: SettingsMachineTarget, projectId: string | undefined): boolean {
+    return this.isCurrentMcpTarget(target) && this.mcpProjectSelection === projectId;
   }
 
   private isCurrentSkillsTarget(target: SettingsMachineTarget): boolean {
     return this.settingsTarget().id === target.id;
   }
 
-  private isCurrentMcpTarget(target: SettingsMachineTarget): boolean {
+  private isCurrentMcpTarget(target: SettingsMachineTarget, requestSeq?: number): boolean {
+    if (requestSeq !== undefined && requestSeq !== this.mcpProjectsLoadSeq) return false;
     return this.settingsTarget().id === target.id;
   }
 
@@ -1137,6 +1209,16 @@ export class SettingsDialog extends LitElement {
   }
 
   private resetMcpStateForTargetChange(): void {
+    this.resetMcpScopeState();
+    this.mcpProjectsLoadSeq += 1;
+    this.mcpProjects = [];
+    this.mcpProjectsLoading = true;
+    this.mcpProjectsError = "";
+    this.mcpProjectSelection = this.mcpProjectSelections.get(this.settingsTarget().id);
+  }
+
+  /** The rows, messages and in-flight work of the MCP scope the reader is leaving. */
+  private resetMcpScopeState(): void {
     const hadMcpOperation = this.mcpOperation !== undefined;
     this.mcpLoadRequestSeq += 1;
     this.mcpMutationSeq += 1;
