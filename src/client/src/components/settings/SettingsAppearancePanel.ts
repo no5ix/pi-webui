@@ -171,15 +171,14 @@ export class SettingsAppearancePanel extends LitElement {
         aria-hidden="true"
         style=${style(["--pi-bg", "--pi-surface", "--pi-border", "--pi-text", "--pi-muted", "--pi-accent", "--pi-success", "--pi-warning", "--pi-danger"])}
       >
-        <span class="preview-surface">
-          <span class="preview-line long"></span>
-          <span class="preview-line short"></span>
+        <span class="preview-sidebar">
+          <span class="preview-mark"></span><span class="preview-nav active"></span><span class="preview-nav"></span><span class="preview-nav"></span>
         </span>
-        <span class="preview-dots">
-          <span class="preview-dot accent"></span>
-          <span class="preview-dot success"></span>
-          <span class="preview-dot warning"></span>
-          <span class="preview-dot danger"></span>
+        <span class="preview-workspace">
+          <span class="preview-toolbar"><span class="preview-line long"></span><span class="preview-dot accent"></span></span>
+          <span class="preview-message user"></span>
+          <span class="preview-message assistant"><span class="preview-line long"></span><span class="preview-line short"></span></span>
+          <span class="preview-composer"><span class="preview-line short"></span><span class="preview-send"></span></span>
         </span>
       </span>
     `;
@@ -225,12 +224,21 @@ export class SettingsAppearancePanel extends LitElement {
        moves. On a flat scale such as Pro's the card's lg(3) is smaller than the
        space-5 padding, so the concentric clamp bottoms out at xs(0) - flat insides
        are the correct flat answer, not an accident. */
-    .preview { box-sizing: border-box; display: grid; gap: var(--pi-space-3); height: 74px; margin-bottom: var(--pi-space-3); padding: var(--pi-space-4); border: 1px solid var(--preview-border, var(--pi-border)); border-radius: max(var(--pi-radius-xs), calc(var(--pi-radius-lg) - var(--pi-space-5))); background: var(--preview-bg, var(--pi-bg)); }
-    .preview-surface { display: grid; align-content: center; gap: var(--pi-space-3); padding: var(--pi-space-3) var(--pi-space-4); border: 1px solid var(--preview-border, var(--pi-border)); border-radius: max(var(--pi-radius-xs), calc(var(--pi-radius-md) - var(--pi-space-4))); background: var(--preview-surface, var(--pi-surface)); }
-    .preview-line { display: block; height: var(--pi-dot-xs); border-radius: var(--pi-radius-pill); background: var(--preview-text, var(--pi-text)); }
-    .preview-line.long { width: 78%; }
+    .preview { box-sizing: border-box; display: grid; grid-template-columns: 22% minmax(0, 1fr); gap: 0; height: 104px; margin-bottom: var(--pi-space-3); overflow: hidden; border: 1px solid var(--preview-border, var(--pi-border)); border-radius: max(var(--pi-radius-xs), calc(var(--pi-radius-lg) - var(--pi-space-5))); background: var(--preview-bg, var(--pi-bg)); }
+    .preview-sidebar { display: flex; flex-direction: column; gap: 5px; padding: 9px 6px; border-right: 1px solid var(--preview-border, var(--pi-border)); background: var(--preview-surface, var(--pi-surface)); }
+    .preview-mark { width: 12px; height: 12px; margin: 0 0 3px 2px; border-radius: 4px; background: var(--preview-accent, var(--pi-accent)); }
+    .preview-nav { height: 5px; border-radius: 4px; background: var(--preview-muted, var(--pi-muted)); opacity: .5; }
+    .preview-nav.active { width: 80%; background: var(--preview-accent, var(--pi-accent)); opacity: .95; }
+    .preview-workspace { display: grid; grid-template-rows: 14px 13px 1fr 16px; gap: 5px; min-width: 0; padding: 8px; }
+    .preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .preview-line { display: block; height: 3px; border-radius: var(--pi-radius-pill); background: var(--preview-text, var(--pi-text)); }
+    .preview-line.long { width: 76%; }
     .preview-line.short { width: 46%; background: var(--preview-muted, var(--pi-muted)); }
-    .preview-dots { display: flex; align-items: center; gap: var(--pi-space-3); }
+    .preview-message { display: block; min-width: 0; border-radius: 4px; }
+    .preview-message.user { width: 65%; justify-self: end; background: var(--preview-accent, var(--pi-accent)); opacity: .24; }
+    .preview-message.assistant { display: grid; align-content: center; gap: 5px; padding: 4px; background: var(--preview-surface, var(--pi-surface)); }
+    .preview-composer { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; border: 1px solid var(--preview-border, var(--pi-border)); border-radius: 5px; }
+    .preview-send { width: 8px; height: 8px; border-radius: 3px; background: var(--preview-accent, var(--pi-accent)); }
     .preview-dot { width: var(--pi-dot-md); height: var(--pi-dot-md); border-radius: 50%; }
     .preview-dot.accent { background: var(--preview-accent, var(--pi-accent)); }
     .preview-dot.success { background: var(--preview-success, var(--pi-success)); }
@@ -238,7 +246,7 @@ export class SettingsAppearancePanel extends LitElement {
     .preview-dot.danger { background: var(--preview-danger, var(--pi-danger)); }
     @media (max-width: 760px) {
       .theme-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--pi-space-4); }
-      .preview { height: 64px; }
+      .preview { height: 88px; }
     }
   `];
 }
