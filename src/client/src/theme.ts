@@ -36,8 +36,8 @@ type NativeThemeChoice = Pick<QualifiedThemeContribution, "id" | "name" | "color
 export const NATIVE_THEME_CHOICES: readonly NativeThemeChoice[] = [
   { id: CORE_MATERIAL_DARK_THEME_ID, name: "Material Dark (native)", description: "The app's built-in dark palette.", colorScheme: "dark", tokens: CORE_MATERIAL_DARK_TOKENS },
   { id: CORE_MATERIAL_LIGHT_THEME_ID, name: "Material Light (native)", description: "The app's built-in light palette.", colorScheme: "light", tokens: CORE_MATERIAL_LIGHT_TOKENS },
-  { id: CORE_BUILTIN_DARK_THEME_ID, name: "Builtin Dark", description: "Neutral charcoal look: soft-white text, quiet surfaces, one restrained accent.", colorScheme: "dark", tokens: CORE_BUILTIN_DARK_TOKENS },
-  { id: CORE_BUILTIN_LIGHT_THEME_ID, name: "Builtin Light", description: "Neutral light look: a white page, near-white surfaces, subtle borders.", colorScheme: "light", tokens: CORE_BUILTIN_LIGHT_TOKENS },
+  { id: CORE_BUILTIN_DARK_THEME_ID, name: "Darkness", description: "A focused charcoal workspace with layered surfaces, violet accents, and calm developer chrome.", colorScheme: "dark", tokens: CORE_BUILTIN_DARK_TOKENS },
+  { id: CORE_BUILTIN_LIGHT_THEME_ID, name: "Lightness", description: "A warm paper workspace with crisp typography, soft separators, and restrained violet accents.", colorScheme: "light", tokens: CORE_BUILTIN_LIGHT_TOKENS },
 ];
 
 /**
@@ -62,7 +62,7 @@ export interface NativeThemePaint {
 
 export const NATIVE_THEME_PAIRS: readonly NativeThemePair[] = [
   { name: "Material", dark: CORE_MATERIAL_DARK_THEME_ID, light: CORE_MATERIAL_LIGHT_THEME_ID },
-  { name: "Builtin", dark: CORE_BUILTIN_DARK_THEME_ID, light: CORE_BUILTIN_LIGHT_THEME_ID },
+  { name: "Darkness / Lightness", dark: CORE_BUILTIN_DARK_THEME_ID, light: CORE_BUILTIN_LIGHT_THEME_ID },
 ];
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = { themeId: CORE_MATERIAL_DARK_THEME_ID, auto: true };

@@ -41,6 +41,11 @@ describe("the builtin palettes", () => {
     expect(DEFAULT_THEME_PREFERENCE).toEqual({ themeId: CORE_MATERIAL_DARK_THEME_ID, auto: true });
   });
 
+  it("are named Darkness and Lightness without changing their stable saved ids", () => {
+    expect(nativeThemeChoice(CORE_BUILTIN_DARK_THEME_ID)?.name).toBe("Darkness");
+    expect(nativeThemeChoice(CORE_BUILTIN_LIGHT_THEME_ID)?.name).toBe("Lightness");
+  });
+
   it("are each a dark and a light look", () => {
     expect(nativeThemeChoice(CORE_BUILTIN_DARK_THEME_ID)?.colorScheme).toBe("dark");
     expect(nativeThemeChoice(CORE_BUILTIN_LIGHT_THEME_ID)?.colorScheme).toBe("light");
@@ -71,7 +76,7 @@ describe("the builtin palettes", () => {
 
 describe("the builtin theme pair", () => {
   it("pairs the builtin pair as its own pair, and leaves the Material pair alone", () => {
-    expect(findNativeThemePair(CORE_BUILTIN_DARK_THEME_ID)).toEqual({ name: "Builtin", dark: CORE_BUILTIN_DARK_THEME_ID, light: CORE_BUILTIN_LIGHT_THEME_ID });
+    expect(findNativeThemePair(CORE_BUILTIN_DARK_THEME_ID)).toEqual({ name: "Darkness / Lightness", dark: CORE_BUILTIN_DARK_THEME_ID, light: CORE_BUILTIN_LIGHT_THEME_ID });
     expect(findNativeThemePair(CORE_MATERIAL_LIGHT_THEME_ID)).toEqual({ name: "Material", dark: CORE_MATERIAL_DARK_THEME_ID, light: CORE_MATERIAL_LIGHT_THEME_ID });
     expect(NATIVE_THEME_PAIRS).toHaveLength(2);
   });
@@ -80,7 +85,7 @@ describe("the builtin theme pair", () => {
     const pair = nativeThemePairContribution(CORE_BUILTIN_LIGHT_THEME_ID);
     expect(pair?.light).toBe(CORE_BUILTIN_LIGHT_THEME_ID);
     expect(pair?.dark).toBe(CORE_BUILTIN_DARK_THEME_ID);
-    expect(pair?.name).toBe("Builtin");
+    expect(pair?.name).toBe("Darkness / Lightness");
     expect(nativeThemePairContribution("themes:pi-web-dark")).toBeUndefined();
   });
 

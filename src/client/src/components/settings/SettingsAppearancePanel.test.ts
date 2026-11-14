@@ -94,8 +94,8 @@ describe("settings-appearance-panel", () => {
     expect(cards(panel).map((card) => card.querySelector(".theme-name")?.textContent)).toEqual([
       "Material Dark (native)",
       "Material Light (native)",
-      "Builtin Dark",
-      "Builtin Light",
+      "Darkness",
+      "Lightness",
       "pi-web-dark",
       "paper",
       "From a plugin",
@@ -145,8 +145,8 @@ describe("settings-appearance-panel", () => {
     const panel = await mount((element) => { element.onSelectTheme = onSelectTheme; });
 
     const names = cards(panel).map((card) => card.querySelector(".theme-name")?.textContent);
-    expect(names).toContain("Builtin Dark");
-    expect(names).toContain("Builtin Light");
+    expect(names).toContain("Darkness");
+    expect(names).toContain("Lightness");
     const dark = cards(panel)[2];
     const light = cards(panel)[3];
     expect(dark?.querySelector(".theme-scheme")?.textContent).toBe("Dark");
