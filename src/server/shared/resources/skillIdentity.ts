@@ -173,7 +173,7 @@ export function skillPreferenceIdentityFor(agentDir: string, sessionCwd?: string
     const owner = skillOwnership(filePath, agentDir);
     if (owner.kind === "project") return skillIdentity(filePath, { projectPath: owner.projectPath });
     if (owner.kind === "global") return skillIdentity(filePath, {});
-    if (sessionCwd !== undefined && (filePath === sessionCwd || filePath.startsWith(`${sessionCwd.replace(/\\/+$/, "")}/`))) {
+    if (sessionCwd !== undefined && (filePath === sessionCwd || filePath.startsWith(`${sessionCwd.replace(/\/+$/, "")}/`))) {
       return skillIdentity(filePath, { projectPath: sessionCwd });
     }
     return skillIdentity(filePath, {});
