@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { posix, win32, type PlatformPath } from "node:path";
+import { homedir } from "node:os";
+import { join, posix, win32, type PlatformPath } from "node:path";
 
 /**
  * The identity of one discovered skill, and the reason PI WEB cannot use a skill name for one.
@@ -136,23 +137,22 @@ export type SkillOwnership =
 /**
  * Which scope a skill file belongs to, from where the file is.
  *
- * Pi loads a project's skills from `<project>/.pi/skills` and from the `.agents/skills` folders on the
- * way up, so the directory above that marker is the project whose sessions load the file. The agent
- * directory answers first: a machine's own Pi folder is `<agentDir>/skills`, the same shape, and it
- * must not be read as a project - a machine-wide skill whose folder happens to sit inside a repository
- * would otherwise be given that repository's identity by a session opened there, and the machine-wide
- * preference the reader wrote would name a skill no scope can answer for.
+ * Pi loads project skills from `<root>/.pi/skills` and `.agents/skills` folders on the way up.
+ * The two user-level directories are exceptions to that ancestor rule: `<home>/.agents/skills`
+ * and `<agentDir>/skills` are global even when a project sits below the home directory. Checking
+ * those locations first prevents a user skill from acquiring the identity of whichever repository
+ * happened to discover it.
  *
  * A skill configured by absolute path answers `location-only`: the file's location says nothing about
  * projects. A session, which knows its own working directory, can treat such a file as its own when it
- * lies inside it; a panel that is not looking at a session cannot, and leaves it machine-wide. That
- * asymmetry is the one identity divergence this design accepts, and it is only reachable for skills
- * configured by path inside a repository.
+ * lies inside it; a panel that is not looking at a session cannot, and leaves it machine-wide.
  */
 export function skillOwnership(filePath: string, agentDir: string): SkillOwnership {
-  const normalized = filePath.replaceAll("\\", "/");
-  const agent = agentDir.replaceAll("\\", "/").replace(/\/+$/, "");
-  if (agent !== "" && (normalized === agent || normalized.startsWith(`${agent}/`))) return { kind: "global" };
+  const fileKey = canonicalPathKey(filePath);
+  const agentKey = canonicalPathKey(agentDir);
+  const sharedGlobalSkillsKey = canonicalPathKey(join(homedir(), ".agents", "skills"));
+  if (isPathWithinKey(agentKey, fileKey) || isPathWithinKey(sharedGlobalSkillsKey, fileKey)) return { kind: "global" };
+  const normalized = fileKey.replaceAll("\\", "/");
   const marker = /^(.*)\/(?:\.pi|\.agents)\/skills(?:\/|$)/.exec(normalized);
   const owner = marker?.[1];
   if (owner !== undefined && owner !== "") return { kind: "project", projectPath: owner };
@@ -173,7 +173,7 @@ export function skillPreferenceIdentityFor(agentDir: string, sessionCwd?: string
     const owner = skillOwnership(filePath, agentDir);
     if (owner.kind === "project") return skillIdentity(filePath, { projectPath: owner.projectPath });
     if (owner.kind === "global") return skillIdentity(filePath, {});
-    if (sessionCwd !== undefined && (filePath === sessionCwd || filePath.startsWith(`${sessionCwd.replace(/\/+$/, "")}/`))) {
+    if (sessionCwd !== undefined && (filePath === sessionCwd || filePath.startsWith(`${sessionCwd.replace(/\\/+$/, "")}/`))) {
       return skillIdentity(filePath, { projectPath: sessionCwd });
     }
     return skillIdentity(filePath, {});
@@ -181,18 +181,13 @@ export function skillPreferenceIdentityFor(agentDir: string, sessionCwd?: string
 }
 
 /**
- * Whether a file sits inside the agent directory, on canonical paths.
+ * Whether a file belongs to one of the user's global Pi skill directories.
  *
- * The agent directory decides where a machine's own Pi skill folders are, and a panel needs that fact
- * to label a row: Pi reports the same file with different source fields depending on which path list
- * handed it over, so the folder the file is in is the only stable answer.
+ * The Settings panel uses this provenance to label both Pi's own agent directory and the shared
+ * Agent Skills directory as user-level skills, independently of the source label Pi reports.
  */
-export function isInsideAgentDir(filePath: string, agentDir: string): boolean {
-  const key = canonicalPathKey(filePath);
-  const agent = canonicalPathKey(agentDir);
-  return key === agent || key.startsWith(`${agent}/`) || key.startsWith(`${agent}${pathSep()}`);
-}
-
-function pathSep(): string {
-  return process.platform === "win32" ? "\\" : "/";
+export function isGlobalAgentSkillPath(filePath: string, agentDir: string): boolean {
+  const fileKey = canonicalPathKey(filePath);
+  return isPathWithinKey(canonicalPathKey(agentDir), fileKey)
+    || isPathWithinKey(canonicalPathKey(join(homedir(), ".agents", "skills")), fileKey);
 }
