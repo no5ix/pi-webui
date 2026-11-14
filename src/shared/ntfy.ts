@@ -23,7 +23,7 @@
  * are unaffected.
  */
 
-import { isRecord, errorMessage } from "./unknownValues.js";
+import { isRecord } from "./unknownValues.js";
 
 /** What a reader can be told about. One switch per event, per provider; `NTFY_EVENT_FIELDS` is the list. */
 export type NotificationEvent = "completed" | "failed" | "ask-user";
@@ -301,7 +301,7 @@ export function redactNtfySecret(text: string, secrets: readonly (string | undef
  * no topic, a topic that is not allowed, a body the server will not take - and the same bytes are
  * refused the second time. A timeout, a 5xx, and a 429 are worth one more try.
  */
-export function ntfyDeliveryOutcome(response: Response, body: string): { accepted: boolean; reason?: string; retryable: boolean } {
+export function ntfyDeliveryOutcome(response: NtfyFetchResponse, body: string): { accepted: boolean; reason?: string; retryable: boolean } {
   if (response.ok) return { accepted: true, retryable: false };
   const status = response.status;
   const detail = body.trim().slice(0, 200);
@@ -327,7 +327,7 @@ export function ntfyDeliveryOutcome(response: Response, body: string): { accepte
 export async function sendNtfyNotice(
   notice: NtfyNotice,
   config: NtfyConfig,
-  options: { fetchImpl?: typeof fetch; now?: () => number; log?: (fields: Record<string, unknown>, message: string) => void } = {},
+  options: { fetchImpl?: NtfyFetch; now?: () => number; log?: (fields: Record<string, unknown>, message: string) => void } = {},
 ): Promise<NtfyDelivery> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? (() => Date.now());
@@ -370,6 +370,31 @@ export async function sendNtfyNotice(
 }
 
 /**
+ * The transport contract one ntfy publish needs, and nothing more.
+ *
+ * The notice is posted by two different transports: the process-wide `fetch` and Undici's IPv4
+ * connection pool, whose `Response` is its own type and not the global one. Naming the three
+ * members the delivery decision reads keeps both transports honest without a type assertion, and
+ * a test stub that returns a plain `Response` satisfies it as it stands.
+ */
+export interface NtfyFetchResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  text(): Promise<string>;
+}
+
+/** What one ntfy publish asks a transport to send. */
+export interface NtfyFetchRequest {
+  method: "POST";
+  headers: Record<string, string>;
+  body: string;
+  signal: AbortSignal;
+}
+
+/** A transport that can post one ntfy notice. */
+export type NtfyFetch = (input: string, init: NtfyFetchRequest) => Promise<NtfyFetchResponse>;
+
+/**
  * Summarize Node fetch failures using nested system error codes. Node commonly wraps a useful
  * DNS/socket/Undici error in a generic "fetch failed" TypeError. Do not include nested messages:
  * they can contain request URLs or the topic bearer secret.
@@ -378,12 +403,13 @@ export function ntfyFetchFailureReason(error: unknown): string {
   const codes: string[] = [];
   const visited = new Set<unknown>();
   const visit = (value: unknown, depth: number): void => {
-    if (depth > 4 || value === null || typeof value !== "object" || visited.has(value)) return;
+    if (depth > 4 || !isRecord(value) || visited.has(value)) return;
     visited.add(value);
-    const record = value as { code?: unknown; cause?: unknown; errors?: unknown };
-    if (typeof record.code === "string" && /^[A-Z0-9_]{2,64}$/u.test(record.code) && !codes.includes(record.code)) codes.push(record.code);
-    visit(record.cause, depth + 1);
-    if (Array.isArray(record.errors)) for (const nested of record.errors.slice(0, 4)) visit(nested, depth + 1);
+    const code = value["code"];
+    if (typeof code === "string" && /^[A-Z0-9_]{2,64}$/u.test(code) && !codes.includes(code)) codes.push(code);
+    visit(value["cause"], depth + 1);
+    const errors = value["errors"];
+    if (Array.isArray(errors)) for (const nested of errors.slice(0, 4)) visit(nested, depth + 1);
   };
   visit(error, 0);
   if (codes.length > 0) return `ntfy network request failed (${codes.slice(0, 4).join(", ")}).`;

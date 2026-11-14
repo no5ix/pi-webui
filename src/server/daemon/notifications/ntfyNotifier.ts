@@ -1,4 +1,4 @@
-import type { NtfyConfig, NtfyDelivery, NotificationEvent } from "../../../shared/ntfy.js";
+import type { NtfyConfig, NtfyDelivery, NotificationEvent, NtfyFetch } from "../../../shared/ntfy.js";
 import { ntfyFetch } from "../../notifications/ntfyFetch.js";
 import { ntfyReadiness, ntfyWantsEvent, sendNtfyNotice } from "../../../shared/ntfy.js";
 
@@ -55,7 +55,7 @@ export interface NtfyNotifierStatus {
 export interface NtfyNotifierDependencies {
   /** Read the ntfy block as it stands now, so a settings change is used by the next notice. */
   readConfig: () => NtfyConfig | undefined;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: NtfyFetch;
   /** A log line. Its fields arrive already free of the topic. */
   log?: (fields: Record<string, unknown>, message: string) => void;
   now?: () => number;
