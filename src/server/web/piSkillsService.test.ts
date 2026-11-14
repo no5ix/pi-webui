@@ -127,7 +127,11 @@ describe("listing skills", () => {
       baseDir: "/work/project/.agents/skills/changeset-changelog",
     });
     const listed = await service(discovery([repositorySkill]), preferences({ version: 1, disabled: ["changeset-changelog"] }).store).list({ projectId: "p-1" });
-    expect(listed.skills[0]).toMatchObject({ scope: "project", origin: "project", name: "changeset-changelog", enabled: true, preference: "default" });
+    expect(listed.skills[0]).toMatchObject({ scope: "project", origin: "project", name: "changeset-changelog" });
+    // The row is project-owned by where the file lives; the preference is answered by name, the way
+    // the session's `skillsOverride` answers it. The machine's global entry disables this name, so the
+    // row must say the skill is out, or the panel contradicts the session that will not load it.
+    expect(listed.skills[0]).toMatchObject({ enabled: false, preference: "disabled" });
   });
 
   it("keeps a global configured skill global when it lives outside the selected repository", async () => {
