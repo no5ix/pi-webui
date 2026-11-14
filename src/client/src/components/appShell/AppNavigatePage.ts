@@ -1268,14 +1268,15 @@ export class AppNavigatePage extends LitElement {
     .row-wrap.menu-open > .row { border-color: var(--pi-accent); }
     .row-wrap.selected > .row { border-color: var(--pi-accent); background: var(--pi-selection-bg); }
     .row-wrap.lifted { z-index: 3; }
-    .row-wrap.lifted > .row { border-color: var(--pi-accent); outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: 0; cursor: grabbing; }
+    .row-wrap.lifted > .row { border-color: var(--pi-accent); outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: 0; cursor: grabbing; }
     .head-stack { position: relative; flex: 0 0 auto; }
     .list-head { display: flex; flex-direction: column; }
     .selection-overlay { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; background: var(--pi-bg-overlay); }
     .selection-overlay .selection-header { background: var(--pi-bg); }
     /* A hold is the row's own gesture: iOS must not start a callout or a text selection under it, which cancels the press. */
     .row-wrap > .row { -webkit-touch-callout: none; }
-    .select-key { box-sizing: border-box; flex: 0 0 auto; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-5); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-muted); font: inherit; cursor: pointer; }
+    .select-key { box-sizing: border-box; flex: 0 0 auto; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-5); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text-secondary); font: inherit; cursor: pointer; }
+    @media (hover: hover) { .select-key:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
     @media (pointer: coarse) { .select-key { display: none; } }
     /* One scrolling row of tag chips under the search, so typing a hash adds one row and no more; its
        padding holds each chip's 44px reach, which the scrolling row would otherwise clip. */
@@ -1283,7 +1284,7 @@ export class AppNavigatePage extends LitElement {
     .tag-suggestion { position: relative; flex: 0 0 auto; box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--pi-space-2); min-height: var(--pi-control-height); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text-secondary); font: inherit; font-size: var(--pi-text-xs); cursor: pointer; }
     .tag-count { color: var(--pi-muted); }
     @media (hover: hover) { .tag-suggestion:hover { border-color: var(--pi-accent-border); } }
-    .tag-suggestion:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset-inset); }
+    .tag-suggestion:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
     @media (pointer: coarse) { .tag-suggestion::after { content: ""; position: absolute; inset: calc((var(--pi-control-height) - var(--pi-control-height-touch)) / 2) 0; } }
     /* B35: the header's keys keep their drawn height and a finger reaches 44px. The kinds and the
        create key stand 4px apart, so their reach grows only up and down, laid from inside their 1px
@@ -1304,33 +1305,39 @@ export class AppNavigatePage extends LitElement {
     :host { display: block; min-height: 0; height: 100%; color: var(--pi-text); font: var(--pi-text-base) var(--pi-font-ui); user-select: none; -webkit-user-select: none; }
     .navigate { display: flex; flex-direction: column; min-height: 0; height: 100%; }
     ::slotted([slot="app-row"]) { flex: 0 0 auto; }
-    .path-bar { box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; gap: var(--pi-space-2); min-height: var(--pi-panel-header-height); padding: 0 var(--pi-bar-inset); border-bottom: 1px solid var(--pi-border); }
+    .path-bar { box-sizing: border-box; flex: 0 0 auto; display: flex; align-items: center; gap: var(--pi-space-2); min-height: var(--pi-panel-header-height); padding: 0 var(--pi-bar-inset); border-bottom: 1px solid var(--pi-divider); }
     /* The corner key stands where it stands on the conversation's bar (AppContextBar), and the
        rows under it keep its edge. */
     :host { --pi-bar-inset: var(--pi-chat-gutter); }
     /* No sideways scrolling on a phone: the path shares the width and each
        step ellipsises, so the whole scope is readable at a glance (owner). */
     .path-row { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--pi-space-2); overflow: clip visible; }
-    .path-step { box-sizing: border-box; flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; white-space: nowrap; min-height: var(--pi-panel-header-control-height); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text-secondary); font: inherit; cursor: pointer; }
+    .path-step { box-sizing: border-box; flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; white-space: nowrap; min-height: var(--pi-panel-header-control-height); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text-secondary); font: inherit; cursor: pointer; }
+    @media (hover: hover) { .path-step:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
     .path-step-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .path-step.chosen { border-color: var(--pi-accent-border); background: var(--pi-selection-bg); color: var(--pi-text-bright); }
+    .path-step.chosen { border-color: var(--pi-accent-border); background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
     .path-sep { flex: 0 0 auto; display: inline-grid; place-items: center; color: var(--pi-muted); }
     .path-sep .ui-icon { width: 14px; height: 14px; }
     /* The key back to every session this machine runs reads as the place the
        reader is in while that list is shown. */
     .quick-access.current.bar-key { border-color: var(--pi-accent-border); background: var(--pi-selection-bg); color: var(--pi-accent); }
-    .scope-switch { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; margin: var(--pi-space-3) var(--pi-bar-inset) 0; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); }
+    .scope-switch { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; margin: var(--pi-space-3) var(--pi-bar-inset) 0; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); }
     .scope:first-child { border-radius: var(--pi-radius-sm) 0 0 var(--pi-radius-sm); }
     .scope:last-child { border-radius: 0 var(--pi-radius-sm) var(--pi-radius-sm) 0; }
     .scope { box-sizing: border-box; min-height: var(--pi-control-height-comfort); min-width: 0; display: inline-flex; align-items: center; justify-content: center; padding: 0 var(--pi-space-4); border: 0; background: var(--pi-surface); color: var(--pi-muted); font: inherit; font-size: var(--pi-text-sm); white-space: nowrap; cursor: pointer; }
     .scope-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .scope + .scope { border-left: 1px solid var(--pi-border); }
-    .scope.current { background: var(--pi-selection-bg); color: var(--pi-accent); }
-    .scope:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: calc(-1 * var(--pi-focus-ring-width)); }
+    .scope.current { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); font-weight: var(--pi-weight-medium); }
+    .scope:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: calc(-1 * var(--pi-focus-ring-width)); }
     .path-bar-actions { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--pi-space-3); }
-    .kinds { flex: 0 0 auto; display: flex; gap: var(--pi-space-2); padding: var(--pi-space-3) var(--pi-bar-inset) 0; }
-    .kind { box-sizing: border-box; flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-3); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text-secondary); font: inherit; font-size: var(--pi-text-xs); cursor: pointer; }
-    .kind.current { border-color: var(--pi-accent-border); background: var(--pi-selection-bg); color: var(--pi-text-bright); }
+    /* One control, not three outlined pills. The destinations share a track and the one
+       you are on is filled: the panel's primary navigation has to read as navigation
+       before it reads as a row of buttons. */
+    .kinds { flex: 0 0 auto; display: flex; gap: var(--pi-space-1); margin: var(--pi-space-3) var(--pi-bar-inset) 0; padding: var(--pi-space-1); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); }
+    .kind { box-sizing: border-box; flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-3); border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); font: inherit; font-size: var(--pi-text-sm); font-weight: var(--pi-weight-medium); cursor: pointer; }
+    @media (hover: hover) { .kind:not(.current):hover { background: var(--pi-row-hover); color: var(--pi-text); } }
+    .kind .kind-icon { color: inherit; }
+    .kind.current { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
     .kind-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .kind-icon, .row-icon { display: inline-grid; place-items: center; }
     .kind-icon .ui-icon, .row-icon .ui-icon { width: 14px; height: 14px; }
@@ -1342,12 +1349,18 @@ export class AppNavigatePage extends LitElement {
     .row-icon { margin-right: var(--pi-space-3); }
     .row-title { display: inline-flex; align-items: center; }
     .search-row { flex: 0 0 auto; padding: var(--pi-space-3) var(--pi-bar-inset) 0; }
-    .search { box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-font-ui); }
+    .search { box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-font-ui); }
+    .search:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-tight); }
+    .search::placeholder { color: var(--pi-muted); }
     .actions { flex: 0 0 auto; display: flex; gap: var(--pi-space-3); padding: var(--pi-space-3) var(--pi-bar-inset) 0; }
-    .create { box-sizing: border-box; flex: 1 1 0; display: grid; align-content: center; gap: var(--pi-space-1); min-height: var(--pi-control-height-comfort); padding: var(--pi-space-3) var(--pi-space-4); border: 1px solid var(--pi-accent-border); border-radius: var(--pi-radius-md); background: var(--pi-selection-bg); color: var(--pi-text-bright); font: inherit; cursor: pointer; }
+    /* The panel's one primary action: the accent fill, the label colour the theme
+       picked for it, and a place line quiet enough to read second. */
+    .create { box-sizing: border-box; flex: 1 1 0; display: grid; align-content: center; gap: var(--pi-space-1); min-height: var(--pi-control-height-comfort); padding: var(--pi-space-3) var(--pi-space-4); border: 1px solid var(--pi-accent); border-radius: var(--pi-radius-md); background: var(--pi-accent); color: var(--pi-on-accent); font: inherit; font-weight: var(--pi-weight-strong); cursor: pointer; }
+    @media (hover: hover) { .create:hover:not(:disabled) { background: color-mix(in srgb, var(--pi-accent) 88%, var(--pi-text)); border-color: var(--pi-accent); } }
+    .create:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
     .create[aria-pressed="true"] { border-color: var(--pi-accent); }
     .create-label, .create-place { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .create-place { color: var(--pi-muted); font-size: var(--pi-text-2xs); }
+    .create-place { color: color-mix(in srgb, var(--pi-on-accent) 74%, transparent); font-size: var(--pi-text-2xs); font-weight: var(--pi-weight-regular); }
     /* Two entries to a line: the owner reads this list as a board of places,
        and one tall row per screen line wasted half the width. */
     /* The quick-access board's shape, which the owner asked this page to
@@ -1371,27 +1384,33 @@ export class AppNavigatePage extends LitElement {
     .reachability-reason { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .reachability[data-state="error"] { color: var(--pi-danger); }
     .row.folder-missing .row-name, .row.folder-missing .row-icon { color: var(--pi-muted); }
-    .section-title { margin: var(--pi-space-5) 0 0; color: var(--pi-muted); font: var(--pi-text-2xs) var(--pi-font-ui); font-weight: var(--pi-weight-strong); letter-spacing: .08em; text-transform: uppercase; }
+    .section-title { margin: var(--pi-space-5) 0 0; color: var(--pi-muted); font: var(--pi-text-2xs) var(--pi-font-ui); font-weight: var(--pi-weight-semibold); letter-spacing: var(--pi-tracking-label); text-transform: uppercase; }
     /* A section title stands close to its own rows (owner, 2026-10-09: "the Pinned / Active
        margins are too tall"). The 44px coarse-pointer target no longer sets the box's height; a
        hit area reaches up over the margin and the grid gap above and down over the gap below,
        up to the neighbouring tiles but never onto them. */
     .section-toggle { position: relative; justify-self: start; display: inline-flex; align-items: center; gap: var(--pi-space-2); box-sizing: border-box; padding: var(--pi-space-3) var(--pi-space-2); border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; cursor: pointer; text-align: start; }
     .section-toggle::after { content: ""; position: absolute; inset: calc(-1 * var(--pi-space-7)) 0 calc(-1 * var(--pi-space-3)); }
-    .section-toggle:focus-visible { border-color: var(--pi-accent); }
+    .section-toggle:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
     .section-fold { display: inline-grid; place-items: center; width: 12px; height: 12px; }
     .section-empty { margin: 0 0 var(--pi-space-2); }
-    .row { box-sizing: border-box; display: grid; gap: var(--pi-space-2); width: 100%; min-height: calc(var(--pi-row-min-height, 48px) + var(--pi-space-6)); padding: var(--pi-space-4) calc(var(--tile-menu-size) + var(--pi-space-2)) var(--pi-space-4) var(--pi-space-5); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); font: inherit; text-align: start; cursor: pointer; }
-    .row.current { border-color: var(--pi-accent-border); background: var(--pi-selection-bg); }
+    /* A list, not a stack of boxes: a row is a line on a divider, and the pointer
+       and the selection are fills. Thirty sessions read by scanning, and a column of
+       outlined rectangles makes the eye stop on every one of them. */
+    .row { position: relative; box-sizing: border-box; display: grid; gap: var(--pi-space-2); width: 100%; min-height: calc(var(--pi-row-min-height, 48px) + var(--pi-space-6)); padding: var(--pi-space-4) calc(var(--tile-menu-size) + var(--pi-space-2)) var(--pi-space-4) var(--pi-space-5); border: 0; border-bottom: 1px solid var(--pi-divider); border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text); font: inherit; text-align: start; cursor: pointer; }
+    .row:last-child { border-bottom: 0; }
+    @media (hover: hover) { .row:hover:not(.current) { background: var(--pi-row-hover); } }
+    .row.current { border-bottom-color: transparent; background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
+    .row.current .row-path, .row.current .row-detail, .row.current .row-labels { color: color-mix(in srgb, var(--pi-on-accent-soft) 76%, transparent); }
     /* A row the machine sent back keeps its place with the reason under its name for a moment. */
-    .row.returned { border-color: var(--pi-danger); }
+    .row.returned { box-shadow: inset 0 0 0 1px var(--pi-danger); }
     .row-path.mark-pending { color: var(--pi-dim); }
     .row-path.mark-returned { color: var(--pi-danger); }
     .row-title { min-width: 0; overflow: hidden; }
     .row-detail { min-width: 0; display: flex; gap: var(--pi-space-3); overflow: hidden; color: var(--pi-muted); font-size: var(--pi-text-2xs); white-space: nowrap; }
     .pin { display: inline-flex; align-items: center; margin-right: var(--pi-space-2); color: var(--pi-accent); }
     .pin .ui-icon { width: 14px; height: 14px; }
-    .empty { margin: var(--pi-space-5) 0; color: var(--pi-muted); font-size: var(--pi-text-xs); }
+    .empty { margin: var(--pi-space-5) 0; color: var(--pi-text-secondary); font-size: var(--pi-text-sm); overflow-wrap: anywhere; }
     .empty.problem { color: var(--pi-danger); font-size: var(--pi-text-sm); overflow-wrap: anywhere; }
   `, barKeyStyles];
 }
