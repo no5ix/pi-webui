@@ -326,7 +326,7 @@ export const listStyles = css`
   /* Follows the control's own shape: the outline already traces the border
      box, and inheriting a parent's radius squared off every rounded button
      the moment it took keyboard focus. */
-  button:focus-visible, [role="button"]:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); }
+  button:focus-visible, [role="button"]:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
   /* Motion is a preference, not a decoration: a user who asks for less of it
      gets none. Kept to a blanket rule because every animation here is
      ornamental — progress bars, pulses, fades — so there is no reduced variant
@@ -351,10 +351,10 @@ export const listStyles = css`
   /* Search affordance shared by the lists that have one, so a second list does
      not drift from the first. Class named for the role, not the list. */
   .list-search { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: var(--pi-space-3); margin: 0 0 var(--pi-space-3); padding-bottom: var(--pi-space-3); background: var(--pi-bg); }
-  .list-search-input { box-sizing: border-box; flex: 1 1 auto; min-width: 0; height: var(--pi-control-height-comfort); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); padding: 0 var(--pi-space-5); font: var(--pi-control-font-size, 14px) var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
+  .list-search-input { box-sizing: border-box; flex: 1 1 auto; min-width: 0; height: var(--pi-control-height-comfort); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); padding: 0 var(--pi-space-5); font: var(--pi-control-font-size, 14px) var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
   .list-search-input::placeholder { color: var(--pi-muted); }
   .list-search-input::-webkit-search-cancel-button { display: none; }
-  .list-search-input:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset-tight); }
+  .list-search-input:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-tight); }
   .list-search-clear { box-sizing: border-box; flex: 0 0 auto; display: inline-grid; place-items: center; width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); padding: 0; font-size: var(--pi-text-lg); line-height: 1; }
   /* Coarse pointers get the comfort floor on the shared search row. Placed
      after every base declaration it raises - a media query carries no extra
@@ -366,7 +366,7 @@ export const listStyles = css`
   }
   .search-empty { padding: var(--pi-space-6) var(--pi-space-2); color: var(--pi-muted); }
   section { box-sizing: border-box; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: var(--pi-reading-edge); }
-  h2 { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: var(--pi-space-4); margin: 0 0 var(--pi-space-2); color: var(--pi-muted); font-size: var(--pi-text-xs); }
+  h2 { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: var(--pi-space-4); margin: 0 0 var(--pi-space-2); color: var(--pi-muted); font-size: var(--pi-text-xs); font-weight: var(--pi-weight-semibold); letter-spacing: var(--pi-tracking-label); }
   /* The create control for a section, carried by its heading rather than by a
      bar of its own: a stacked bar cost a fifth of a phone screen before any
      content, and the heading was already a flex row with a free trailing edge.
@@ -377,9 +377,9 @@ export const listStyles = css`
   /* The glyph decorates the label without moving it: absolutely placed, so
      the text alone is centred and the button's weight is where it reads. */
   .section-add-glyph { font-size: var(--pi-text-lg); line-height: 1; }
-  .section-add { box-sizing: border-box; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); min-width: var(--pi-control-height); min-height: var(--pi-control-height); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); line-height: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  .section-add:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset-inset); }
-  @media (hover: hover) { .section-add:hover { border-color: var(--pi-accent); } }
+  .section-add { box-sizing: border-box; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); min-width: var(--pi-control-height); min-height: var(--pi-control-height); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); line-height: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .section-add:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+  @media (hover: hover) { .section-add:hover { border-color: var(--pi-accent); background: var(--pi-row-hover); } }
   /* Coarse pointers get the comfort floor. Declared after every base rule it
      raises - a media query carries no extra specificity. */
   @media (pointer: coarse) {
@@ -410,7 +410,11 @@ export const listStyles = css`
   /* Tiles in a row share a height, so the row is a grid of equal boxes rather
      than a ragged one. A tile that sizes to its own title makes the row's
      height an accident of which names happen to be long. */
-  .list-body.tiles .action-row { grid-template-columns: minmax(0, 1fr); margin: 0; align-self: stretch; }
+  .list-body.tiles .action-row { grid-template-columns: minmax(0, 1fr); margin: 0; align-self: stretch; border-bottom: 0; background: var(--pi-chip-bg); }
+  /* A tile is a target, not a card: a fill that answers the pointer and the
+     selection, and no outline arguing with the grid it sits in. */
+  @media (hover: hover) { .list-body.tiles .action-row:not(.selected):hover { background: var(--pi-row-hover); } }
+  .list-body.tiles .action-row.selected { background: var(--pi-accent-soft); }
   /* The menu button floats in the corner, so the text must reserve the space it
      occupies - inset plus size plus a gap. This was a hardcoded 30px while the
      button measured 32px at a 6px inset, and 36px at 4px on coarse pointers, so
@@ -456,7 +460,12 @@ export const listStyles = css`
      are derived from the same inset and size, so they read as one row of
      corner affordances instead of two marks 10px apart. */
   .list-body.tiles .action-activity { transform: none; top: calc(var(--pi-tile-menu-inset) + (var(--pi-tile-menu-size) / 2) - (var(--pi-dot-md) / 2)); right: calc(var(--pi-tile-menu-inset) + var(--pi-tile-menu-size) + var(--pi-space-2)); }
-  button { font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); padding: var(--pi-space-4) var(--pi-space-5); cursor: pointer; }
+  button { font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); padding: var(--pi-space-4) var(--pi-space-5); cursor: pointer; }
+  @media (hover: hover) { button:hover:not(:disabled) { background: var(--pi-row-hover); border-color: var(--pi-accent); } }
+  /* One primary spelling for the whole app: the accent fill, the label colour the
+     theme picked for it, no border to argue with. A region gets one of these. */
+  button.primary { border-color: var(--pi-accent); background: var(--pi-accent); color: var(--pi-on-accent); font-weight: var(--pi-weight-strong); }
+  @media (hover: hover) { button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--pi-accent) 88%, var(--pi-text)); border-color: var(--pi-accent); } }
   section > button { display: block; width: 100%; text-align: left; margin: var(--pi-space-3) 0; }
   .subheading { margin-top: var(--pi-space-7); }
   .section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-self: stretch; align-items: center; justify-content: space-between; gap: var(--pi-space-4); width: 100%; border: 0; background: transparent; color: inherit; padding: 0; font: inherit; text-align: left; text-transform: inherit; }
@@ -469,19 +478,23 @@ export const listStyles = css`
      outlined boxes butted together, so their shared edge stacked into a hard
      rule and the row read as a table cell. The border and the radius belong to
      the row; what sits inside it is transparent. */
-  .action-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: var(--pi-space-3) 0; cursor: pointer; box-sizing: border-box; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); overflow: hidden; }
-  .action-row:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); }
-  .action-row.selected { border-color: var(--pi-accent); background: var(--pi-selection-bg); }
+  .action-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 0; cursor: pointer; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--pi-divider); border-radius: var(--pi-radius-md); background: transparent; overflow: hidden; }
+  /* The state rail, drawn inside the row rather than as its border. A row is a
+     line on a divider, not a box, so the one colour that carries meaning in a
+     scanned list cannot live on a border that no longer exists. */
+  .action-row::before { content: ""; position: absolute; left: 0; top: var(--pi-space-3); bottom: var(--pi-space-3); width: var(--pi-rail-width); border-radius: var(--pi-radius-pill); background: var(--pi-rail-color, transparent); transition: background-color var(--pi-motion-fast) var(--pi-ease); }
+  .action-row:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
+  .action-row.selected { border-bottom-color: transparent; background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
   .action-row.archived .action-main { color: var(--pi-muted); }
   /* Written to work whether the primary region is a div or a real <button>:
      the font and cursor resets are inert on a div and stop a button from
      inheriting the UA's centred, small-font control styling. */
   .action-main { position: relative; box-sizing: border-box; min-height: var(--pi-row-min-height); min-width: 0; width: 100%; display: flex; flex-wrap: wrap; align-items: center; border: 0; background: transparent; color: var(--pi-text); padding: var(--pi-space-2) var(--pi-space-9) var(--pi-space-2) calc(var(--pi-space-5) + var(--depth, 0) * var(--pi-space-7)); font: inherit; text-align: left; cursor: pointer; }
-  button.action-main:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: calc(var(--pi-focus-ring-offset) * -1); }
+  button.action-main:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: calc(var(--pi-focus-ring-offset) * -1); }
   /* One line, then the ellipsis (owner: rows of equal height read calmer
      than clamped two-line rows of different heights). */
   .action-name { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.4; }
-  @media (hover: hover) { .action-row:not(.selected):hover { background: var(--pi-surface-hover); } }
+  @media (hover: hover) { .action-row:not(.selected):hover { background: var(--pi-row-hover); } }
   .workspace-row .action-main { border-radius: var(--pi-radius-md) 0 0 var(--pi-radius-md); }
   .workspace-primary { min-width: 0; display: flex; align-items: baseline; gap: var(--pi-space-3); }
   .workspace-primary-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -504,7 +517,7 @@ export const listStyles = css`
   .action-menu-panel .detail-copy:focus { color: var(--pi-text); border-color: var(--pi-accent); background: var(--pi-surface-hover); }
   @media (hover: hover) { .action-menu-panel .detail-copy:hover { color: var(--pi-text); border-color: var(--pi-accent); background: var(--pi-surface-hover); } }
   .tree-marker { color: var(--pi-muted); margin-right: var(--pi-space-3); }
-  .badge { display: inline-block; margin-left: var(--pi-space-3); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-pill); color: var(--pi-muted); padding: 0 var(--pi-space-3); font-size: var(--pi-text-2xs); font-weight: var(--pi-weight-regular); }
+  .badge { display: inline-block; margin-left: var(--pi-space-3); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-pill); background: var(--pi-chip-bg); color: var(--pi-muted); padding: 0 var(--pi-space-3); font-size: var(--pi-text-2xs); font-weight: var(--pi-weight-regular); }
   /* In a row the menu is its own column beside the content, so this mark cannot
      share its centre line: it is centred vertically in the content and sits at
      the content edge. The tile variant, where the menu overlays the card, does
@@ -529,7 +542,7 @@ export const listStyles = css`
    * distance. The dot keeps the detail; the rail is what the eye follows down
    * the list, and it is the one place this design spends colour on identity.
    */
-  .action-row { border-left: var(--pi-rail-width) solid transparent; transition: border-left-color var(--pi-motion-fast) var(--pi-ease); }
+
   /* :where() inside :has() keeps these rules at class specificity, so the
      row-state rules below can override them; a bare :has() outranks every
      single-class rule forever, which is how a selected row kept the work
@@ -559,26 +572,26 @@ export const listStyles = css`
      "the rail wears the dot's colour" means for a composite. The arbiter's
      one-dot guarantee holds within each vocabulary; no row renders session
      and terminal dots together today, so their order is unexercised. */
-  .action-row:has(:where(.activity-indicator.unread, .session-state.unread, .session-state.background)) { border-left-color: var(--pi-purple); }
+  .action-row:has(:where(.activity-indicator.unread, .session-state.unread, .session-state.background)) { --pi-rail-color: var(--pi-purple); }
   /* The vocabulary split is exact: machine/workspace working rows speak
      .activity-indicator.session and paint success; session running rows
      speak .session-state.running and paint accent. A previous draft put
      .session-state.running in both rules; the later accent rule then
      overpainted every row the success membership matched, so the membership
      never decided a colour and the table read as two colours for one state. */
-  .action-row:has(:where(.activity-indicator.session)) { border-left-color: var(--pi-success); }
-  .action-row:has(:where(.session-state.running)) { border-left-color: var(--pi-accent); }
-  .action-row:has(:where(.session-state.asking)) { border-left-color: var(--pi-warning); }
-  .action-row:has(:where(.activity-indicator.terminal)) { border-left-color: var(--pi-accent); }
-  .action-row:has(:where(.session-state.error)) { border-left-color: var(--pi-danger); }
+  .action-row:has(:where(.activity-indicator.session)) { --pi-rail-color: var(--pi-success); }
+  .action-row:has(:where(.session-state.running)) { --pi-rail-color: var(--pi-accent); }
+  .action-row:has(:where(.session-state.asking)) { --pi-rail-color: var(--pi-warning); }
+  .action-row:has(:where(.activity-indicator.terminal)) { --pi-rail-color: var(--pi-accent); }
+  .action-row:has(:where(.session-state.error)) { --pi-rail-color: var(--pi-danger); }
   /* The machine rows' own status vocabulary joins here: offline and error
      wear the danger dot in the plugin, so the rail wears it too - the
      scanning edge is the sidebar's only peripheral cue, and a down machine
      must not scan like a healthy idle one. Placed after the unread rule:
      health outranks unread on a row that is both. */
-  .action-row:has(:where(.machine-status.offline, .machine-status.error)) { border-left-color: var(--pi-danger); }
-  .action-row.archived { border-left-color: var(--pi-border); }
-  .action-row.selected { border-left-color: var(--pi-accent); }
+  .action-row:has(:where(.machine-status.offline, .machine-status.error)) { --pi-rail-color: var(--pi-danger); }
+  .action-row.archived { --pi-rail-color: var(--pi-border); }
+  .action-row.selected { --pi-rail-color: var(--pi-accent); }
   .activity-indicator.session { border-radius: 50%; background: var(--pi-success); }
   .activity-indicator.terminal { border-radius: var(--pi-radius-xs); background: var(--pi-accent); }
   /* Client-side sending (a session starting); distinct from server activity, which propagates to workspace/machine rows. Painted on the pending-session row, which has no rail. */
@@ -613,12 +626,12 @@ export const listStyles = css`
 
 export const formattedTextStyles = css`
   :host { display: block; }
-  .formatted { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; text-align: start; unicode-bidi: plaintext; }
+  .formatted { white-space: normal; overflow-wrap: anywhere; line-height: var(--pi-leading-normal); text-align: start; unicode-bidi: plaintext; }
   p, ul, ol, pre, blockquote, .table-scroll, .code-block-wrapper { margin: 0 0 var(--pi-space-5); }
   :is(p, ul, ol, pre, blockquote, .table-scroll, .code-block-wrapper):last-child { margin-bottom: 0; }
   ul, ol { padding-left: var(--pi-space-9); }
   li + li { margin-top: var(--pi-space-2); }
-  code { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-xs); background: var(--pi-bg); padding: var(--pi-space-1) var(--pi-space-2); font: var(--pi-text-sm) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: inherit; direction: ltr; text-align: left; unicode-bidi: isolate; }
+  code { border: 1px solid var(--pi-code-border); border-radius: var(--pi-radius-xs); background: var(--pi-code-bg); padding: var(--pi-space-1) var(--pi-space-2); font: var(--pi-text-sm) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: inherit; direction: ltr; text-align: left; unicode-bidi: isolate; }
   .code-block-wrapper { position: relative; }
   /* A drawn fence shows the drawing; the source stays in the DOM for the
      copy button and comes back the moment the claim is released or fails,
@@ -627,28 +640,30 @@ export const formattedTextStyles = css`
   .code-fence-render > svg { display: block; max-width: 100%; height: auto; }
   .code-block-wrapper.code-fence-claimed > pre { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .code-block-wrapper pre { margin: 0; padding-right: calc(var(--pi-space-3) * 2 + var(--pi-control-height-touch) / 2 + var(--pi-space-4)); }
-  pre { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-bg); padding: var(--pi-space-5); overflow-x: auto; overflow-y: hidden; direction: ltr; text-align: left; unicode-bidi: isolate; }
+  pre { border: 1px solid var(--pi-code-border); border-radius: var(--pi-radius-md); background: var(--pi-code-bg); padding: var(--pi-space-5); overflow-x: auto; overflow-y: hidden; direction: ltr; text-align: left; unicode-bidi: isolate; }
   pre code { border: 0; padding: 0; background: transparent; }
-  .code-copy-button { box-sizing: border-box; position: absolute; top: var(--pi-space-3); right: var(--pi-space-3); z-index: 1; display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-sm); background: var(--pi-surface); color: var(--pi-muted); padding: 0; font: var(--pi-text-base) var(--pi-font-ui); line-height: 1; cursor: pointer; }
+  .code-copy-button { box-sizing: border-box; position: absolute; top: var(--pi-space-3); right: var(--pi-space-3); z-index: 1; display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-sm); background: var(--pi-chip-bg); color: var(--pi-muted); padding: 0; font: var(--pi-text-base) var(--pi-font-ui); line-height: 1; cursor: pointer; }
   /* The icon carries the class the shared icon sheet sizes, and that sheet is
      not adopted here: without a size of its own the mark drew nothing and the
      button read as an empty square on the phone. */
   .code-copy-button .ui-icon, .code-copy-button svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   .code-copy-button:focus { color: var(--pi-text); border-color: var(--pi-accent); }
   @media (hover: hover) { .code-copy-button:hover { color: var(--pi-text); border-color: var(--pi-accent); } }
-  blockquote { border-left: 3px solid var(--pi-border); padding-left: var(--pi-space-5); color: var(--pi-muted); }
+  blockquote { border-left: var(--pi-rail-width) solid var(--pi-divider); padding-left: var(--pi-space-5); color: var(--pi-muted); }
   a { color: var(--pi-accent); }
-  h1, h2, h3, h4 { margin: var(--pi-space-7) 0 var(--pi-space-4); line-height: 1.2; }
+  /* A transcript is read for its headings, so they are set as headings: the
+     display face, a real weight, and the tight tracking the scale names. */
+  h1, h2, h3, h4 { margin: var(--pi-space-7) 0 var(--pi-space-4); line-height: var(--pi-leading-tight); font-family: var(--pi-font-display); font-weight: var(--pi-weight-semibold); letter-spacing: var(--pi-tracking-tight); color: var(--pi-text-bright); }
   h1:first-child, h2:first-child, h3:first-child, h4:first-child { margin-top: 0; }
-  h1 { font-size: var(--pi-text-xl); }
-  h2 { font-size: var(--pi-text-lg); }
-  h3 { font-size: var(--pi-text-md); }
-  h4 { font-size: var(--pi-text-base); }
+  h1 { font-size: var(--pi-text-2xl); }
+  h2 { font-size: var(--pi-text-xl); }
+  h3 { font-size: var(--pi-text-lg); }
+  h4 { font-size: var(--pi-text-md); }
   .table-scroll { max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
-  .table-scroll:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); }
+  .table-scroll:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
   table { border-collapse: collapse; width: max-content; min-width: 100%; max-width: none; }
-  th, td { border: 1px solid var(--pi-border); padding: var(--pi-space-2) var(--pi-space-4); max-width: 48ch; overflow-wrap: anywhere; }
-  th { background: var(--pi-surface); }
+  th, td { border: 1px solid var(--pi-divider); padding: var(--pi-space-2) var(--pi-space-4); max-width: 48ch; overflow-wrap: anywhere; }
+  th { background: var(--pi-surface-panel); font-weight: var(--pi-weight-semibold); text-align: start; }
 `;
 
 

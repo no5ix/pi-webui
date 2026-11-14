@@ -61,5 +61,16 @@ export const CORE_MATERIAL_LIGHT_TOKENS = {
   "--pi-msg-assistant-header-bg": "var(--pi-surface)",
   "--pi-msg-system-bg": "#eef1f5",
   "--pi-msg-system-border": "#b8c0cb",
-  "--pi-msg-system-header-bg": "#eef1f5"
+  "--pi-msg-system-header-bg": "#eef1f5",
+  "--pi-accent-soft": "#ece2f8",
+  "--pi-accent-soft-hover": "#e2d5f1",
+  "--pi-on-accent-soft": "#3f1f73",
+  "--pi-focus-ring": "#6750a4",
+  "--pi-row-hover": "#e8e0eb",
+  "--pi-divider": "#e0dbe8",
+  "--pi-chip-bg": "#f3edf7",
+  "--pi-chip-border": "#cac4d0",
+  "--pi-code-bg": "#ece6f0",
+  "--pi-code-border": "#d8d2dd",
+  "--pi-sheen": "inset 0 1px 0 #ffffff"
 } satisfies Record<ThemeToken, string>;

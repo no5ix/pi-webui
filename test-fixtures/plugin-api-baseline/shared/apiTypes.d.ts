@@ -1,5 +1,6 @@
 import type { CardSubmission, InteractiveCard } from "./interactiveCard.js";
 import type { MachineStatusUiEvent } from "./machineStatus.js";
+import type { NtfyConfig } from "./ntfy.js";
 import type { DeleteWorkspaceFileResponse, FileContentMediaType, FileContentResponse, FileTreeEntry, FileTreeResponse, JsonObject, JsonPrimitive, JsonValue, MachineConnection, MachineKind, MoveWorkspaceFileOptions, MoveWorkspaceFileResponse, PiPackageListing, PiPackageServerProcess, PiPackageSourceKind, PiPackageUpdate, PiPackageUpdates, PiPackageUpdateState, PiWebComponentStatus, PiWebDockerMode, PiWebInstallationInfo, PiWebInstallationKind, PiWebReleaseStatus, PiWebServiceComponent, PiWebServiceRestartState, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, PiWebVersionResponse, TerminalCommandRun, TerminalCommandRunHandle, TerminalCommandRunStatus, WorkspaceProviderCapabilities, WorkspaceProviderMetadata, WorkspaceFileRefusal, WorkspaceRemovalPresentation, WriteWorkspaceFileOptions, WriteWorkspaceFileResponse } from "./pluginApiTypes.js";
 export type { DeleteWorkspaceFileResponse, FileContentMediaType, FileContentResponse, FileTreeEntry, FileTreeResponse, JsonObject, JsonPrimitive, JsonValue, MachineConnection, MachineKind, MoveWorkspaceFileOptions, MoveWorkspaceFileResponse, PiPackageListing, PiPackageServerProcess, PiPackageSourceKind, PiPackageUpdate, PiPackageUpdates, PiPackageUpdateState, PiWebComponentStatus, PiWebDockerMode, PiWebInstallationInfo, PiWebInstallationKind, PiWebReleaseStatus, PiWebServiceComponent, PiWebServiceRestartState, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, PiWebVersionResponse, TerminalCommandRun, TerminalCommandRunHandle, TerminalCommandRunStatus, WorkspaceProviderCapabilities, WorkspaceProviderMetadata, WorkspaceRemovalPresentation, WriteWorkspaceFileOptions, WriteWorkspaceFileResponse, };
 /** Internal query shape for PI WEB's terminal-command-runs host protocol. */
@@ -176,12 +177,17 @@ export interface PiWebConfigValues {
      * Tuning knob only — extension dialogs are always enabled.
      */
     extensionDialogsTimeoutMs?: number;
+    /**
+     * ntfy notices: a plain HTTP POST to a topic, sent by the server that runs the task, so a notice
+     * reaches a phone with no browser open. Independent of the browser's own notification switch.
+     * See {@link NtfyConfig}; the topic is a bearer secret on a public server, so no config response
+     * carries it - only `ntfyConfigured` says whether one is stored.
+     */
+    ntfy?: NtfyConfig;
     /** Deprecated agent-configuration keys, still honored as aliases during the deprecation window and detected for the deprecation warning (see PiWebAgentConfig). */
     agent?: PiWebAgentConfig;
 }
 /**
- * `level`: `errors` records failed (5xx) and slow requests, `requests` every request, `debug`
- * every request and debug messages. `maxFileMb` and `keepFiles`: a log file larger than
  * `maxFileMb` is moved to `<name>.1` and started again; `keepFiles` older copies are kept.
  */
 export interface PiWebLoggingConfig {
@@ -271,11 +277,24 @@ export interface PiWebPluginsResponse {
     serverRuntime: PiWebPluginRuntimeInfo;
 }
 export type PiPackageScope = "user" | "project";
+/**
+ * A configured Pi package.
+ *
+ * Pi's own package filter is what "disabled" means here: a `packages` entry in its object form with
+ * `autoload: false` and no resource patterns contributes no extension, skill, prompt template or
+ * theme, while staying installed and staying configured. `filtered` is Pi's word for "the entry is
+ * an object", so a disabled package is always filtered and a filtered package is not necessarily
+ * disabled. `enabled` is the effective answer the switch shows.
+ */
 export interface PiPackageInfo {
     source: string;
     scope: PiPackageScope;
     filtered: boolean;
     installedPath?: string;
+    /** Pi's filter is set so that none of this package's resources load. */
+    disabled: boolean;
+    /** Configured and not filtered off: the state the enable/disable switch reports. */
+    enabled: boolean;
 }
 export interface PiPackagesResponse {
     packages: PiPackageInfo[];
@@ -292,12 +311,255 @@ export interface PiPackageUpdateRequest {
     /** Omit to update all configured Pi packages. */
     source?: string;
 }
-export type PiPackageMutationAction = "install" | "remove" | "update";
+export interface PiPackageSetEnabledRequest {
+    source: string;
+    scope: PiPackageScope;
+    enabled: boolean;
+}
+export type PiPackageMutationAction = "install" | "remove" | "update" | "set-enabled";
 export interface PiPackageMutationResponse extends PiPackagesResponse {
     action: PiPackageMutationAction;
     source?: string;
     scope?: PiPackageScope;
     removed?: boolean;
+    enabled?: boolean;
+    /**
+     * Whether a running session must reload (or restart) before the change reaches its runtime.
+     * A settings file that says "enabled" is not a session that has loaded the package.
+     */
+    requiresReload?: boolean;
+}
+/**
+ * Skills, as Pi discovers them, with PI WEB's saved preference on top.
+ *
+ * The states a reader needs are kept apart on purpose: what is configured (`preference`), what the
+ * runtime loads (`enabled`), and whether Pi accepted the file at all (`validation`). A skill can be
+ * configured enabled and still not reach the model, and the panel has to say so.
+ */
+export type PiSkillScope = "global" | "project";
+/** Where a skill came from: Pi's own skill folders, a Pi package, or a configured path. */
+export type PiSkillOrigin = "agent" | "project" | "package" | "path";
+/** The saved preference for one skill. `default` means nothing has been written for it. */
+export type PiSkillPreference = "default" | "enabled" | "disabled";
+export type PiSkillValidation = "valid" | "warning";
+/**
+ * One saved preference under the identity schema: the skill's identity decides, and its display name
+ * travels beside it so a hand-edited config file still says which skill the opaque id stands for.
+ */
+export interface PiSkillPreferenceEntry {
+    id: string;
+    name?: string;
+}
+/**
+ * One saved entry. A v1 file lists bare skill names, a v2 file lists identity entries; a reader that
+ * has not been migrated keeps its names, and resolution treats them as names, never as guesses.
+ */
+export type PiSkillPreferenceEntryValue = PiSkillPreferenceEntry | string;
+/**
+ * The saved skill preferences of one scope: the skills a reader turned off, and the skills it turned
+ * back on. A skill in neither list has no preference, and Pi's own default (enabled) applies, so
+ * adding this file to an installation cannot disable a skill anybody already uses.
+ */
+export interface PiSkillPreferenceConfig {
+    version?: 1 | 2;
+    /** Skills explicitly kept in the runtime list. */
+    enabled?: PiSkillPreferenceEntryValue[];
+    /** Skills kept out of the runtime list. Their files are never touched. */
+    disabled?: PiSkillPreferenceEntryValue[];
+}
+export interface PiSkillInfo {
+    /**
+     * Which skill this row is, in the form a preference is written against. Never derived from `name`:
+     * two skills that share a display name are two rows with two ids and two saved answers.
+     */
+    id: string;
+    name: string;
+    description: string;
+    /** The skill file Pi reads, on the machine that answers the request. */
+    filePath: string;
+    baseDir: string;
+    scope: PiSkillScope;
+    origin: PiSkillOrigin;
+    /** Pi's own source label for the skill: `user`, `project`, `path`, or a package name. */
+    source: string;
+    /** The Pi package that supplies the skill, when a package does. */
+    packageSource?: string;
+    /** A package that is installed but filtered off supplies nothing, and its skills say so. */
+    ownerPackageDisabled?: boolean;
+    preference: PiSkillPreference;
+    /**
+     * Which saved entry answered: the project's, the machine's, or neither. `enabled` alone cannot say
+     * which of two files to go change, and those are two different scopes.
+     */
+    answeredBy?: PiSkillScope | "default";
+    /** Effective state of the list Pi is given: the preference, then Pi's own default of enabled. */
+    enabled: boolean;
+    /** A skill of this name from a stronger source is the one Pi keeps, so this one is not used. */
+    shadowed?: boolean;
+    /** This skill is in the list in place of a same-named skill the reader turned off. */
+    promoted?: boolean;
+    validation: PiSkillValidation;
+    validationMessage?: string;
+    disableModelInvocation?: boolean;
+}
+export interface PiSkillsDiagnostic {
+    message: string;
+    path?: string;
+}
+export interface PiSkillsScopeInfo {
+    scope: PiSkillScope;
+    /** The directory Pi scans for this scope's own skills. */
+    skillsDir: string;
+    /** Where a preference for this scope is saved. */
+    configPath: string;
+    /** Project scope only: the project the request was read for, and whether Pi trusts it. */
+    projectId?: string;
+    projectPath?: string;
+    projectTrusted?: boolean;
+}
+export interface PiSkillsResponse {
+    skills: PiSkillInfo[];
+    diagnostics: PiSkillsDiagnostic[];
+    scopes: PiSkillsScopeInfo[];
+    /** Skill paths Pi could not read, with the reason, so the panel is not silently short. */
+    unreadablePaths?: PiSkillsDiagnostic[];
+}
+export interface PiSkillSetEnabledRequest {
+    /**
+     * The skill identity from the list, and the answer a current client sends.
+     *
+     * `name` stays accepted beside it: a browser newer than the machine it is talking to must not fail
+     * on a machine that knows identities, and a browser older than the server must not fail either, so
+     * a request carries both and the server answers with the identity when it has one.
+     */
+    id?: string;
+    name?: string;
+    scope: PiSkillScope;
+    enabled: boolean;
+    /** Required for project scope: a project this machine has, resolved to its path by the server. */
+    projectId?: string;
+}
+export interface PiSkillSetEnabledResponse extends PiSkillsResponse {
+    /** A running session keeps the skills it loaded: the new list reaches it after a reload. */
+    requiresReload: boolean;
+}
+/**
+ * MCP servers, as Pi's `mcp.json` files define them.
+ *
+ * Configuration and connection are two facts, and only one of them is readable from a file. The
+ * panel therefore shows `configured` (enabled, disabled, invalid) and what a probe last answered;
+ * the live connection of a running session stays pi's to report, through its own `/mcp` manager.
+ */
+export type PiMcpScope = "global" | "project" | "extension";
+/**
+ * Which entry an MCP write is aimed at.
+ *
+ * A server's `scope` answers where its **definition** lives, and that is a fact about the files; it
+ * is not an instruction about where a change goes. A global server that a project overrides has two
+ * writable entries - the definition and the project's override - and picking a file by the first of
+ * those numbers is how a "turn this off for this project" press ends up editing the machine's config.
+ * A write therefore names its target, and the answer to a row names the targets it offers.
+ */
+export type PiMcpWriteKind = "definition" | "override";
+/** One entry a row can be written to, with the file that will change. */
+export interface PiMcpWriteTarget {
+    kind: PiMcpWriteKind;
+    /** The scope the write goes to, which is the scope pi's rules key on. */
+    scope: PiMcpScope;
+    /** The `mcp.json` this write opens. The panel names it, so a reader sees the file before pressing. */
+    configPath: string;
+}
+export type PiMcpTransport = "stdio" | "http";
+export type PiMcpExposure = "codemode" | "deferred" | "direct" | "hidden";
+export type PiMcpConfiguredState = "enabled" | "disabled" | "invalid";
+/** What a connection probe answered. `unprobed` means nobody has asked this server yet. */
+export type PiMcpProbeState = "unprobed" | "reachable" | "unreachable" | "needs-auth";
+export interface PiMcpProbe {
+    state: PiMcpProbeState;
+    /** A redacted one-line reason: never a header value, an env value, or a command's own output. */
+    message?: string;
+    /** The server's own name and version, from the `initialize` handshake. */
+    serverName?: string;
+    serverVersion?: string;
+    probedAt?: string;
+}
+export interface PiMcpServerInfo {
+    name: string;
+    scope: PiMcpScope;
+    transport: PiMcpTransport;
+    configured: PiMcpConfiguredState;
+    /** The `mcp.json` that defines the server. */
+    configPath: string;
+    /** The entries this row can be written to, for the scope the answer was read for. */
+    targets: PiMcpWriteTarget[];
+    /** The project `mcp.json` that overrides this global server's enabled / exposure keys. */
+    overridePath?: string;
+    /** A project entry that names no command or url: it only overrides a global server. */
+    overrideOnly?: boolean;
+    enabled: boolean;
+    exposure?: PiMcpExposure;
+    description?: string;
+    /** Seconds; pi's own default when it is not set. */
+    timeout?: number;
+    /** stdio only. */
+    command?: string;
+    cwd?: string;
+    /** stdio only: the names of the environment variables the server sets, never their values. */
+    envNames?: string[];
+    /** http only. */
+    url?: string;
+    /** http only: the header names the server sends, never their values. */
+    headerNames?: string[];
+    /** True when a header, env value, or command reference carries a value PI WEB does not read. */
+    usesSecrets?: boolean;
+    /** The server sends a pi provider's credential (`auth.provider`), which only global config may ask for. */
+    authProvider?: string;
+    oauthConfigured?: boolean;
+    probe?: PiMcpProbe;
+}
+export interface PiMcpListResponse {
+    servers: PiMcpServerInfo[];
+    /** pi's own configuration errors for the files it read. */
+    errors: string[];
+    globalConfigPath: string;
+    projectConfigPath?: string;
+    projectPath?: string;
+    projectTrusted: boolean;
+    /** False when the project scope was not read, so a reader never calls an absence an empty. */
+    projectScopeRead: boolean;
+}
+export interface PiMcpSetEnabledRequest {
+    name: string;
+    /** The entry to write: the server's definition, or this project's override of it. */
+    target: PiMcpWriteKind;
+    enabled: boolean;
+    /** Required for an override: a project this machine has, resolved to its path by the server. */
+    projectId?: string;
+    /**
+     * The scope the write lands in, sent beside `target` so a PI WEB old enough to know only `scope`
+     * still answers a request it can check. The target is what the server acts on.
+     */
+    scope?: PiMcpScope;
+}
+export interface PiMcpRemoveRequest {
+    name: string;
+    target: PiMcpWriteKind;
+    projectId?: string;
+    scope?: PiMcpScope;
+}
+export interface PiMcpTestRequest {
+    name: string;
+    /** A probe reads the effective config, so it needs no write target. */
+    projectId?: string;
+}
+export interface PiMcpMutationResponse extends PiMcpListResponse {
+    action: "set-enabled" | "remove" | "test";
+    name: string;
+    enabled?: boolean;
+    removed?: boolean;
+    probe?: PiMcpProbe;
+    /** A running session keeps the connections it opened: the change reaches it after a reload. */
+    requiresReload: boolean;
 }
 export interface PiWebConfigEnvOverrides {
     host: boolean;
@@ -314,6 +576,11 @@ export interface PiWebConfigResponse {
     serverSettingsProtocol?: 1;
     /** Which plugins hold a `serverSettings` block (an empty block counts); presence only, never validity or a value. */
     serverSettingsConfigured?: Record<string, boolean>;
+    /**
+     * True when an ntfy topic is stored on this machine. Presence only: the topic is what it takes to
+     * publish to (and read) the reader's channel, so it is never part of an answer.
+     */
+    ntfyConfigured?: boolean;
 }
 export interface Project {
     id: string;
@@ -1294,11 +1561,29 @@ export interface SessionStatus {
      */
     turnStartedAt?: string;
     /**
+     * How long the task that just finished took, measured by the session daemon from the transcript: from
+     * the newest input boundary (the prompt the reader sent, or the steer that took the turn over) to the
+     * newest entry on the branch. Present when the session is settled and the transcript answers both
+     * ends; absent while it works, and from a daemon that predates the field.
+     *
+     * The number is the server's, so it does not depend on a page having watched the task: a browser that
+     * opens after a two-hour run, a device on a different clock, and a reload in the middle of it all
+     * read the same span. A device-measured span is a fallback for a daemon that does not publish this.
+     */
+    lastRunDurationMs?: number;
+    /**
      * The timestamp of the session's leaf entry, the newest on its current branch (B28). A session
      * list orders by when a session last changed; carried on every status frame, it moves a row when
      * the run ends instead of at the next whole read of the list. Absent from a daemon that predates it.
      */
     lastActivityAt?: string;
+    /**
+     * The branch the session's working directory stands on, read the way pi's footer reads it.
+     * Present only inside a repository; absent means the daemon has not answered, which covers a
+     * directory outside a repository and a daemon that predates the field. A browser shows the branch
+     * when it is present and shows nothing when it is not, never "no branch".
+     */
+    gitBranch?: string;
     model?: SessionModel;
     thinkingLevel?: string;
     isStreaming: boolean;
@@ -1385,6 +1670,7 @@ export interface SlashCommand {
     source: "extension" | "prompt" | "skill" | "builtin";
 }
 export type { FileSuggestion, ProjectFolderContents, ProjectFolderCrumb, ProjectFolderEntry, ProjectFolderListing, ProjectFolderListingRequest, ProjectFolderUnreadableCause } from "./pluginApiTypes.js";
+export type { NtfyConfig, NotificationEvent } from "./ntfy.js";
 export interface TerminalInfo {
     id: string;
     cwd: string;

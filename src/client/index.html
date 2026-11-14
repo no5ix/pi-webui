@@ -43,6 +43,9 @@
         --pi-text-md: 15px;
         --pi-text-lg: 17px;
         --pi-text-xl: 20px;
+        /* A page title in a wide pane: the step above the largest control text,
+           so a heading cannot be confused with a 20px button label. */
+        --pi-text-2xl: 24px;
         --pi-leading-tight: 1.25;
         --pi-leading-normal: 1.45;
         --pi-weight-regular: 400;
@@ -145,6 +148,14 @@
         --pi-font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         --pi-font-display: "SF Pro Display", "Segoe UI Variable Display", Inter, "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
         --pi-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        /* Letters, set on purpose. Display headings tighten a hair; a group label
+           is a label, so it opens up and gets read as a name rather than a word. */
+        --pi-tracking-tight: -0.015em;
+        --pi-tracking-label: 0.08em;
+        /* The measure a transcript reads at. A chat column that spans a 2k
+           screen is unreadable, and a transcript that spans a 1600px pane makes
+           the eye hunt for the next line. */
+        --pi-measure-reading: 78ch;
         --pi-control-font-size: 16px;
         --pi-control-font-family: var(--pi-font-ui);
         --pi-control-monospace-font-family: var(--pi-font-mono);
@@ -219,6 +230,22 @@
         --pi-elevation-1: 0 1px 2px var(--pi-shadow-soft);
         --pi-elevation-2: 0 2px 10px var(--pi-shadow);
         --pi-elevation-3: 0 12px 40px var(--pi-shadow-strong);
+
+        /* The interaction layer: what a surface wears when it is selected, being
+           hovered, focused, or showing the machinery of a run. Named stops, so a
+           selected row, a text selection, a code fence and a focus ring stop
+           being four spellings of the same two colours. */
+        --pi-accent-soft: #2b2135;
+        --pi-accent-soft-hover: #372a45;
+        --pi-on-accent-soft: #e8def8;
+        --pi-focus-ring: #d0bcff;
+        --pi-row-hover: #262329;
+        --pi-divider: #36343b;
+        --pi-chip-bg: #262329;
+        --pi-chip-border: #48454e;
+        --pi-code-bg: #111014;
+        --pi-code-border: #36343b;
+        --pi-sheen: inset 0 1px 0 #ffffff0a;
       }
 
       /* A phone has no width to spare: 32px of a 393px screen went to margins.
@@ -243,6 +270,7 @@
           --pi-text-md: 14px;
           --pi-text-lg: 15px;
           --pi-text-xl: 17px;
+          --pi-text-2xl: 20px;
           --pi-panel-header-height: 44px;
           --pi-panel-header-control-height: 36px;
         }
@@ -300,6 +328,17 @@
           --pi-msg-system-bg: #eef1f5;
           --pi-msg-system-border: #b8c0cb;
           --pi-msg-system-header-bg: #eef1f5;
+          --pi-accent-soft: #ece2f8;
+          --pi-accent-soft-hover: #e2d5f1;
+          --pi-on-accent-soft: #3f1f73;
+          --pi-focus-ring: #6750a4;
+          --pi-row-hover: #e8e0eb;
+          --pi-divider: #e0dbe8;
+          --pi-chip-bg: #f3edf7;
+          --pi-chip-border: #cac4d0;
+          --pi-code-bg: #ece6f0;
+          --pi-code-border: #d8d2dd;
+          --pi-sheen: inset 0 1px 0 #ffffff;
           --pi-font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           --pi-font-display: "SF Pro Display", "Segoe UI Variable Display", Inter, "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
           --pi-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -325,6 +364,12 @@
          against, and mixed normal/1 boxes inside centered rows are what made
          the pro switch read misaligned. Tight is the TUI rhythm. */
       body { line-height: var(--pi-leading-tight); }
+      /* The scrollbar is part of the surface: a light UI with a black scroller
+         is a different app. Both properties inherit, so they cross shadow roots. */
+      html { scrollbar-width: thin; scrollbar-color: var(--pi-border) transparent; }
+      /* Type is rendered once, on a dark or warm canvas, and the platform's own
+         smoothing is what makes a 12px label read as ink rather than pixels. */
+      html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
     </style>
     <script>
       (() => {

@@ -61,5 +61,16 @@ export const CORE_MATERIAL_DARK_TOKENS = {
   "--pi-msg-assistant-header-bg": "var(--pi-surface)",
   "--pi-msg-system-bg": "#283039",
   "--pi-msg-system-border": "#6f7d90",
-  "--pi-msg-system-header-bg": "#283039"
+  "--pi-msg-system-header-bg": "#283039",
+  "--pi-accent-soft": "#2b2135",
+  "--pi-accent-soft-hover": "#372a45",
+  "--pi-on-accent-soft": "#e8def8",
+  "--pi-focus-ring": "#d0bcff",
+  "--pi-row-hover": "#262329",
+  "--pi-divider": "#36343b",
+  "--pi-chip-bg": "#262329",
+  "--pi-chip-border": "#48454e",
+  "--pi-code-bg": "#111014",
+  "--pi-code-border": "#36343b",
+  "--pi-sheen": "inset 0 1px 0 #ffffff0a"
 } satisfies Record<ThemeToken, string>;

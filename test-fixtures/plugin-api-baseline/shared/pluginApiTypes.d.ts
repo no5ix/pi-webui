@@ -390,7 +390,19 @@ export interface PiPackageUpdates {
  * density or border-width token yet.
  */
 export type ShapeTypographyToken = "--pi-font-ui" | "--pi-font-display" | "--pi-font-mono" | "--pi-radius-xs" | "--pi-radius-sm" | "--pi-radius-md" | "--pi-radius-lg" | "--pi-radius-xl";
-export type ThemeToken = LegacyThemeToken | SemanticSurfaceToken | ForegroundToken | ShapeTypographyToken | MessageRoleToken;
+/**
+ * The interaction layer: the colours a surface wears when a person is about to
+ * use it, is using it, or is reading the machinery of a run. Optional, so a pack
+ * written before it keeps rendering: the core derives each stop from the pack's
+ * own accent, selection, border and terminal colours when it applies it.
+ *
+ * These exist because selection, focus, telemetry chips and code had been drawn
+ * with the same three tokens everywhere, so a selected row looked like a text
+ * selection, a code fence looked like an input, and the focus ring was the accent
+ * border of a card. One named stop each keeps them four different things.
+ */
+export type InteractionToken = "--pi-accent-soft" | "--pi-accent-soft-hover" | "--pi-on-accent-soft" | "--pi-focus-ring" | "--pi-row-hover" | "--pi-divider" | "--pi-chip-bg" | "--pi-chip-border" | "--pi-code-bg" | "--pi-code-border" | "--pi-sheen";
+export type ThemeToken = LegacyThemeToken | SemanticSurfaceToken | ForegroundToken | ShapeTypographyToken | MessageRoleToken | InteractionToken;
 /**
  * Conversation message colours by who wrote the message. Optional: a theme that omits one gets it
  * derived from its own tokens when it is applied (user from the selection colour and accent border,

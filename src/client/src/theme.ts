@@ -87,6 +87,9 @@ export const THEME_TOKENS: ThemeToken[] = [
   "--pi-msg-user-bg", "--pi-msg-user-border", "--pi-msg-user-header-bg", "--pi-msg-assistant-bg",
   "--pi-msg-assistant-border", "--pi-msg-assistant-header-bg", "--pi-msg-system-bg", "--pi-msg-system-border",
   "--pi-msg-system-header-bg",
+  "--pi-accent-soft", "--pi-accent-soft-hover", "--pi-on-accent-soft", "--pi-focus-ring",
+  "--pi-row-hover", "--pi-divider", "--pi-chip-bg", "--pi-chip-border", "--pi-code-bg",
+  "--pi-code-border", "--pi-sheen",
 ];
 
 type UnlistedThemeToken = Exclude<ThemeToken, (typeof THEME_TOKENS)[number]>;
@@ -113,6 +116,17 @@ const DERIVED_TOKENS: Partial<Record<ThemeToken, string>> = {
   "--pi-msg-system-bg": "color-mix(in srgb, var(--pi-purple-surface) 60%, var(--pi-bg))",
   "--pi-msg-system-border": "color-mix(in srgb, var(--pi-purple-border) 45%, var(--pi-border))",
   "--pi-msg-system-header-bg": "var(--pi-msg-system-bg)",
+  "--pi-accent-soft": "color-mix(in srgb, var(--pi-purple-surface) 62%, var(--pi-bg))",
+  "--pi-accent-soft-hover": "color-mix(in srgb, var(--pi-accent-soft) 82%, var(--pi-text))",
+  "--pi-on-accent-soft": "var(--pi-text)",
+  "--pi-focus-ring": "var(--pi-accent)",
+  "--pi-row-hover": "var(--pi-surface-hover)",
+  "--pi-divider": "var(--pi-border-muted)",
+  "--pi-chip-bg": "var(--pi-surface)",
+  "--pi-chip-border": "var(--pi-border)",
+  "--pi-code-bg": "var(--pi-terminal-bg)",
+  "--pi-code-border": "var(--pi-border)",
+  "--pi-sheen": "inset 0 1px 0 #ffffff0a",
 };
 
 const qualifiedContributionIdPattern = /^[a-z][a-z0-9.-]*:[a-z][a-z0-9.-]*$/u;

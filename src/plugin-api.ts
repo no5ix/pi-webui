@@ -1,5 +1,5 @@
 import type { CSSResultGroup, TemplateResult } from "lit";
-import type { FileSuggestion, ProjectFolderListing, ProjectFolderListingRequest, ForegroundToken, MessageRoleToken, PluginListModel, PluginReadFailure, LegacyThemeToken, SemanticSurfaceToken, ShapeTypographyToken, TerminalCommandRun, TerminalInfo, DeleteWorkspaceFileResponse, FileContentResponse, FileTreeResponse, JsonValue, MachineKind, MoveWorkspaceFileOptions, MoveWorkspaceFileResponse, PiWebStatusResponse, TerminalCommandRunHandle, WorkspaceProviderMetadata, WorkspaceRemovalPresentation, WorkspaceUploadBatchProgress, WorkspaceUploadCancelHandle, StagedFileRequest, StagedFileState, WriteWorkspaceFileOptions, WriteWorkspaceFileResponse, MachineConnection, PluginFleet, PluginMachineFacts, PluginSessionFacts, ListContext, ListItemAction, ListItemContext, ListKind, ListSection } from "./shared/pluginApiTypes.js";
+import type { FileSuggestion, ProjectFolderListing, ProjectFolderListingRequest, ForegroundToken, InteractionToken, MessageRoleToken, PluginListModel, PluginReadFailure, LegacyThemeToken, SemanticSurfaceToken, ShapeTypographyToken, TerminalCommandRun, TerminalInfo, DeleteWorkspaceFileResponse, FileContentResponse, FileTreeResponse, JsonValue, MachineKind, MoveWorkspaceFileOptions, MoveWorkspaceFileResponse, PiWebStatusResponse, TerminalCommandRunHandle, WorkspaceProviderMetadata, WorkspaceRemovalPresentation, WorkspaceUploadBatchProgress, WorkspaceUploadCancelHandle, StagedFileRequest, StagedFileState, WriteWorkspaceFileOptions, WriteWorkspaceFileResponse, MachineConnection, PluginFleet, PluginMachineFacts, PluginSessionFacts, ListContext, ListItemAction, ListItemContext, ListKind, ListSection } from "./shared/pluginApiTypes.js";
 
 export type { ThemeToken } from "./shared/pluginApiTypes.js";
 import type { ComposerSendResult, PluginButton, PluginExpandableRow, PluginMessageField, PluginOutputView, PluginPanelComposer, PluginPanelSession, PluginToggle } from "./shared/pluginApiTypes.js";
@@ -15,6 +15,7 @@ export type {
   ProjectFolderUnreadableCause,
   LegacyThemeToken,
   SemanticSurfaceToken,
+  InteractionToken,
   TerminalInfo,
   FileContentMediaType,
   FileContentResponse,
@@ -1318,7 +1319,7 @@ export interface WorkspaceLabelContribution {
 }
 
 export type ThemeColorScheme = "dark" | "light";
-export type ThemeTokens = Record<LegacyThemeToken, string> & Partial<Record<SemanticSurfaceToken | ForegroundToken | ShapeTypographyToken | MessageRoleToken, string>>;
+export type ThemeTokens = Record<LegacyThemeToken, string> & Partial<Record<SemanticSurfaceToken | ForegroundToken | ShapeTypographyToken | MessageRoleToken | InteractionToken, string>>;
 
 export interface ThemeContribution {
   id: LocalContributionId;
