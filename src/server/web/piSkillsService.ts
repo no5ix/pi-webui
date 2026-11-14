@@ -154,7 +154,7 @@ export class DefaultPiSkillsService implements PiSkillsService {
   private response(found: SkillDiscovery, scope: ReadScope): PiSkillsResponse {
     const global = this.preferences.readGlobal();
     const project = scope.projectPath === undefined ? undefined : this.preferences.readProject(scope.projectPath);
-    const skills = found.skills.map((skill) => describeSkill(skill, global.config, project?.config));
+    const skills = found.skills.map((skill) => describeSkill(skill, global.config, project?.config, scope.projectPath));
     return {
       skills,
       diagnostics: found.diagnostics,
@@ -194,11 +194,14 @@ function scopeRows(
   ];
 }
 
-function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, project: PiSkillPreferenceConfig | undefined): PiSkillInfo {
-  const scope: PiSkillScope = skill.piScope === "project" ? "project" : "global";
+function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, project: PiSkillPreferenceConfig | undefined, projectPath: string | undefined): PiSkillInfo {
+  const resolvedFile = resolve(skill.filePath);
+  const resolvedProject = projectPath === undefined ? undefined : resolve(projectPath);
+  const isProjectOwnedPath = resolvedProject !== undefined && (resolvedFile === resolvedProject || resolvedFile.startsWith(`${resolvedProject}/`));
+  const scope: PiSkillScope = skill.piScope === "project" || isProjectOwnedPath ? "project" : "global";
   const origin: PiSkillOrigin = skill.packageSource !== undefined
     ? "package"
-    : skill.source === "user" ? "agent" : skill.source === "project" ? "project" : "path";
+    : isProjectOwnedPath || skill.source === "project" ? "project" : skill.source === "user" ? "agent" : "path";
   const filteredByOwner = skill.ownerPackageDisabled === true;
   const validationMessage = filteredByOwner
     ? `Supplied by the disabled Pi package ${skill.packageSource ?? ""}, which loads none of its resources.`
@@ -214,7 +217,7 @@ function describeSkill(skill: DiscoveredSkill, global: PiSkillPreferenceConfig, 
     ...(skill.packageSource === undefined ? {} : { packageSource: skill.packageSource }),
     ...(filteredByOwner ? { ownerPackageDisabled: true } : {}),
     preference: resolveSkillPreference(skill.name, global, project),
-    enabled: filteredByOwner ? false : isSkillEnabled(skill.name, global, project),
+    enabled: filteredByOwner ? false : isSkillEnabled(skill.name, global, scope === "project" ? project : undefined),
     validation: validationMessage === undefined ? "valid" : "warning",
     ...(validationMessage === undefined ? {} : { validationMessage }),
     ...(skill.disableModelInvocation ? { disableModelInvocation: true } : {}),

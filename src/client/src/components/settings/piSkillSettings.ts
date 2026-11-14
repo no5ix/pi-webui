@@ -23,7 +23,7 @@ export interface PiSkillScopeGroup {
   scopeInfo: PiSkillsScopeInfo | undefined;
 }
 
-const PI_SKILL_SCOPE_ORDER: readonly PiSkillScope[] = ["global", "project"];
+const PI_SKILL_SCOPE_ORDER: readonly PiSkillScope[] = ["project", "global"];
 
 export function piSkillScopeLabel(scope: PiSkillScope): string {
   return scope === "project" ? "Project" : "Global";
@@ -108,7 +108,9 @@ export function piSkillValidationNote(info: PiSkillInfo): string | undefined {
  * an empty list under it stays "this directory has no skills", not "no skills anywhere".
  */
 export function piSkillScopeGroups(skills: readonly PiSkillInfo[], scopes: readonly PiSkillsScopeInfo[]): PiSkillScopeGroup[] {
-  return PI_SKILL_SCOPE_ORDER.map((scope) => ({
+  const hasProject = scopes.some((entry) => entry.scope === "project") || skills.some((skill) => skill.scope === "project");
+  const order: readonly PiSkillScope[] = hasProject ? PI_SKILL_SCOPE_ORDER : ["global"];
+  return order.map((scope) => ({
     scope,
     skills: skills.filter((skill) => skill.scope === scope),
     scopeInfo: scopes.find((entry) => entry.scope === scope),

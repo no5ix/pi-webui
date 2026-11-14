@@ -159,14 +159,30 @@ export class SettingsMcpPanel extends LitElement {
     if (this.loading && response.servers.length === 0) {
       return html`<p class="section-note">Refreshing MCP servers from ${targetLabel}…</p>`;
     }
-    if (response.servers.length === 0) {
-      return html`<div class="loading-card">${piMcpEmptyListNote(response, targetLabel)}</div>`;
+    const projectServers = response.servers.filter((server) => server.scope === "project");
+    const globalServers = response.servers.filter((server) => server.scope !== "project");
+    if (!this.projectSelected) {
+      return html`
+        <section class="section-card resource-scope" aria-label="Global MCP servers">
+          <header class="scope-heading"><h3>Global MCP servers</h3><small>Available across all projects on ${targetLabel}.</small></header>
+          ${globalServers.length === 0 ? html`<p class="section-note">${piMcpEmptyListNote({ ...response, servers: globalServers }, targetLabel)}</p>` : this.renderServerCards(globalServers)}
+        </section>
+      `;
     }
     return html`
-      <div class="server-list">
-        ${response.servers.map((server) => this.renderServer(server))}
-      </div>
+      <section class="section-card resource-scope" aria-label="Project MCP servers">
+        <header class="scope-heading"><h3>Project MCP servers</h3><small>Defined in this project's MCP configuration.</small></header>
+        ${projectServers.length === 0 ? html`<p class="section-note">No project-specific MCP servers are configured for this project.</p>` : this.renderServerCards(projectServers)}
+      </section>
+      <section class="section-card resource-scope" aria-label="Global MCP servers">
+        <header class="scope-heading"><h3>Global MCP servers</h3><small>Available across all projects; project overrides remain attached to their global definitions.</small></header>
+        ${globalServers.length === 0 ? html`<p class="section-note">No global MCP servers are configured on this machine.</p>` : this.renderServerCards(globalServers)}
+      </section>
     `;
+  }
+
+  private renderServerCards(servers: readonly PiMcpServerInfo[]): TemplateResult {
+    return html`<div class="server-list">${servers.map((server) => this.renderServer(server))}</div>`;
   }
 
   private renderServer(server: PiMcpServerInfo): TemplateResult {
@@ -317,6 +333,9 @@ export class SettingsMcpPanel extends LitElement {
     .loading-card, .scope-note, .section-note, .config-paths { color: var(--pi-muted); }
     .scope-note, .config-paths { display: grid; gap: var(--pi-space-2); font-size: var(--pi-text-xs); }
     .server-list { display: grid; gap: var(--pi-space-5); }
+    .resource-scope { display: grid; gap: var(--pi-space-5); }
+    .scope-heading { display: grid; gap: var(--pi-space-2); }
+    .scope-heading h3 { margin: 0; font-size: var(--pi-text-md); }
     .server-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pi-space-6); align-items: center; }
     .server-card.off { opacity: .82; }
     .server-main { min-width: 0; display: grid; gap: var(--pi-space-2); }

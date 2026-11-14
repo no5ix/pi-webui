@@ -117,6 +117,20 @@ function flip(input: HTMLInputElement, checked: boolean): void {
 }
 
 describe("settings-mcp-panel", () => {
+  it("shows project MCP servers above global servers when a project is selected", async () => {
+    const panel = await mount((element) => {
+      element.mcpResponse = response([
+        server("global-files"),
+        server("project-search", { scope: "project", configPath: "/work/project/.pi/mcp.json" }),
+      ], { projectPath: "/work/project", projectConfigPath: "/work/project/.pi/mcp.json", projectTrusted: true, projectScopeRead: true });
+      element.projects = [project];
+      element.projectSelection = "p-1";
+    });
+    const text = panelText(panel);
+    expect(text.indexOf("Project MCP servers")).toBeLessThan(text.indexOf("Global MCP servers"));
+    expect(text.indexOf("project-search")).toBeLessThan(text.indexOf("global-files"));
+  });
+
   it("shows a server pi has, on and off, with the file the answer came from", async () => {
     const panel = await mount((element) => {
       element.mcpResponse = response([

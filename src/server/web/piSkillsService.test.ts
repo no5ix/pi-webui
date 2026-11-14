@@ -120,6 +120,22 @@ describe("listing skills", () => {
     expect(listed.skills[1]).toMatchObject({ name: "other", enabled: true, preference: "default" });
   });
 
+  it("classifies a configured skills path inside the selected repository as project-owned", async () => {
+    const repositorySkill = skill("changeset-changelog", {
+      piScope: "user", source: "local",
+      filePath: "/work/project/.agents/skills/changeset-changelog/SKILL.md",
+      baseDir: "/work/project/.agents/skills/changeset-changelog",
+    });
+    const listed = await service(discovery([repositorySkill]), preferences({ version: 1, disabled: ["changeset-changelog"] }).store).list({ projectId: "p-1" });
+    expect(listed.skills[0]).toMatchObject({ scope: "project", origin: "project", name: "changeset-changelog", enabled: true, preference: "default" });
+  });
+
+  it("keeps a global configured skill global when it lives outside the selected repository", async () => {
+    const globalConfiguredSkill = skill("shared-helper", { piScope: "user", source: "local", filePath: "/home/test/shared/skills/shared-helper/SKILL.md" });
+    const listed = await service(discovery([globalConfiguredSkill]), preferences().store).list({ projectId: "p-1" });
+    expect(listed.skills[0]).toMatchObject({ scope: "global", origin: "path", name: "shared-helper" });
+  });
+
   it("lets a project's preference answer for that project, and only for it", async () => {
     const store = preferences({ version: 1, disabled: ["pdf"] }, { version: 1, disabled: ["release"], enabled: ["pdf"] }).store;
 

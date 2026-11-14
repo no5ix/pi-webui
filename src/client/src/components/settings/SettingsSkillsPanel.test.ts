@@ -111,6 +111,7 @@ describe("settings-skills-panel", () => {
     expect(text).toContain("Skills directory: /repo/.pi/skills");
     expect(text).toContain("Saved preference: /repo/.pi-web/config.json");
     expect(text).toContain("Project scope read from /repo.");
+    expect(text.indexOf("Project skills")).toBeLessThan(text.indexOf("Global skills"));
     expect(switches(panel)).toHaveLength(2);
   });
 
