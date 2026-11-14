@@ -1275,22 +1275,29 @@ export class SettingsDialog extends LitElement {
   static override styles = [css`${unsafeCSS(uiIconStyle)}`, css`${unsafeCSS(disclosureIconStyle)}`, interactiveSurfaceStyles, pageScrollerStyles, css`
     :host { position: fixed; inset: 0; z-index: var(--pi-layer-dialog); color: var(--pi-text); font: var(--pi-text-base) var(--pi-font-ui, system-ui, sans-serif); line-height: inherit; }
     modal-surface { --modal-surface-backdrop-padding: max(var(--pi-space-8), env(safe-area-inset-top)) max(var(--pi-space-8), env(safe-area-inset-right)) max(var(--pi-space-8), env(safe-area-inset-bottom)) max(var(--pi-space-8), env(safe-area-inset-left)); --modal-surface-width: min(980px, 100%); --modal-surface-max-height: min(760px, 100%); --modal-surface-min-height: min(620px, 100%); --modal-surface-radius: var(--pi-radius-lg); }
-    .settings-header { display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-6); padding: var(--pi-space-7) var(--pi-space-7); border-bottom: 1px solid var(--pi-border); }
-    .eyebrow { display: block; color: var(--pi-muted); font-size: var(--pi-text-xs); font-weight: var(--pi-weight-semibold); }
-    h1 { margin: 0; font-size: var(--pi-text-xl); line-height: 1.2; }
-    button { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); padding: var(--pi-space-4) var(--pi-space-5); font: inherit; cursor: pointer; }
+    .settings-header { display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-6); padding: var(--pi-space-7) var(--pi-space-7); border-bottom: 1px solid var(--pi-divider); }
+    .eyebrow { display: block; color: var(--pi-muted); font-size: var(--pi-text-2xs); font-weight: var(--pi-weight-semibold); letter-spacing: var(--pi-tracking-label); text-transform: uppercase; }
+    h1 { margin: 0; color: var(--pi-text-bright); font-family: var(--pi-font-display); font-size: var(--pi-text-2xl); font-weight: var(--pi-weight-strong); letter-spacing: var(--pi-tracking-tight); line-height: var(--pi-leading-tight); }
+    button { border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); padding: var(--pi-space-4) var(--pi-space-5); font: inherit; cursor: pointer; }
+    @media (hover: hover) { button:hover:not(:disabled) { background: var(--pi-row-hover); border-color: var(--pi-accent); } }
+    button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
     .settings-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
     .settings-search { padding: 0 0 var(--pi-space-4); }
-    .settings-search-input { box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-bg); color: var(--pi-text); font: inherit; }
+    .settings-search-input { box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-4); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); font: inherit; }
+    .settings-search-input:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-tight); }
+    .settings-search-input::placeholder { color: var(--pi-muted); }
     @media (pointer: coarse) { .settings-search-input { min-height: var(--pi-control-height-touch); } }
     .settings-no-match { margin: var(--pi-space-4) 0; color: var(--pi-muted); font-size: var(--pi-text-xs); }
-    .settings-nav { min-height: 0; padding: var(--pi-space-5); border-right: 1px solid var(--pi-border); background: var(--pi-surface); overflow: auto; }
-    .settings-nav button { display: grid; gap: var(--pi-space-1); box-sizing: border-box; width: 100%; margin: 0 0 var(--pi-space-3); text-align: left; border-color: transparent; background: transparent; }
-    .settings-nav button:focus { background: var(--pi-surface-hover); }
-    @media (hover: hover) { .settings-nav button:hover { background: var(--pi-surface-hover); } }
-    .settings-nav button.selected { border-color: var(--pi-accent); background: var(--pi-selection-bg); }
-    .settings-nav small { font-size: var(--pi-text-xs); color: var(--pi-muted); }
-    .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: var(--pi-space-8); }
+    /* The rail is navigation, so it is a list of items on the canvas and not a
+       panel of bordered buttons: the current section is filled, the rest are ink. */
+    .settings-nav { min-height: 0; padding: var(--pi-space-4); border-right: 1px solid var(--pi-divider); background: transparent; overflow: auto; }
+    .settings-nav button { display: grid; gap: var(--pi-space-1); box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); margin: 0 0 var(--pi-space-1); padding: var(--pi-space-3) var(--pi-space-4); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: left; }
+    .settings-nav button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+    @media (hover: hover) { .settings-nav button:hover:not(.selected) { background: var(--pi-row-hover); color: var(--pi-text); } }
+    .settings-nav button.selected { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); font-weight: var(--pi-weight-medium); }
+    .settings-nav small { font-size: var(--pi-text-2xs); color: var(--pi-muted); }
+    .settings-nav button.selected small { color: color-mix(in srgb, var(--pi-on-accent-soft) 76%, transparent); }
+    .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: var(--pi-space-7); }
 
     @media ${unsafeCSS(PHONE_LAYOUT_MEDIA_QUERY)} {
       modal-surface { --modal-surface-backdrop-padding: 0; --modal-surface-place-items: stretch; --modal-surface-width: 100%; --modal-surface-max-height: none; --modal-surface-min-height: 0; --modal-surface-border: 0; --modal-surface-radius: 0; }
@@ -1303,7 +1310,9 @@ export class SettingsDialog extends LitElement {
       .settings-content { padding: var(--pi-space-5) var(--pi-reading-edge) calc(var(--pi-space-6) + env(safe-area-inset-bottom)); }
       .settings-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
       .settings-list { display: grid; gap: var(--pi-space-3); align-content: start; overflow-y: auto; padding: var(--pi-space-4) var(--pi-reading-edge) calc(var(--pi-space-6) + env(safe-area-inset-bottom)); }
-      .settings-list button { font: inherit; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-6); width: 100%; min-height: var(--pi-row-min-height); margin: 0; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); padding: var(--pi-space-3) var(--pi-space-5); text-align: start; }
+      .settings-list button { font: inherit; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-6); width: 100%; min-height: var(--pi-row-min-height); margin: 0; border: 0; border-bottom: 1px solid var(--pi-divider); border-radius: 0; background: transparent; padding: var(--pi-space-4) var(--pi-space-1); text-align: start; }
+      .settings-list button:last-child { border-bottom: 0; }
+      @media (hover: hover) { .settings-list button:hover { background: var(--pi-row-hover); } }
       .settings-list-label { display: flex; flex-direction: column; gap: var(--pi-space-1); min-width: 0; }
       .settings-list-label strong { font-size: var(--pi-text-base); font-weight: var(--pi-weight-medium); color: var(--pi-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .settings-list-label small { font-size: var(--pi-text-xs); color: var(--pi-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

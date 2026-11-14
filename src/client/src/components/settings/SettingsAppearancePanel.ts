@@ -187,8 +187,8 @@ export class SettingsAppearancePanel extends LitElement {
   static override styles = [interactiveSurfaceStyles, settingsControlStyles, css`
     :host { display: block; color: var(--pi-text); font: var(--pi-text-base) var(--pi-font-ui); line-height: inherit; }
     .heading { margin-bottom: var(--pi-space-6); }
-    h2 { margin: 0 0 var(--pi-space-2); font-family: var(--pi-font-display); font-size: var(--pi-text-lg); font-weight: var(--pi-weight-semibold); letter-spacing: -0.01em; }
-    .muted { margin: 0; color: var(--pi-muted); font-size: var(--pi-text-xs); line-height: 1.4; }
+    h2 { margin: 0 0 var(--pi-space-2); color: var(--pi-text-bright); font-family: var(--pi-font-display); font-size: var(--pi-text-xl); font-weight: var(--pi-weight-strong); letter-spacing: var(--pi-tracking-tight); }
+    .muted { margin: 0; color: var(--pi-muted); font-size: var(--pi-text-sm); line-height: var(--pi-leading-normal); }
     .toggles { display: grid; gap: var(--pi-space-4); margin-bottom: var(--pi-space-7); }
     .follow { display: flex; gap: var(--pi-space-5); padding: var(--pi-space-5); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); cursor: pointer; }
     .follow { align-items: center; }
@@ -203,15 +203,20 @@ export class SettingsAppearancePanel extends LitElement {
     .list-tiles-option input { margin: 0; width: var(--pi-checkbox-size); height: var(--pi-checkbox-size); accent-color: var(--pi-accent); }
     .field-error { margin: 0; color: var(--pi-danger); font-size: var(--pi-text-xs); }
     .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--pi-space-5); }
-    .theme { display: grid; gap: var(--pi-space-2); padding: var(--pi-space-5); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); color: var(--pi-text); font: inherit; text-align: left; cursor: pointer; }
+    .theme { display: grid; gap: var(--pi-space-2); padding: var(--pi-space-5); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); color: var(--pi-text); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--pi-elevation-1); }
+    @media (hover: hover) { .theme:hover:not(.selected) { background: var(--pi-row-hover); border-color: var(--pi-accent-border); } }
     @media (hover: hover) { .theme:hover { border-color: var(--pi-accent); } }
-    .theme:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-accent); outline-offset: var(--pi-focus-ring-offset); }
-    .theme.selected { border-color: var(--pi-accent); box-shadow: 0 0 0 1px var(--pi-accent) inset; }
+    .theme:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
+    /* The chosen look is a state, and it is stated three ways at once: the accent
+       hairline, the accent-soft fill, and a ring inside the card. A reader scanning
+       ten plugin themes finds the one in use without reading a sentence. */
+    .theme.selected { border-color: var(--pi-accent); background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); box-shadow: inset 0 0 0 1px var(--pi-accent), var(--pi-elevation-1); }
     /* The theme actually on screen is a state, not prose: it used to be an
        11px "· in use" suffix on a card drawn exactly like every unrelated one. */
     .theme.active:not(.selected) { border-color: var(--pi-border-strong, var(--pi-muted)); }
     .theme.active .theme-name::after { content: ""; display: inline-block; width: var(--pi-dot-sm); height: var(--pi-dot-sm); margin-left: var(--pi-space-3); border-radius: 50%; background: var(--pi-accent); vertical-align: middle; }
-    .theme-name { font-weight: var(--pi-weight-semibold); }
+    .theme-name { color: inherit; font-weight: var(--pi-weight-semibold); }
+    .theme-scheme, .theme-description { color: color-mix(in srgb, var(--pi-muted) 82%, var(--pi-text)); }
     .theme-scheme, .theme-description { font-size: var(--pi-text-2xs); }
     /* The scheme line grew a suffix ("· in use", "· follows the system") and
        became the second variable-height line in a grid whose cards must match. */
@@ -225,20 +230,20 @@ export class SettingsAppearancePanel extends LitElement {
        space-5 padding, so the concentric clamp bottoms out at xs(0) - flat insides
        are the correct flat answer, not an accident. */
     .preview { box-sizing: border-box; display: grid; grid-template-columns: 22% minmax(0, 1fr); gap: 0; height: 104px; margin-bottom: var(--pi-space-3); overflow: hidden; border: 1px solid var(--preview-border, var(--pi-border)); border-radius: max(var(--pi-radius-xs), calc(var(--pi-radius-lg) - var(--pi-space-5))); background: var(--preview-bg, var(--pi-bg)); }
-    .preview-sidebar { display: flex; flex-direction: column; gap: 5px; padding: 9px 6px; border-right: 1px solid var(--preview-border, var(--pi-border)); background: var(--preview-surface, var(--pi-surface)); }
-    .preview-mark { width: 12px; height: 12px; margin: 0 0 3px 2px; border-radius: 4px; background: var(--preview-accent, var(--pi-accent)); }
-    .preview-nav { height: 5px; border-radius: 4px; background: var(--preview-muted, var(--pi-muted)); opacity: .5; }
+    .preview-sidebar { display: flex; flex-direction: column; gap: var(--pi-space-1); padding: var(--pi-space-5) var(--pi-space-3); border-right: 1px solid var(--preview-border, var(--pi-border)); background: var(--preview-surface, var(--pi-surface)); }
+    .preview-mark { width: 12px; height: 12px; margin: 0 0 var(--pi-space-1) var(--pi-space-1); border-radius: var(--pi-radius-sm); background: var(--preview-accent, var(--pi-accent)); }
+    .preview-nav { height: var(--pi-dot-sm); border-radius: var(--pi-radius-pill); background: var(--preview-muted, var(--pi-muted)); opacity: .5; }
     .preview-nav.active { width: 80%; background: var(--preview-accent, var(--pi-accent)); opacity: .95; }
-    .preview-workspace { display: grid; grid-template-rows: 14px 13px 1fr 16px; gap: 5px; min-width: 0; padding: 8px; }
-    .preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-    .preview-line { display: block; height: 3px; border-radius: var(--pi-radius-pill); background: var(--preview-text, var(--pi-text)); }
+    .preview-workspace { display: grid; grid-template-rows: 14px 13px 1fr 16px; gap: var(--pi-space-1); min-width: 0; padding: var(--pi-space-4); }
+    .preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-3); }
+    .preview-line { display: block; height: var(--pi-dot-xs); border-radius: var(--pi-radius-pill); background: var(--preview-text, var(--pi-text)); }
     .preview-line.long { width: 76%; }
     .preview-line.short { width: 46%; background: var(--preview-muted, var(--pi-muted)); }
-    .preview-message { display: block; min-width: 0; border-radius: 4px; }
+    .preview-message { display: block; min-width: 0; border-radius: var(--pi-radius-xs); }
     .preview-message.user { width: 65%; justify-self: end; background: var(--preview-accent, var(--pi-accent)); opacity: .24; }
-    .preview-message.assistant { display: grid; align-content: center; gap: 5px; padding: 4px; background: var(--preview-surface, var(--pi-surface)); }
-    .preview-composer { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; border: 1px solid var(--preview-border, var(--pi-border)); border-radius: 5px; }
-    .preview-send { width: 8px; height: 8px; border-radius: 3px; background: var(--preview-accent, var(--pi-accent)); }
+    .preview-message.assistant { display: grid; align-content: center; gap: var(--pi-space-1); padding: var(--pi-space-2); background: var(--preview-surface, var(--pi-surface)); }
+    .preview-composer { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--pi-space-2); border: 1px solid var(--preview-border, var(--pi-border)); border-radius: var(--pi-radius-sm); }
+    .preview-send { width: var(--pi-dot-md); height: var(--pi-dot-md); border-radius: var(--pi-radius-xs); background: var(--preview-accent, var(--pi-accent)); }
     .preview-dot { width: var(--pi-dot-md); height: var(--pi-dot-md); border-radius: 50%; }
     .preview-dot.accent { background: var(--preview-accent, var(--pi-accent)); }
     .preview-dot.success { background: var(--preview-success, var(--pi-success)); }

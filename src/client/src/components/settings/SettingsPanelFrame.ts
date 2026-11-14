@@ -102,21 +102,29 @@ export class SettingsPanelFrame extends LitElement {
     .section-heading { display: grid; gap: var(--pi-space-3); margin-bottom: var(--pi-space-7); }
     .title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-6); min-height: var(--pi-control-height); padding-left: var(--pi-settings-inner-edge); }
     .heading-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--pi-space-4); }
-    h2 { margin: 0; font-size: var(--pi-text-lg); line-height: 1.25; }
-    .description { color: var(--pi-muted); line-height: 1.45; }
+    h2 { margin: 0; color: var(--pi-text-bright); font-family: var(--pi-font-display); font-size: var(--pi-text-xl); font-weight: var(--pi-weight-strong); letter-spacing: var(--pi-tracking-tight); line-height: var(--pi-leading-tight); }
+    .description { color: var(--pi-muted); font-size: var(--pi-text-sm); line-height: var(--pi-leading-normal); }
     .description ::slotted(*) { margin: 0; }
-    button { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); padding: var(--pi-space-4) var(--pi-space-5); font: inherit; cursor: pointer; }
+    button { border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); padding: var(--pi-space-4) var(--pi-space-5); font: inherit; cursor: pointer; }
+    @media (hover: hover) { button:hover:not(:disabled) { background: var(--pi-row-hover); border-color: var(--pi-accent); } }
+    button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
+    /* A panel states its one primary action as an accent fill; everything else in
+       the panel is a chip beside it. */
+    .primary { border-color: var(--pi-accent); background: var(--pi-accent); color: var(--pi-on-accent); font-weight: var(--pi-weight-strong); }
+    @media (hover: hover) { .primary:hover:not(:disabled) { border-color: var(--pi-accent); background: color-mix(in srgb, var(--pi-accent) 88%, var(--pi-text)); color: var(--pi-on-accent); } }
     button:disabled { opacity: var(--pi-disabled-opacity); cursor: not-allowed; }
     .secondary { flex: 0 0 auto; }
     .notice-stack { display: grid; gap: var(--pi-space-6); margin-bottom: var(--pi-space-7); }
-    .notice { border: 1px solid var(--pi-border); border-radius: var(--pi-radius-lg); background: var(--pi-surface); padding: var(--pi-space-6); line-height: 1.45; }
-    .notice.error { border-color: var(--pi-danger); color: var(--pi-danger); background: color-mix(in srgb, var(--pi-danger) 10%, var(--pi-surface)); }
-    .notice.success { border-color: var(--pi-success-border); color: var(--pi-success); background: var(--pi-success-surface); }
-    .notice.warning { border-color: var(--pi-warning-border); color: var(--pi-text); background: var(--pi-warning-surface); }
+    /* A notice is a rail, a surface and words - not a card with a card inside
+       it. The rail is what says which kind of news this is. */
+    .notice { display: grid; gap: var(--pi-space-2); border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); padding: var(--pi-space-5); line-height: var(--pi-leading-normal); }
+    .notice.error { border-inline-start-color: var(--pi-danger); color: var(--pi-danger); background: color-mix(in srgb, var(--pi-danger) 8%, var(--pi-surface)); }
+    .notice.success { border-inline-start-color: var(--pi-success); color: var(--pi-success); background: var(--pi-success-surface); }
+    .notice.warning { border-inline-start-color: var(--pi-warning); color: var(--pi-text); background: var(--pi-warning-surface); }
     .notice.info { color: var(--pi-muted); }
     .notice-title { display: block; margin-bottom: var(--pi-space-2); color: inherit; }
     .notice-content { min-width: 0; }
-    .content { display: grid; gap: var(--pi-space-7); min-width: 0; }
+    .content { display: grid; gap: var(--pi-space-6); min-width: 0; }
     .content ::slotted(*) { min-width: 0; }
 
   `];
