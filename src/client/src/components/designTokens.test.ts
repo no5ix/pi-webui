@@ -31,6 +31,13 @@ const SHARED_SHEETS = [
 
 const indexHtml = readFileSync(join(process.cwd(), "src/client/index.html"), "utf8");
 
+describe("the transcript and composer share a bounded reading measure", () => {
+  it("uses the declared reading measure unless a deployment explicitly overrides it", () => {
+    expect(indexHtml).toContain("--pi-measure-reading: 72ch;");
+    expect(indexHtml).toContain("--pi-chat-measure: var(--pi-measure-reading);");
+  });
+});
+
 describe("scale tokens are published to every shadow root", () => {
   it.each([
     ["spacing", ["--pi-space-1", "--pi-space-4", "--pi-space-9"]],
