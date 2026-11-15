@@ -1,3 +1,10 @@
+
+
+# no5ix - how to open it
+
+1. in the project root path, ` pnpm run dev `
+
+
 # PI WEB
 
 English | [简体中文](README.zh-CN.md)
