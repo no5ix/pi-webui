@@ -25,7 +25,7 @@ const statusBarStyles = css`${unsafeCSS(uiIconStyle)}
   .bar { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--pi-space-3); row-gap: var(--pi-space-2); justify-content: flex-start; min-width: 0; min-height: calc(var(--pi-panel-header-height) * 4 / 9); padding: var(--pi-space-2) var(--pi-chat-gutter); border-top: 1px solid var(--pi-divider); background: var(--pi-bg); }
   /* Each number is its own quiet fact, so it is its own chip: small, hairline,
      the same height, and never the loudest thing under the composer. */
-  .bar > span, .bar .statuses > span { box-sizing: border-box; padding: 0 var(--pi-space-3); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-pill); background: var(--pi-chip-bg); }
+  .bar > span:not(.statuses), .bar .statuses > span { box-sizing: border-box; padding: 0 var(--pi-space-3); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-pill); background: var(--pi-chip-bg); }
   /* Every value keeps its own words: no ellipsis, no clipping, no shrinking into a fragment. A span
      that does not fit starts a line of its own, and a single token longer than the window - a branch
      name - breaks inside itself rather than pushing the bar out of the page. */

@@ -158,7 +158,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
      not an accent, and the app's lowest elevation. Focus is a ring, never a
      permanent accent border - an accent outline that is always on reads as
      "already focused" and stops being a signal. */
-  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 1px solid var(--pi-chip-border); background: var(--pi-surface); color: var(--pi-text); box-shadow: var(--pi-elevation-1); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
+  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 1px solid var(--pi-chip-border); background: var(--pi-surface); color: var(--pi-text); box-shadow: var(--pi-elevation-1), var(--pi-sheen); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
   textarea:focus-visible, .markdown-editor .cm-editor.cm-focused { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
   textarea { overflow-y: auto; padding: var(--pi-space-5); padding-right: calc(var(--pi-space-3) + var(--pi-control-height) + var(--pi-space-3)); }
   /* A phone with the keyboard open leaves roughly 400px of viewport, and a

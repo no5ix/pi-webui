@@ -144,6 +144,15 @@ describe("panel headers share one height", () => {
     "utf8",
   );
 
+  it("checks focus-ring and row-hover colours in both pre-JavaScript schemes", () => {
+    const dark = indexHtml.slice(indexHtml.indexOf(":root {"), indexHtml.indexOf("@media (max-width: 640px)"));
+    const light = indexHtml.slice(indexHtml.indexOf("@media (prefers-color-scheme: light)"));
+    for (const token of ["--pi-focus-ring", "--pi-row-hover"]) {
+      expect(dark).toContain(`${token}:`);
+      expect(light).toContain(`${token}:`);
+    }
+  });
+
   it("publishes the panel-header scale on :root", () => {
     expect(indexHtml).toContain("--pi-panel-header-height:");
     expect(indexHtml).toContain("--pi-panel-header-control-height:");
@@ -154,7 +163,14 @@ describe("panel headers share one height", () => {
     const light = indexHtml.slice(indexHtml.indexOf("@media (prefers-color-scheme: light)"));
     /* Colour stops must arrive in both modes; the scale (spacing, type, shape,
        tracking, measure, layers) is mode-independent and lives in one place. */
-    const skip = (name: string): boolean => /^(--pi-(space|text|weight|radius|leading|tracking|measure|dot|layer|control|motion|ease|focus|checkbox|disabled|rail|row|panel|bar|chat|reading|chrome|info|font)-?)/u.test(name) || name.startsWith("--pi-surface-");
+    const scaleOnly = new Set([
+      "--pi-focus-ring-width",
+      "--pi-focus-ring-offset",
+      "--pi-focus-ring-offset-inset",
+      "--pi-focus-ring-offset-tight",
+      "--pi-row-min-height",
+    ]);
+    const skip = (name: string): boolean => /^(--pi-(space|text|weight|radius|leading|tracking|measure|dot|layer|control|motion|ease|checkbox|disabled|rail|panel|bar|chat|reading|chrome|info|font)-?)/u.test(name) || scaleOnly.has(name) || name.startsWith("--pi-surface-");
     const names = (block: string): string[] => [...new Set((block.match(/--pi-[a-z-]+(?=:)/gu) ?? []))].filter((name) => !skip(name));
     const missing = names(dark).filter((name) => !names(light).includes(name));
     expect(missing).toEqual([]);
