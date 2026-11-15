@@ -278,7 +278,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      that finished with exit 0 as often as a failure - so it is not coloured as
      a fault. A genuine error arrives as an error line and keeps the red. */
   .msg.system { border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-purple-border); border-radius: var(--pi-radius-md); background: var(--pi-msg-system-bg); color: var(--pi-text-secondary); }
-  .msg.system > .msg-header { background: transparent; border: 0; box-shadow: none; }
+  .msg.system > .msg-header { background: var(--pi-msg-system-bg); border: 0; box-shadow: none; }
   .msg.system > .msg-header .label { color: var(--pi-text-secondary); }
   .msg.bash { border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-success); border-radius: var(--pi-radius-md); background: var(--pi-success-bg); }
   .msg.skill { border: 0; border-inline-start: var(--pi-rail-width) solid var(--pi-purple-border); border-radius: var(--pi-radius-md); background: var(--pi-purple-surface); }
@@ -403,8 +403,8 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      3.93:1, the weakest of the three roles, on the one that says "you". */
   .msg.user > .msg-header .label { color: var(--pi-text-secondary); font-weight: var(--pi-weight-medium); }
   .msg.tool > .msg-header { border: 0; background: var(--pi-chip-bg); }
-  .msg.bash > .msg-header { border: 0; background: var(--pi-bg); }
-  .msg.skill > .msg-header { border: 0; background: var(--pi-bg); }
+  .msg.bash > .msg-header { border: 0; background: var(--pi-success-bg); }
+  .msg.skill > .msg-header { border: 0; background: var(--pi-purple-surface); }
   .group-msg > .msg-header { position: sticky; top: var(--pi-chat-sticky-top); z-index: 4; margin: calc(-1 * var(--pi-space-5)) 0 var(--pi-space-4); padding: var(--pi-space-4) 0 var(--pi-space-3); border-bottom: 1px solid var(--pi-border-muted); background: var(--pi-bg); }
   /* The last control used to end on the card's inner edge, which reads as
      stuck to the border on a phone where the card is the screen. */
