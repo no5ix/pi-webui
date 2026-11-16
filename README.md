@@ -116,6 +116,17 @@ pi-web version
 pi-web uninstall
 ```
 
+### Foreground production run from a checkout
+
+Build and run the production UI/API and session daemon in the foreground, with automatic Tailscale HTTPS on macOS:
+
+```bash
+pnpm run prod
+```
+
+This runs the production build first, then starts the compiled processes without Vite or development watchers. On macOS it opens Tailscale if needed and publishes the configured PI WEB HTTP port (default `8504`) through Tailscale Serve HTTPS (default `8504`). Press `Ctrl+C` to stop PI WEB and remove only the Serve mapping created by this run; Tailscale itself stays connected. Set `PI_WEB_PROD_SKIP_TAILSCALE=1` to skip the automatic mapping.
+
+
 ## Core model
 
 ```text
