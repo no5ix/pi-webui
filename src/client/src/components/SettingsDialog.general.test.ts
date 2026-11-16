@@ -17,6 +17,8 @@ describe("settings-dialog general settings machine targeting", () => {
     expect(activeSettingsPanelTag("packages")).toBe("settings-packages-panel");
     expect(activeSettingsPanelTag("plugins")).toBe("settings-plugins-panel");
     expect(activeSettingsPanelTag("shortcuts")).toBe("settings-shortcuts-panel");
+    expect(activeSettingsPanelTag("info")).toBe("settings-info");
+    expect(activeSettingsPanelTag("updates")).toBe("settings-updates");
   });
 
   it("keeps gateway settings loads on the gateway config/plugin endpoints", async () => {
