@@ -52,6 +52,10 @@ export class TurnRunClock {
     this.runs.set(key, { startedAt: now(), startedWhileWorking: options.partial === true, fromAction: options.fromAction === true });
   }
 
+  reset(key: string): void {
+    this.runs.delete(key);
+  }
+
   /**
    * Called when a session this device saw working is seen finished.
    *
