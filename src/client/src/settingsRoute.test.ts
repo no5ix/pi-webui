@@ -42,6 +42,10 @@ describe("settings route helpers", () => {
     expect(parseSettingsSection("theme")).toBe("appearance");
     expect(parseSettingsSection("themes")).toBe("appearance");
     expect(parseSettingsSection("shortcuts")).toBe("shortcuts");
+    expect(parseSettingsSection("info")).toBe("info");
+    expect(parseSettingsSection("about")).toBe("info");
+    expect(parseSettingsSection("updates")).toBe("updates");
+    expect(parseSettingsSection("update")).toBe("updates");
     expect(parseSettingsSection("keyboard")).toBe("shortcuts");
     expect(parseSettingsSection("unknown")).toBeUndefined();
   });
