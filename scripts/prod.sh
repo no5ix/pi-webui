@@ -14,8 +14,10 @@ serve_owner_file=""
 cleanup_ran=false
 stop_signals=0
 
-say() { printf 'prod: %s\n' "$*"; }
-trouble() { printf 'prod: %s\n' "$*" >&2; }
+say() { printf 'prod: %s
+' "$*"; }
+trouble() { printf 'prod: %s
+' "$*" >&2; }
 
 tailnet_ready() {
   tailscale status --json </dev/null 2>/dev/null | node -e '
@@ -41,7 +43,8 @@ descendants() {
   local pid="$1" child
   for child in $(pgrep -P "$pid" 2>/dev/null); do
     descendants "$child"
-    printf '%s\n' "$child"
+    printf '%s
+' "$child"
   done
 }
 
@@ -61,7 +64,8 @@ serve_mapping_state() {
     [ -n "$status" ] && trouble "$status"
     return 2
   fi
-  printf '%s\n' "$status" | grep -qE -- ":${PROD_PORT}([[:space:]]|\$)" && return 1
+  printf '%s
+' "$status" | grep -qE -- ":${PROD_PORT}([[:space:]]|\$)" && return 1
   return 0
 }
 
@@ -195,9 +199,17 @@ main() {
 
     serve_owner_file="$(mktemp "${TMPDIR:-/tmp}/pi-web-prod-serve.XXXXXX")" || serve_owner_file=""
     say "publishing production HTTP port ${PI_WEB_PORT:-8504} as Tailscale HTTPS :$PROD_PORT"
-    if serve_mapping_state; then\n      :\n    else\n      local mapping_state=$?\n      if [ "$mapping_state" = 1 ]; then trouble "Tailscale Serve already has a handler on port $PROD_PORT; leaving the existing mapping untouched."; return 1; fi\n      trouble "could not inspect existing Tailscale Serve configuration"; return 1\n    fi\n    tailscale serve --bg --https="$PROD_PORT" "http://127.0.0.1:${PI_WEB_PORT:-8504}" </dev/null || { trouble "Tailscale Serve setup failed"; return 1; }
+    if serve_mapping_state; then
+      :
+    else
+      local mapping_state=$?
+      if [ "$mapping_state" = 1 ]; then trouble "Tailscale Serve already has a handler on port $PROD_PORT; leaving the existing mapping untouched."; return 1; fi
+      trouble "could not inspect existing Tailscale Serve configuration"; return 1
+    fi
+    tailscale serve --bg --https="$PROD_PORT" "http://127.0.0.1:${PI_WEB_PORT:-8504}" </dev/null || { trouble "Tailscale Serve setup failed"; return 1; }
     serve_mapping_mine=true
-    if [ -n "$serve_owner_file" ]; then printf 'mine\n' >"$serve_owner_file"; start_watchdog "$serve_owner_file"; fi
+    if [ -n "$serve_owner_file" ]; then printf 'mine
+' >"$serve_owner_file"; start_watchdog "$serve_owner_file"; fi
   else
     say "skipping automatic Tailscale setup"
   fi
@@ -214,7 +226,10 @@ main() {
   node dist/server/index.js &
   children+=("$!")
   wait_for_web || return 1
-  say "production PI WEB is ready at http://127.0.0.1:${PI_WEB_PORT:-8504}"\n  if [ "$(uname -s)" = Darwin ] && [ "${PI_WEB_PROD_SKIP_TAILSCALE:-}" != 1 ]; then\n    say "Tailscale HTTPS is available on port $PROD_PORT"\n  fi
+  say "production PI WEB is ready at http://127.0.0.1:${PI_WEB_PORT:-8504}"
+  if [ "$(uname -s)" = Darwin ] && [ "${PI_WEB_PROD_SKIP_TAILSCALE:-}" != 1 ]; then
+    say "Tailscale HTTPS is available on port $PROD_PORT"
+  fi
 
   while :; do
     local alive=true
