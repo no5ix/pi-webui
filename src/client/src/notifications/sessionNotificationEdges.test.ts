@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { notificationEdge, stoppedByReaderFacts } from "./sessionNotificationEdges";
+import { daemonInstanceChanged, notificationEdge, stoppedByReaderFacts } from "./sessionNotificationEdges";
 import type { SessionActivityCategory } from "../../../shared/sessionActivityState";
 
 const CATEGORIES: readonly SessionActivityCategory[] = ["asking", "error", "working", "opening", "background", "idle"];
@@ -86,5 +86,25 @@ describe("whose stop ended the run", () => {
 
   it("is nobody's when neither says so", () => {
     expect(stoppedByReaderFacts(undefined, false)).toBe(false);
+  });
+});
+
+
+describe("notification continuity across daemon instances", () => {
+  it("treats an instance change as a new session baseline", () => {
+    expect(daemonInstanceChanged("daemon-before-restart", "daemon-after-restart", true)).toBe(true);
+  });
+
+  it("treats the first observation as a baseline", () => {
+    expect(daemonInstanceChanged(undefined, "daemon-first-seen", false)).toBe(false);
+  });
+
+  it("keeps task transitions eligible within the same daemon instance", () => {
+    expect(daemonInstanceChanged("daemon-1", "daemon-1", true)).toBe(false);
+  });
+
+  it("treats a missing identity appearing or disappearing as a boundary", () => {
+    expect(daemonInstanceChanged(undefined, "daemon-1", true)).toBe(true);
+    expect(daemonInstanceChanged("daemon-1", undefined, true)).toBe(true);
   });
 });
