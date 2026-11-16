@@ -3051,8 +3051,15 @@ export class PiWebApp extends LitElement {
     const emptyState = workspace === undefined ? this.workspacePanelEmptyState() : undefined;
     return html`
       <div class="workbench-shell" id="workspace-panel">
-        <workspace-tab-bar active=${this.shownWorkspaceToolId()} editedCount=${0}
-          .onSelect=${(id: string) => { this.openShellToolTab(id); }}
+        <workspace-tab-bar active=${(["git", "files", "terminal", "goals"] as const).find((kind) => this.workbenchPanel(kind)?.id === this.shownWorkspaceToolId()) ?? ""}
+          editedCount=${0}
+          .tabs=${(["git", "files", "terminal", "goals"] as const).map((kind) => ({
+            id: kind,
+            label: kind === "git" ? "Git" : kind === "files" ? "Files" : kind === "terminal" ? "Terminal" : "Goals",
+            disabled: this.workbenchPanel(kind) === undefined,
+            detail: this.workbenchPanel(kind)?.title,
+          }))}
+          .onSelect=${(kind: "git" | "files" | "terminal" | "goals") => { this.openShellToolTab(kind); }}
         ></workspace-tab-bar>
         <div class="workspace-panel-content">
           <workspace-panel
@@ -6858,10 +6865,36 @@ export class PiWebApp extends LitElement {
   }
 
   /** Resolve the row id back to its typed view; unknown ids are ignored. */
-  private openShellToolTab(id: string): void {
-    const panel = [...this.visibleWorkspacePanels(), ...this.visibleGlobalPanels()].find((candidate) => candidate.id === id);
+  private workbenchPanel(kind: "git" | "files" | "terminal" | "goals"): QualifiedWorkspacePanelContribution | QualifiedGlobalPanelContribution | undefined {
+    const machineId = selectedMachineId(this.state);
+    const workspacePanels = this.visibleWorkspacePanels();
+    const globalPanels = this.visibleGlobalPanels();
+    if (kind === "files") {
+      const id = this.plugins.resolveWorkspacePanelRouteId(WORKSPACE_FILES_SLOT, machineId);
+      return [...workspacePanels, ...globalPanels].find((panel) => panel.id === id);
+    }
+    if (kind === "terminal") {
+      const id = this.workspaceTerminalPage() ?? this.plugins.resolveGlobalPanelRouteId(GLOBAL_TERMINAL_SLOT, machineId);
+      return [...workspacePanels, ...globalPanels].find((panel) => panel.id === id);
+    }
+    const candidates = [...workspacePanels, ...globalPanels];
+    return candidates.find((panel) => {
+      const haystack = `${panel.title} ${panel.localId} ${panel.id}`.toLowerCase();
+      return kind === "git" ? /\\bgit\\b|source control|version control/u.test(haystack) : /\\bgoals?\\b|project objectives/u.test(haystack);
+    });
+  }
+
+  private openShellToolTab(kind: "git" | "files" | "terminal" | "goals"): void {
+    const panel = this.workbenchPanel(kind);
     if (panel === undefined) {
-      this.setState(noticePatch(noticeForReader("That page is not available here")));
+      const message = kind === "git"
+        ? "No Git workspace panel is registered for the selected project."
+        : kind === "goals"
+          ? "No Goals workspace panel is registered for the selected project."
+          : kind === "files"
+            ? "The Files workspace panel is not available on this machine."
+            : "The Terminal workspace panel is not available on this machine.";
+      this.setState(noticePatch(noticeForReader(message)));
       return;
     }
     this.selectMainView(panel.id);
