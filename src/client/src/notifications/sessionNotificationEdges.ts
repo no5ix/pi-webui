@@ -16,9 +16,8 @@ import type { SessionActivityCategory } from "../../../shared/sessionActivitySta
  * rule the browser channel has followed since it existed. And leaving `asking` is not an event - the
  * reader just answered, so they are already there.
  *
- * `opening` counts as work. A session that dies while its runtime is starting is a task that failed,
- * and a notice that arrives only for turns that got as far as streaming is a notice that misses the
- * failures the reader most needs to hear about.
+ * `opening` is not a completed task: it is runtime construction and extension loading, not an
+ * agent turn. It can still fail, so an opening-to-error edge remains a failure notice.
  */
 export type NotificationEdge = NotificationEvent | "none";
 
@@ -40,13 +39,19 @@ export function notificationEdge(facts: SessionEdgeFacts): NotificationEdge {
   if (stoppedByReader) return "none";
   if (next === "asking") return previous === "asking" ? "none" : "ask-user";
   if (previous === "asking") return "none";
-  if (next === "error" && isWork(previous)) return "failed";
-  if (next === "idle" && isWork(previous)) return "completed";
+  if (next === "error" && isFailureWork(previous)) return "failed";
+  if (next === "idle" && isTaskWork(previous)) return "completed";
   return "none";
 }
 
-function isWork(category: SessionActivityCategory): boolean {
+/** Runtime construction can fail, but its end is not completion of a task. */
+function isFailureWork(category: SessionActivityCategory): boolean {
   return category === "working" || category === "opening" || category === "background";
+}
+
+/** Only agent work can complete a task; opening is session initialization, not a task. */
+function isTaskWork(category: SessionActivityCategory): boolean {
+  return category === "working" || category === "background";
 }
 
 /**
