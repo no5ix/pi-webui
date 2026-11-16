@@ -78,6 +78,8 @@ export class WorkspaceTabBar extends LitElement {
         ${this.tabs.map((tab) => html`
           <button type="button" role="tab" aria-selected=${this.active === tab.id ? "true" : "false"}
             class=${this.active === tab.id ? "tab selected" : "tab"} ?disabled=${tab.disabled === true}
+            title=${tab.disabled ? (tab.detail ?? `${tab.label} is not available for this project`) : tab.detail ?? tab.label}
+            aria-label=${tab.label}
             @click=${() => this.onSelect?.(tab.id)}>
             <span>${tab.label}</span>
             ${tab.id === "git" && this.editedCount > 0 ? html`<span class="badge">${this.editedCount}</span>` : nothing}
