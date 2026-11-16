@@ -81,7 +81,8 @@
     "changelog:status": "changeset status",
     "docker:verify:start": "./docker/pi-web-docker --dev start",
     "docker:verify:stop": "./docker/pi-web-docker --dev stop",
-    "docker:verify:status": "./docker/pi-web-docker --dev status"
+    "docker:verify:status": "./docker/pi-web-docker --dev status",
+    "prod": "pnpm run build && bash scripts/prod.sh"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
