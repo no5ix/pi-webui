@@ -309,6 +309,8 @@ export class SettingsDialog extends LitElement {
       { id: "mcp", label: "MCP Servers", detail: "Selected machine" },
       { id: "plugins", label: "PI WEB Plugins", detail: "Selected machine" },
       { id: "shortcuts", label: "Keyboard", detail: "Gateway shortcuts" },
+      { id: "info", label: "Info", detail: "PI WEB and machine runtime" },
+      { id: "updates", label: "Updates", detail: "Update command configuration" },
       ...this.pluginSections.map((entry) => ({ id: entry.id, label: entry.title, detail: "Plugin" })),
     ];
   }
@@ -382,6 +384,25 @@ export class SettingsDialog extends LitElement {
 
   private renderActiveSection(): TemplateResult {
     if (isPluginSettingsSection(this.activeSection)) return this.renderPluginSection(this.activeSection);
+    if (this.activeSection === "info") {
+      return html`<section class="settings-info">
+        <h2>PI WEB information</h2>
+        <p>Information currently reported to this Settings dialog.</p>
+        <dl>
+          <dt>Client version</dt><dd>${typeof __PI_WEB_CLIENT_VERSION__ === "string" ? __PI_WEB_CLIENT_VERSION__ : "Unknown"}</dd>
+          <dt>Selected machine</dt><dd>${this.machine?.name ?? "Local machine"}</dd>
+          <dt>Machine runtime</dt><dd>${this.machineRuntime?.version ?? "Not reported"}</dd>
+        </dl>
+      </section>`;
+    }
+    if (this.activeSection === "updates") {
+      return html`<section class="settings-updates">
+        <h2>Updates</h2>
+        <p>PI WEB update behavior is configured through the machine update command.</p>
+        <p>Open <button type="button" class="settings-inline-link" @click=${() => this.navigate("general")}>General settings</button> to review that command.</p>
+        <p class="muted">This dialog does not currently receive a live update-status feed, so it does not claim that an update check has completed.</p>
+      </section>`;
+    }
     // Keep the section -> panel routing in sync with the public
     // `activeSettingsPanelTag` seam below, which tests assert against instead of
     // scraping this template's markup.
@@ -1298,6 +1319,13 @@ export class SettingsDialog extends LitElement {
     .settings-nav small { font-size: var(--pi-text-2xs); color: var(--pi-muted); }
     .settings-nav button.selected small { color: color-mix(in srgb, var(--pi-on-accent-soft) 76%, transparent); }
     .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: var(--pi-space-7); }
+
+    .settings-info h2, .settings-updates h2 { margin:0 0 var(--pi-space-4); font-size:var(--pi-text-lg); }
+    .settings-info p, .settings-updates p { color:var(--pi-text-secondary); line-height:1.55; }
+    .settings-info dl { display:grid; grid-template-columns:minmax(120px, auto) minmax(0,1fr); gap:8px 16px; margin-top:20px; }
+    .settings-info dt { color:var(--pi-muted); }
+    .settings-info dd { margin:0; overflow-wrap:anywhere; }
+    .settings-inline-link { border:0; padding:0; background:transparent; color:var(--pi-accent); text-decoration:underline; cursor:pointer; font:inherit; }
 
     @media ${unsafeCSS(PHONE_LAYOUT_MEDIA_QUERY)} {
       modal-surface { --modal-surface-backdrop-padding: 0; --modal-surface-place-items: stretch; --modal-surface-width: 100%; --modal-surface-max-height: none; --modal-surface-min-height: 0; --modal-surface-border: 0; --modal-surface-radius: 0; }
