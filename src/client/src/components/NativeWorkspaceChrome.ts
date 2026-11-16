@@ -1,6 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { SessionInfo } from "../api";
 import { sessionLabel } from "../sessionLabels";
 import { isSessionActive } from "../../../shared/activity";
 import type { SessionStatus, SessionActivity } from "../api";
@@ -133,3 +132,4 @@ export class ConversationDisclosure extends LitElement {
     .content { max-height:190px; overflow:auto; padding:4px 12px 10px 28px; color:var(--pi-text-secondary); font-size:var(--pi-text-xs); }
   `];
 }
+
