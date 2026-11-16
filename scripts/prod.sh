@@ -100,7 +100,7 @@ start_watchdog() {
       state="$(ps -o stat= -p "$parent" 2>/dev/null | tr -d ' ')"
       case "$state" in ""|Z*) break ;; esac
       command="$(ps -o command= -p "$parent" 2>/dev/null)"
-      case "$command" in *"scripts/prod.sh"*) : ;; *) break ;; esac
+      case "$command" in *"scripts/prod.sh"*|*"bash scripts/prod.sh"*) : ;; *) break ;; esac
       sleep 1
     done
     [ "$(cat "$owner_file" 2>/dev/null)" = mine ] || exit 0
@@ -195,7 +195,7 @@ main() {
 
     serve_owner_file="$(mktemp "${TMPDIR:-/tmp}/pi-web-prod-serve.XXXXXX")" || serve_owner_file=""
     say "publishing production HTTP port ${PI_WEB_PORT:-8504} as Tailscale HTTPS :$PROD_PORT"
-    tailscale serve --bg --https="$PROD_PORT" "http://127.0.0.1:${PI_WEB_PORT:-8504}" </dev/null || { trouble "Tailscale Serve setup failed"; return 1; }
+    if serve_mapping_state; then\n      :\n    else\n      local mapping_state=$?\n      if [ "$mapping_state" = 1 ]; then trouble "Tailscale Serve already has a handler on port $PROD_PORT; leaving the existing mapping untouched."; return 1; fi\n      trouble "could not inspect existing Tailscale Serve configuration"; return 1\n    fi\n    tailscale serve --bg --https="$PROD_PORT" "http://127.0.0.1:${PI_WEB_PORT:-8504}" </dev/null || { trouble "Tailscale Serve setup failed"; return 1; }
     serve_mapping_mine=true
     if [ -n "$serve_owner_file" ]; then printf 'mine\n' >"$serve_owner_file"; start_watchdog "$serve_owner_file"; fi
   else
@@ -214,7 +214,7 @@ main() {
   node dist/server/index.js &
   children+=("$!")
   wait_for_web || return 1
-  say "production PI WEB is ready at http://127.0.0.1:${PI_WEB_PORT:-8504}${PROD_PORT:+ (Tailscale HTTPS port $PROD_PORT)}"
+  say "production PI WEB is ready at http://127.0.0.1:${PI_WEB_PORT:-8504}"\n  if [ "$(uname -s)" = Darwin ] && [ "${PI_WEB_PROD_SKIP_TAILSCALE:-}" != 1 ]; then\n    say "Tailscale HTTPS is available on port $PROD_PORT"\n  fi
 
   while :; do
     local alive=true
