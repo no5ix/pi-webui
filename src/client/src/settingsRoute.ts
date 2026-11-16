@@ -1,7 +1,7 @@
 import { writeRouteUrl } from "./historyWrites";
 import type { QualifiedContributionId } from "./plugins/ids";
 
-export type CoreSettingsSection = "general" | "appearance" | "notifications" | "machines" | "packages" | "skills" | "mcp" | "plugins" | "shortcuts";
+export type CoreSettingsSection = "general" | "appearance" | "notifications" | "machines" | "packages" | "skills" | "mcp" | "plugins" | "shortcuts" | "info" | "updates";
 
 /**
  * A settings section is either one the core owns or one a plugin contributed.
@@ -64,6 +64,8 @@ export function parseSettingsSection(value: string | null): SettingsSection | un
   if (value === "mcp" || value === "mcp-servers" || value === "pi-mcp") return "mcp";
   if (value === "plugins") return "plugins";
   if (value === "shortcuts" || value === "keyboard" || value === "keyboard-shortcuts") return "shortcuts";
+  if (value === "info" || value === "about") return "info";
+  if (value === "updates" || value === "update") return "updates";
   if (value !== null && isPluginSettingsSection(value)) return value;
   return undefined;
 }
