@@ -15,11 +15,28 @@ serve_owner_file=""
 cleanup_ran=false
 stop_signals=0
 
-say() { printf 'prod: %s
-' "$*"; }
-trouble() { printf 'prod: %s
-' "$*" >&2; }
+say() { printf 'prod: %s\n' "$*"; }
+say_highlight() {
+  if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ] && [ "\${TERM:-}" != dumb ]; then
+    printf '\033[1;32m%s\033[0m\n' "$*"
+  else
+    printf '%s\n' "$*"
+  fi
+}
+trouble() { printf 'prod: %s\n' "$*" >&2; }
 
+print_server_output() {
+  while IFS= read -r line; do
+    case "$line" in
+      *'"msg":"Server listening at http://127.0.0.1:'*) say_highlight "$line" ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done
+}
+
+run_web_server() {
+  node dist/server/index.js 2>&1 | print_server_output
+}
 tailnet_ready() {
   tailscale status --json </dev/null 2>/dev/null | node -e '
 let text = "";
