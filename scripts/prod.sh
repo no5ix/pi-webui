@@ -2,6 +2,7 @@
 # Production foreground stack with the same Tailscale lifecycle as scripts/dev.sh.
 # Starts the built session daemon and web/API server (no Vite or file watchers).
 set -uo pipefail
+set -o pipefail
 
 PROD_PORT="${PI_WEB_PROD_TAILSCALE_PORT:-8504}"
 PROD_HOST_SUFFIX="${PI_WEB_PROD_TAILSCALE_HOST_SUFFIX:-.ts.net}"
@@ -199,7 +200,7 @@ main() {
     tailnet_ready || { trouble "Tailscale did not connect within ${READY_TIMEOUT}s"; return 1; }
 
     serve_owner_file="$(mktemp "${TMPDIR:-/tmp}/pi-web-prod-serve.XXXXXX")" || serve_owner_file=""
-    say "publishing production HTTP port ${PI_WEB_PORT:-8504} as Tailscale HTTPS :$PROD_PORT"
+    say_highlight "prod: publishing production HTTP port ${PI_WEB_PORT:-8504} as Tailscale HTTPS :$PROD_PORT"
     if serve_mapping_state; then
       :
     else
@@ -207,7 +208,13 @@ main() {
       if [ "$mapping_state" = 1 ]; then trouble "Tailscale Serve already has a handler on port $PROD_PORT; leaving the existing mapping untouched."; return 1; fi
       trouble "could not inspect existing Tailscale Serve configuration"; return 1
     fi
-    tailscale serve --bg --https="$PROD_PORT" "http://127.0.0.1:${PI_WEB_PORT:-8504}" </dev/null || { trouble "Tailscale Serve setup failed"; return 1; }
+    local serve_output
+    if ! serve_output="$(tailscale serve --bg --https="$PROD_PORT" "http://127.0.0.1:${PI_WEB_PORT:-8504}" </dev/null 2>&1)"; then
+      [ -z "$serve_output" ] || trouble "$serve_output"
+      trouble "Tailscale Serve setup failed"
+      return 1
+    fi
+    say_highlight "$serve_output"
     serve_mapping_mine=true
     if [ -n "$serve_owner_file" ]; then printf 'mine
 ' >"$serve_owner_file"; start_watchdog "$serve_owner_file"; fi
@@ -224,12 +231,12 @@ main() {
   children+=("$!")
   wait_for_sessiond || return 1
 
-  node dist/server/index.js &
+  run_web_server &
   children+=("$!")
   wait_for_web || return 1
-  say "production PI WEB is ready at http://127.0.0.1:${PI_WEB_PORT:-8504}"
+  say_highlight "prod: production PI WEB is ready at http://127.0.0.1:${PI_WEB_PORT:-8504}"
   if [ "$(uname -s)" = Darwin ] && [ "${PI_WEB_PROD_SKIP_TAILSCALE:-}" != 1 ]; then
-    say "Tailscale HTTPS is available on port $PROD_PORT"
+    say_highlight "prod: Tailscale HTTPS is available on port $PROD_PORT"
   fi
 
   while :; do
