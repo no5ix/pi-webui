@@ -17,7 +17,7 @@ stop_signals=0
 
 say() { printf 'prod: %s\n' "$*"; }
 say_highlight() {
-  if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ] && [ "\${TERM:-}" != dumb ]; then
+  if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
     printf '\033[1;32m%s\033[0m\n' "$*"
   else
     printf '%s\n' "$*"
