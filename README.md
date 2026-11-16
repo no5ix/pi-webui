@@ -4,7 +4,7 @@
 
 1. **Production (prod) to save memory and cpu:** From the project root directory, run:
    ```bash
-   pnpm run build && node dist/cli.js run
+   pnpm run prod
    ```
 
 2. **Development (dev):** From the project root directory, run:
