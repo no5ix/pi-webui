@@ -227,10 +227,33 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
     :host { --pi-app-safe-area-bottom: env(safe-area-inset-bottom); }
   }
-  .shell { --navigation-panel-size: 340px; --workspace-panel-size: 340px; --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display: grid; grid-template-columns: var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px, 1.35fr) var(--workspace-divider-width) var(--workspace-panel-width); height: 100%; min-height: 0; }
-  aside { grid-column: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  aside app-navigation-panel { flex: 1 1 auto; min-height: 0; }
-  aside app-navigate-page { flex: 1 1 auto; min-height: 0; }
+  .shell { --navigation-panel-size: 264px; --workspace-panel-size: 330px; --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display:grid; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); height:100%; min-height:0; background:var(--pi-bg); }
+  aside { grid-column:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--pi-surface-panel); border-right:1px solid var(--pi-border-muted); }
+  aside app-navigation-panel { flex:1 1 auto; min-height:0; }
+  aside app-navigate-page { flex:1 1 auto; min-height:0; }
+  .navigation-stack { display:flex; flex-direction:column; min-height:0; height:100%; }
+  .running-sessions-panel { flex:none; }
+  .projects-area { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; }
+  .projects-heading { display:flex; align-items:center; justify-content:space-between; min-height:32px; padding:4px 13px; color:var(--pi-text-secondary); font:var(--pi-text-xs) var(--pi-font-ui); }
+  .projects-heading button { border:0; background:transparent; color:var(--pi-muted); padding:4px; border-radius:var(--pi-radius-sm); }
+  .projects-area app-navigate-page { flex:1 1 auto; min-height:0; }
+  .conversation-column { grid-column:3; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:0 14px; border-bottom:1px solid var(--pi-border-muted); background:var(--pi-bg); }
+  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text); font:var(--pi-text-sm) var(--pi-font-ui); font-weight:var(--pi-weight-semibold); }
+  .conversation-subtitle { color:var(--pi-muted); font:var(--pi-text-2xs) var(--pi-font-ui); }
+  .conversation-header-actions { display:flex; align-items:center; gap:5px; flex:none; }
+  .conversation-header-actions button { width:28px; height:28px; padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
+  .conversation-header-actions button:hover { background:var(--pi-surface-hover); color:var(--pi-text); }
+  .conversation-subagents { flex:none; }
+  .conversation-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  .conversation-body chat-view { flex:1 1 auto; min-height:0; }
+  .conversation-body prompt-editor { flex:none; }
+  .conversation-bottom { flex:none; }
+  #workspace-panel { grid-column:5; display:flex; min-width:0; min-height:0; flex-direction:column; overflow:hidden; border-left:0; background:var(--pi-bg); }
+  #workspace-panel > workspace-tab-bar { flex:none; }
+  .workspace-panel-content { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  @media (max-width:980px) { .shell { --workspace-panel-size:300px; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(280px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); } }
+  @media (max-width:760px) { .shell { display:flex; } aside#navigation-panel { display:none; } .conversation-column { flex:1 1 auto; } #workspace-panel { position:fixed; inset:0; z-index:var(--pi-layer-overlay); width:100%; } }
   /* Over the session, not instead of it: the page covers the screen while it
      is open and the close returns to the conversation underneath. */
   .navigate-overlay { position: fixed; top: 0; right: 0; left: 0; height: var(--pi-app-visible-height, calc(100dvh - var(--pi-app-keyboard-inset))); box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--pi-app-safe-area-bottom) env(safe-area-inset-left); z-index: var(--pi-layer-overlay); background: var(--pi-bg); }
@@ -446,6 +469,7 @@ import { rowedClientMessageIds } from "../messageDelivery";
 import { frontedPageShown } from "../frontedPage";
 import { directMachinesOf, setDirectMachines } from "../directMachineUrl";
 import { extensionWidgetPanels } from "./ExtensionWidgetPage";
+import "./NativeWorkspaceChrome";
 
 /**
  * A visual viewport scale above this is a pinch zoom rather than rounding. `connectedCallback` reads it, and an element already
@@ -3026,27 +3050,25 @@ export class PiWebApp extends LitElement {
     const panelContext = workspace === undefined ? undefined : this.createWorkspacePanelContext(workspace);
     const emptyState = workspace === undefined ? this.workspacePanelEmptyState() : undefined;
     return html`
-      <workspace-panel
-        id="workspace-panel"
-        .workspace=${workspace}
-        .panelContext=${panelContext}
-        .emptyState=${emptyState}
-        .tool=${this.shownWorkspaceToolId()}
-        .panels=${this.visibleWorkspacePanels()}
-        .globalPanels=${this.activeGlobalPanels()}
-        .globalContext=${this.createGlobalPanelContext()}
-        ?covered=${this.columnGoTo() && this.columnGoToOpen}
-        .behindPage=${this.navigateOpen || this.machineAccessRequestId !== undefined}
-        .onShownPageChange=${this.handleShownPageChange}
-      >${this.columnGoTo() ? html`<app-column-bar
-        slot="bar"
-        .pageTitle=${this.columnGoToOpen ? "Go to" : this.pageTitleOf(this.shownPageId())}
-        .leadingKey=${leadingKeyOf(this.cornerKeys(), "column")}
-        ?goToKey=${this.cornerKeys().goTo === "column"}
-        .onNavigationKey=${() => { this.openNavigationFromCanvas(); }}
-        .onBack=${() => { this.goBackToGoTo(); }}
-        .onGoTo=${() => { this.openGoTo(); }}
-      ></app-column-bar>${this.columnGoToOpen ? html`<app-go-to-sheet slot="cover" placement="column" .destinations=${this.goToDestinations()} .onSelect=${(id: string) => { this.goTo(id); }} .onClose=${() => { this.columnGoToOpen = false; }}></app-go-to-sheet>` : null}` : null}</workspace-panel>
+      <div class="workbench-shell" id="workspace-panel">
+        <workspace-tab-bar active=${this.shownWorkspaceToolId()} editedCount=${0}
+          .onSelect=${(id: string) => { this.openShellToolTab(id); }}
+        ></workspace-tab-bar>
+        <div class="workspace-panel-content">
+          <workspace-panel
+            .workspace=${workspace}
+            .panelContext=${panelContext}
+            .emptyState=${emptyState}
+            .tool=${this.shownWorkspaceToolId()}
+            .panels=${this.visibleWorkspacePanels()}
+            .globalPanels=${this.activeGlobalPanels()}
+            .globalContext=${this.createGlobalPanelContext()}
+            ?covered=${this.columnGoTo() && this.columnGoToOpen}
+            .behindPage=${this.navigateOpen || this.machineAccessRequestId !== undefined}
+            .onShownPageChange=${this.handleShownPageChange}
+          ></workspace-panel>
+        </div>
+      </div>
     `;
   }
 
@@ -6875,25 +6897,58 @@ export class PiWebApp extends LitElement {
     return html`
       <div class=${`${this.panelCollapse.shellClass(displayView, this.workspaceColumnHasContent())}${this.workspacePanelHoldsCanvas() ? " workspace-panel-fullscreen" : ""}`} style=${this.panelResize.shellStyle({ navigation: this.resizablePanelConstraints("navigation"), workspace: this.resizablePanelConstraints("workspace") })}>
         ${this.renderNavigationProgress()}
-        <aside id="navigation-panel">${this.appShell.isMobileNavigationLayout ? null : this.renderNavigatePage(false)}</aside>
-        ${this.contextSheetOpen || this.panelCollapse.navigationPanelCollapsed ? null : this.renderNavigationPanelEdgeControl()}
-        <main class=${mainViewClass(displayView)} @dragenter=${this.handleChatDragEnter} @dragover=${this.handleChatDragOver} @dragleave=${this.handleChatDragLeave} @drop=${this.handleChatDrop}>
-          ${this.appShell.isMobileNavigationLayout && displayView === "navigation" ? null : this.renderContextBar()}
-
+        <aside id="navigation-panel">
+          <div class="navigation-stack">
+            <running-sessions-panel class="running-sessions-panel"
+              .sessions=${this.withCreatingRows(this.quickSwitcherSessionsWithPins(), this.rowsMachineId())}
+              .selectedSessionId=${state.selectedSession?.id}
+              .sessionStatuses=${state.sessionStatuses}
+              .sessionActivities=${state.sessionActivities}
+              .onSelectSession=${(session: SessionInfo) => { void this.openSessionFromQuickSwitcher(session, this.rowsMachineId()); }}
+            ></running-sessions-panel>
+            <section class="projects-area">
+              <div class="projects-heading"><span>Projects</span><button type="button" title="New session" aria-label="New session" @click=${() => this.startNewSession()}>${renderCommandIcon()}</button></div>
+              ${this.renderNavigatePage(false)}
+            </section>
+            ${this.renderNavigationPanelEdgeControl()}
+            <div class="sidebar-footer"><button type="button" aria-label="Settings" title="Settings" @click=${() => this.openSettings()}>${renderGearIcon()}</button><button type="button" aria-label="Actions" title="Actions" @click=${() => this.openActionPalette()}>${renderCommandIcon()}</button></div>
+          </div>
+        </aside>
+        <main class="conversation-column ${mainViewClass(displayView)}" @dragenter=${this.handleChatDragEnter} @dragover=${this.handleChatDragOver} @dragleave=${this.handleChatDragLeave} @drop=${this.handleChatDrop}>
+          <header class="conversation-header">
+            <div class="conversation-title" title=${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}>${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}<div class="conversation-subtitle">${state.selectedProject?.name ?? ""}</div></div>
+            <div class="conversation-header-actions">
+              <button type="button" aria-label="Settings" title="Settings" @click=${() => this.openSettings()}>${renderGearIcon()}</button>
+              <button type="button" aria-label="Actions" title="Actions" @click=${() => this.openActionPalette()}>${renderCommandIcon()}</button>
+            </div>
+          </header>
+          <div class="conversation-subagents">
+            <conversation-disclosure heading="Subagents" description="Child sessions" panelId="subagents-content">
+              <p>Subagent details are available when a selected session exposes child-session records.</p>
+            </conversation-disclosure>
+          </div>
           ${this.renderAppRowAt("main")}
           ${this.renderVersionStrip()}
           ${deprecatedAgentInputsBanner(deprecatedAgentInputsWarnings(state.machines, state.machineRuntimes))}
-          <div class="mobile-navigation-panel">${this.appShell.isMobileNavigationLayout ? this.renderNavigatePage(false) : null}</div>
-          ${state.selectedSession ? html`
-            ${this.renderChatView(state, state.selectedSession)}
-            ${state.selectedSession.archived === true ? this.renderArchivedComposerSlot(state.selectedSession) : html`<prompt-editor .rowedMessageIds=${rowedClientMessageIds(state.messages, state.status?.queuedMessages ?? [])} .sessionId=${state.selectedSession.id} .cwd=${composerCwd(state)} .sessionPrompts=${this.sessionPromptsFor(state)} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${isSessionActive(state.status, state.activity)} .status=${state.status} .statusArrival=${state.statusArrival} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true}  .onLocalCommand=${this.handleLocalCommand} .onOutgoingWritten=${this.handleOutgoingWritten} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .composerContributions=${this.plugins.getComposerContributions(selectedMachineId(state))} .onPluginNotice=${(message: string) => { this.setState(noticePatch(noticeForReader(message))); }}></prompt-editor>`}
-            ${this.renderStatusBar(state)}
-            ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
-            ${state.commandDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
-            ${state.modelDialog !== undefined ? html`<model-picker ?abovedialog=${this.settingsOpen} title=${state.modelDialog.title} .options=${state.modelDialog.options} .catalog=${state.modelDialog.catalog} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onToggleEnabled=${this.handleToggleModelEnabled} .initialQuery=${state.modelDialog.query ?? ""} .initialMode=${state.modelDialog.mode ?? "enabled"} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></model-picker>` : null}
-            ${state.thinkingDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} title=${state.thinkingDialog.title} .options=${state.thinkingDialog.options} .selectedValue=${state.thinkingDialog.selectedValue} .onPick=${(value: string) => { void this.pickThinking(value); }} .onCancel=${() => { this.setState({ thinkingDialog: undefined }); }}></command-picker>` : null}
-          ` : this.renderNoSession()}
-        </main>
+          <div class="conversation-body">
+            ${state.selectedSession ? html`
+              ${this.renderChatView(state, state.selectedSession)}
+              ${state.selectedSession.archived === true ? this.renderArchivedComposerSlot(state.selectedSession) : html`<prompt-editor .rowedMessageIds=${rowedClientMessageIds(state.messages, state.status?.queuedMessages ?? [])} .sessionId=${state.selectedSession.id} .cwd=${composerCwd(state)} .sessionPrompts=${this.sessionPromptsFor(state)} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${isSessionActive(state.status, state.activity)} .status=${state.status} .statusArrival=${state.statusArrival} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .onLocalCommand=${this.handleLocalCommand} .onOutgoingWritten=${this.handleOutgoingWritten} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .composerContributions=${this.plugins.getComposerContributions(selectedMachineId(state))} .onPluginNotice=${(message: string) => { this.setState(noticePatch(noticeForReader(message))); }}></prompt-editor>`}
+              ${this.renderStatusBar(state)}
+              <div class="conversation-bottom">
+                <conversation-disclosure heading="Background" description="Session activity">
+                  <p>${state.activity ? "The selected session's live activity is summarized in the conversation." : "No additional background activity is reported for this session."}</p>
+                </conversation-disclosure>
+                <conversation-disclosure heading="Edited Files" description="Session file records">
+                  <p>File names will appear here when tool results expose written-file paths.</p>
+                </conversation-disclosure>
+              </div>
+              ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
+              ${state.commandDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
+              ${state.modelDialog !== undefined ? html`<model-picker ?abovedialog=${this.settingsOpen} title=${state.modelDialog.title} .options=${state.modelDialog.options} .catalog=${state.modelDialog.catalog} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onToggleEnabled=${this.handleToggleModelEnabled} .initialQuery=${state.modelDialog.query ?? ""} .initialMode=${state.modelDialog.mode ?? "enabled"} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></model-picker>` : null}
+              ${state.thinkingDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} title=${state.thinkingDialog.title} .options=${state.thinkingDialog.options} .selectedValue=${state.thinkingDialog.selectedValue} .onPick=${(value: string) => { void this.pickThinking(value); }} .onCancel=${() => { this.setState({ thinkingDialog: undefined }); }}></command-picker>` : null}
+            ` : this.renderNoSession()}
+          </div>
         ${this.contextSheetOpen || !this.workspacePanelOnScreen() ? null : this.renderWorkspacePanelEdgeControl()}
         ${this.renderWorkspacePanel()}
         ${state.authDialog !== undefined ? html`<auth-dialog .state=${state.authDialog} .onChooseMethod=${(authType: "oauth" | "api_key") => { void this.auth.chooseLoginMethod(authType); }} .onSelectProvider=${(providerId: string, authType: "oauth" | "api_key") => { void this.auth.selectLoginProvider(providerId, authType); }} .onLogoutProvider=${(providerId: string) => { void this.auth.logoutProvider(providerId); }} .onOAuthInput=${(value: string) => { this.auth.updateOAuthInput(value); }} .onOAuthRespond=${(value?: string) => { void this.auth.respondOAuth(value); }} .onOAuthCancel=${() => { void this.auth.cancelOAuth(); }} .onCancel=${() => { this.auth.closeDialog(); }}></auth-dialog>` : null}
