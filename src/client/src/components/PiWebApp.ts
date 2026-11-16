@@ -229,6 +229,10 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
     :host { --pi-app-safe-area-bottom: env(safe-area-inset-bottom); }
   }
   .shell { --navigation-panel-size: 264px; --workspace-panel-size: 330px; --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display:grid; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); height:100%; min-height:0; background:var(--pi-bg); }
+
+  .shell > main.conversation-column { grid-column:3; }
+  .shell > .workbench-shell { grid-column:5; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; background:var(--pi-bg); border-left:1px solid var(--pi-border-muted); }
+  .shell > aside#navigation-panel { grid-column:1; }
   aside { grid-column:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--pi-surface-panel); border-right:1px solid var(--pi-border-muted); }
   aside app-navigation-panel { flex:1 1 auto; min-height:0; }
   aside app-navigate-page { flex:1 1 auto; min-height:0; }
@@ -6921,7 +6925,7 @@ export class PiWebApp extends LitElement {
     const candidates = [...workspacePanels, ...globalPanels];
     return candidates.find((panel) => {
       const haystack = `${panel.title} ${panel.localId} ${panel.id}`.toLowerCase();
-      return kind === "git" ? /\\bgit\\b|source control|version control/u.test(haystack) : /\\bgoals?\\b|project objectives/u.test(haystack);
+      return kind === "git" ? /\bgit\b|source control|version control/u.test(haystack) : /\bgoals?\b|project objectives/u.test(haystack);
     });
   }
 
