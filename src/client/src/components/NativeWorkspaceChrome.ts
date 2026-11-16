@@ -65,11 +65,11 @@ export class WorkspaceTabBar extends LitElement {
   @property({ type: String }) active = "core:workspace.files";
   @property({ attribute: false }) editedCount = 0;
   @property({ attribute: false }) onSelect?: (id: string) => void;
-  @property({ attribute: false }) tabs: readonly { id: string; label: string; disabled?: boolean }[] = [
-    { id: "core:workspace.git", label: "Git" },
-    { id: "core:workspace.files", label: "Files" },
-    { id: "core:workspace.terminal", label: "Terminal" },
-    { id: "core:workspace.goals", label: "Goals" },
+  @property({ attribute: false }) tabs: readonly { id: string; label: string; disabled?: boolean; detail?: string }[] = [
+    { id: "git", label: "Git" },
+    { id: "files", label: "Files" },
+    { id: "terminal", label: "Terminal" },
+    { id: "goals", label: "Goals" },
   ];
 
   override render() {
@@ -80,7 +80,7 @@ export class WorkspaceTabBar extends LitElement {
             class=${this.active === tab.id ? "tab selected" : "tab"} ?disabled=${tab.disabled === true}
             @click=${() => this.onSelect?.(tab.id)}>
             <span>${tab.label}</span>
-            ${tab.id === "core:workspace.git" && this.editedCount > 0 ? html`<span class="badge">${this.editedCount}</span>` : nothing}
+            ${tab.id === "git" && this.editedCount > 0 ? html`<span class="badge">${this.editedCount}</span>` : nothing}
           </button>`)}
       </nav>
     `;
