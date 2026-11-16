@@ -5,6 +5,7 @@ import { uiIconStyle, renderCommandIcon, renderGearIcon, renderPluginIcon } from
 import { loadSurface, warmLazySurfaces, type LazySurface } from "./lazySurfaces.js";
 import { sessionStateBadgeStyles } from "./sessionStateBadgeStyles.js";
 import type { ChatLine } from "./shared";
+import type { ToolExecutionPart } from "./shared";
 import { clearErrorPatch, errorNoticePatch, NOTICE_ON_ROW, noticePatch, noticeScope, type NoticeFields, type NoticeScreen } from "../errorNotice";
 import { HttpError, request } from "../api/http";
 import { RequestTimeoutError } from "../api/requestDeadline";
@@ -249,6 +250,11 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .conversation-body chat-view { flex:1 1 auto; min-height:0; }
   .conversation-body prompt-editor { flex:none; }
   .conversation-bottom { flex:none; }
+  .sidebar-footer { flex:none; display:flex; align-items:center; gap:4px; padding:8px 10px; border-top:1px solid var(--pi-border-muted); }
+  .sidebar-footer button { width:28px; height:28px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
+  .sidebar-footer button:hover { background:var(--pi-surface-hover); color:var(--pi-text); }
+  .edited-file-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
+  .edited-file-list code { overflow-wrap:anywhere; color:var(--pi-text-secondary); font:var(--pi-text-2xs) var(--pi-font-mono); }
   #workspace-panel { grid-column:5; display:flex; min-width:0; min-height:0; flex-direction:column; overflow:hidden; border-left:0; background:var(--pi-bg); }
   #workspace-panel > workspace-tab-bar { flex:none; }
   .workspace-panel-content { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
@@ -493,6 +499,41 @@ interface SessionCleanupDialogState {
  */
 function outboxMiss(entry: { readonly machineId: string; readonly since: number; readonly miss: ReadMiss }, heard: HeardClocks): ReadMiss {
   return entry.miss.kind === "link-down" && heard.link > entry.since ? { kind: "machine-unanswering", machineId: entry.machineId } : entry.miss;
+}
+
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+/** Extract only explicit file paths from known file-writing tool records. */
+function editedFilePaths(messages: readonly ChatLine[]): string[] {
+  const paths = new Set<string>();
+  const writeTools = /^(write|edit|apply_patch|patch|create_file|replace_file|str_replace_editor|multi_edit)$/iu;
+  const visit = (value: unknown, depth = 0): void => {
+    if (depth > 4) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    const record = recordValue(value);
+    if (record === undefined) return;
+    for (const key of ["path", "file_path", "filename", "fileName"]) {
+      const candidate = record[key];
+      if (typeof candidate === "string" && candidate.trim() !== "" && !candidate.includes("\\0")) paths.add(candidate.trim());
+    }
+    for (const key of ["files", "changes", "edits", "operations"]) visit(record[key], depth + 1);
+  };
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type !== "toolExecution" && part.type !== "toolCall" && part.type !== "toolResult") continue;
+      if (!writeTools.test(part.toolName)) continue;
+      if (part.type === "toolExecution" || part.type === "toolCall") visit(part.args);
+      if (part.type === "toolExecution" || part.type === "toolResult") visit(part.details);
+    }
+  }
+  return [...paths].sort((a,b)=>a.localeCompare(b));
 }
 
 @customElement("pi-web-app")
@@ -6970,10 +7011,10 @@ export class PiWebApp extends LitElement {
               ${this.renderStatusBar(state)}
               <div class="conversation-bottom">
                 <conversation-disclosure heading="Background" description="Session activity">
-                  <p>${state.activity ? "The selected session's live activity is summarized in the conversation." : "No additional background activity is reported for this session."}</p>
+                  ${state.activity || state.status?.pendingMessageCount ? html`<p>${state.activity ? activityDockWords(sessionActivityCategory(state.status, state.activity) ?? "background", { activity: state.activity, status: state.status }) : ""}${state.status?.pendingMessageCount ? ` · ${state.status.pendingMessageCount} queued messages` : ""}</p>` : html`<p>No background activity is currently reported for this session.</p>`}
                 </conversation-disclosure>
-                <conversation-disclosure heading="Edited Files" description="Session file records">
-                  <p>File names will appear here when tool results expose written-file paths.</p>
+                <conversation-disclosure heading="Edited Files" description="Files recorded by write/edit tools">
+                  ${editedFilePaths(state.messages).length > 0 ? html`<ul class="edited-file-list">${editedFilePaths(state.messages).map((path) => html`<li><code>${path}</code></li>`)}</ul>` : html`<p>No written-file paths are present in the loaded session transcript.</p>`}
                 </conversation-disclosure>
               </div>
               ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
