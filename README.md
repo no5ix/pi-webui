@@ -2,8 +2,15 @@
 
 # no5ix - how to open it
 
-1. in the project root path, ` pnpm run dev `
+1. **Production (prod) to save memory and cpu:** From the project root directory, run:
+   ```bash
+   pnpm run build && node dist/cli.js run
+   ```
 
+2. **Development (dev):** From the project root directory, run:
+   ```bash
+   pnpm run dev
+   ```
 
 # PI WEB
 
