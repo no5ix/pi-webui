@@ -1311,6 +1311,9 @@ export class PiWebApp extends LitElement {
       stoppedByReader: stoppedByReaderFacts(status.isStopping, this.stoppedByThisReader.delete(key)),
     });
     if (edge === "none") return;
+    // A background child finishing is not an agent task finishing. Only announce a completion
+    // when this page actually observed the session's active turn end.
+    if (edge === "completed" && finishedTurn === undefined) return;
     const question = status.pendingDialogs?.at(-1)?.title;
     const measured = status.lastRunDurationMs ?? finishedTurn?.durationMs;
     void notifyBrowserChannel(
