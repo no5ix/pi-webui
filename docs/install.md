@@ -394,6 +394,16 @@ The web/API server listens on port 8504 (`PI_WEB_PORT`, or `PORT` as many platfo
 
 `pi-web doctor` inside the container (not in the bundled [Docker setup](../docker/README.md), whose doctor skips these checks) checks that the data, config and agent directories are writable, that the socket's directory accepts a socket, what runs as PID 1 and the bind address, and prints how to run PI WEB. It warns when the data directory, the config file or the agent directory is on the container's own overlay filesystem or in memory, where it would not survive the container being recreated. That is read from the mount table, so a volume that does not outlive the container, such as a Kubernetes `emptyDir`, looks like any other; when the mount table cannot be read, doctor says so. To update, deploy an image with the newer package; the Updates page says so instead of offering a command. Your own [update command](config.md#updates), when you set one, is offered there and runs in a terminal of this machine; the fleet **Update** in **Settings → Machines** refuses to start it under `pi-web run`, as **Restart** does, because no service manager runs these processes.
 
+## Foreground production run from a source checkout
+
+From the repository root, run:
+
+```bash
+pnpm run prod
+```
+
+The command builds the production assets and then runs the compiled session daemon and web/API server in the foreground. It does not start Vite or file watchers. On macOS it manages Tailscale Serve for the production port: it opens Tailscale when necessary, waits for the tailnet, publishes the configured PI WEB HTTP port (default `8504`) as HTTPS (default `8504`), and removes only the mapping it created when the run stops. It never disconnects the machine from Tailscale. Set `PI_WEB_PROD_SKIP_TAILSCALE=1` to skip that setup. Override the external HTTPS port with `PI_WEB_PROD_TAILSCALE_PORT`; adjust the connection and shutdown waits with `PI_WEB_PROD_TAILSCALE_WAIT_SECONDS`, `PI_WEB_PROD_BACKEND_WAIT_SECONDS`, and `PI_WEB_PROD_STOP_GRACE_SECONDS`.
+
 ## CLI reference
 
 | Command | What it does |
