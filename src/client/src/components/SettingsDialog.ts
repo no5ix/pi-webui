@@ -1359,6 +1359,8 @@ export type SettingsPanelTag =
   | "settings-appearance-panel"
   | "settings-notifications-panel"
   | "settings-shortcuts-panel"
+  | "settings-info"
+  | "settings-updates"
   | "settings-plugin-section";
 
 /**
@@ -1390,5 +1392,9 @@ export function activeSettingsPanelTag(section: SettingsSection): SettingsPanelT
       return "settings-general-panel";
     case "machines":
       return "settings-machines-panel";
+    case "info":
+      return "settings-info";
+    case "updates":
+      return "settings-updates";
   }
 }
