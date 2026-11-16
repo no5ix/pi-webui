@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
-import { PHONE_LAYOUT_MEDIA_QUERY } from "../../breakpoints";
+import { PHONE_LAYOUT_MEDIA_QUERY, WORKSPACE_STACKED_MEDIA_QUERY } from "../../breakpoints";
 import { customElement, property } from "lit/decorators.js";
 import { clampPanelWidth, panelResizeConstraints, panelWidthFromDrag, panelWidthFromKeyboard, type PanelResizeConstraints, type ResizablePanelSide } from "../../appShell/panelResizeController";
 
@@ -183,7 +183,7 @@ export class AppPanelEdgeControl extends LitElement {
     .resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; transform: translateX(-50%); background: transparent; transition: width .12s ease, background .12s ease, opacity .12s ease; }
     .resize-handle:focus-visible::after, :host([resizing]) .resize-handle::after { width: 3px; background: var(--pi-accent); opacity: .72; }
     @media (hover: hover) { .resize-handle:hover::after { width: 3px; background: var(--pi-accent); opacity: .72; } }
-    @media (max-width: 1180px) {
+    @media ${unsafeCSS(WORKSPACE_STACKED_MEDIA_QUERY)} {
       :host([side="navigation"]) { grid-row: 1 / 3; }
       :host([side="workspace"]) { display: none; }
     }

@@ -19,9 +19,9 @@ describe("panel resize behavior", () => {
   });
 
   it("clamps panel widths to broad fallback bounds", () => {
-    expect(clampPanelWidth("navigation", 50)).toBe(180);
+    expect(clampPanelWidth("navigation", 50)).toBe(220);
     expect(clampPanelWidth("navigation", 9000)).toBe(4096);
-    expect(clampPanelWidth("workspace", 50)).toBe(240);
+    expect(clampPanelWidth("workspace", 50)).toBe(320);
     expect(clampPanelWidth("workspace", 9000)).toBe(4096);
   });
 
@@ -37,7 +37,7 @@ describe("panel resize behavior", () => {
     expect(panelWidthFromKeyboard("navigation", 300, "ArrowLeft")).toBe(276);
     expect(panelWidthFromKeyboard("workspace", 500, "ArrowLeft")).toBe(524);
     expect(panelWidthFromKeyboard("workspace", 500, "ArrowRight")).toBe(476);
-    expect(panelWidthFromKeyboard("workspace", 500, "Home")).toBe(240);
+    expect(panelWidthFromKeyboard("workspace", 500, "Home")).toBe(320);
     expect(panelWidthFromKeyboard("workspace", 500, "End")).toBe(4096);
     expect(panelWidthFromKeyboard("workspace", 500, "Enter")).toBeUndefined();
   });

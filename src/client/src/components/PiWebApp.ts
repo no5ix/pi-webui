@@ -1,11 +1,10 @@
 import { css, LitElement, html, nothing, type TemplateResult, unsafeCSS } from "lit";
-import { PHONE_LAYOUT_MEDIA_QUERY } from "../breakpoints";
+import { DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY, MOBILE_NAVIGATION_MEDIA_QUERY, PHONE_LAYOUT_MEDIA_QUERY, WORKSPACE_STACKED_MEDIA_QUERY } from "../breakpoints";
 import { isArchivableSessionInfo, isPendingStartSessionInfo, isTransientNewSessionInfo, writtenSessionIds } from "../sessionPersistence";
-import { uiIconStyle, renderCommandIcon, renderGearIcon, renderPluginIcon } from "./uiIcons.js";
+import { uiIconStyle, renderActivityIcon, renderCommandIcon, renderDocumentIcon, renderGearIcon, renderPluginIcon, renderRobotIcon } from "./uiIcons.js";
 import { loadSurface, warmLazySurfaces, type LazySurface } from "./lazySurfaces.js";
 import { sessionStateBadgeStyles } from "./sessionStateBadgeStyles.js";
 import type { ChatLine } from "./shared";
-import type { ToolExecutionPart } from "./shared";
 import { clearErrorPatch, errorNoticePatch, NOTICE_ON_ROW, noticePatch, noticeScope, type NoticeFields, type NoticeScreen } from "../errorNotice";
 import { HttpError, request } from "../api/http";
 import { RequestTimeoutError } from "../api/requestDeadline";
@@ -95,7 +94,7 @@ import { loadExternalPlugins, type ExternalPluginLoadResult } from "../plugins/e
 import { createPluginLoadRetry } from "../plugins/pluginLoadRetry";
 import { sessionSelectionFacts } from "../plugins/sessionSelectionFacts";
 import { projectFolderAccess } from "../plugins/projectFolderAccess";
-import { PluginRegistry, installPluginRuntimeScope, installWorkspaceLabelScope, installWorkspacePanelScope, type PluginFleetSource, type ShownPage } from "../plugins/registry";
+import { PluginRegistry, installPluginRuntimeScope, installWorkspaceLabelScope, installWorkspacePanelScope, isQualifiedContributionId, type PluginFleetSource, type ShownPage } from "../plugins/registry";
 import { sessionLocationVerdict } from "../sessionLocationVerdict";
 import { PluginFleetHost } from "../plugins/pluginFleetHost";
 import { ListEntryPort } from "../plugins/listEntries";
@@ -223,15 +222,15 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
      screen, and a shell pinned to its edges ran off the right of it. Layout containment makes the shell
      the box every fixed dialog, sheet and menu inside it is placed against, so they fit what is visible;
      a showModal() dialog sits in the top layer, which containment does not reach (visibleViewportDialogBox). */
-  :host { --pi-app-safe-area-bottom: 0px; --pi-app-keyboard-inset: 0px; --pi-app-viewport-offset-top: 0px; --pi-app-viewport-offset-left: 0px; position: fixed; top: var(--pi-app-viewport-offset-top); left: var(--pi-app-viewport-offset-left); display: block; width: var(--pi-app-visible-width, 100%); height: var(--pi-app-visible-height, calc(100dvh - var(--pi-app-keyboard-inset))); contain: layout; box-sizing: border-box; overflow: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--pi-app-safe-area-bottom) env(safe-area-inset-left); color: var(--pi-text); background: var(--pi-bg); font: var(--pi-text-base) var(--pi-font-ui); line-height: inherit; }
+  :host { --pi-app-safe-area-bottom: 0px; --pi-app-keyboard-inset: 0px; --pi-app-viewport-offset-top: 0px; --pi-app-viewport-offset-left: 0px; --pi-workbench-bg: color-mix(in srgb, var(--pi-surface-panel) 96%, var(--pi-bg)); --pi-workbench-border: color-mix(in srgb, var(--pi-accent-border) 42%, var(--pi-border-muted)); position: fixed; top: var(--pi-app-viewport-offset-top); left: var(--pi-app-viewport-offset-left); display: block; width: var(--pi-app-visible-width, 100%); height: var(--pi-app-visible-height, calc(100dvh - var(--pi-app-keyboard-inset))); contain: layout; box-sizing: border-box; overflow: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--pi-app-safe-area-bottom) env(safe-area-inset-left); color: var(--pi-text); background: var(--pi-bg); font: var(--pi-text-base) var(--pi-font-ui); line-height: inherit; }
   :host([pwa-display-mode]) { --pi-app-safe-area-bottom: env(safe-area-inset-bottom); }
   @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
     :host { --pi-app-safe-area-bottom: env(safe-area-inset-bottom); }
   }
-  .shell { --navigation-panel-size: 264px; --workspace-panel-size: 330px; --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display:grid; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); height:100%; min-height:0; background:var(--pi-bg); }
+  .shell { --navigation-panel-size: 280px; --workspace-panel-size: 400px; --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display:grid; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); height:100%; min-height:0; background:var(--pi-bg); }
 
   .shell > main.conversation-column { grid-column:3; }
-  .shell > .workbench-shell { grid-column:5; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; background:var(--pi-bg); border-left:1px solid var(--pi-border-muted); }
+  .shell > .workbench-shell { grid-column:5; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; background:var(--pi-workbench-bg, var(--pi-surface-panel)); border-left:1px solid var(--pi-workbench-border, var(--pi-border-muted)); }
   .shell > aside#navigation-panel { grid-column:1; }
   aside { grid-column:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--pi-surface-panel); border-right:1px solid var(--pi-border-muted); }
   aside app-navigation-panel { flex:1 1 auto; min-height:0; }
@@ -239,31 +238,38 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .navigation-stack { display:flex; flex-direction:column; min-height:0; height:100%; }
   .running-sessions-panel { flex:none; }
   .projects-area { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; }
-  .projects-heading { display:flex; align-items:center; justify-content:space-between; min-height:32px; padding:4px 13px; color:var(--pi-text-secondary); font:var(--pi-text-xs) var(--pi-font-ui); }
+  .projects-heading { box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; min-height: var(--pi-control-height); padding:var(--pi-space-2) var(--pi-space-5); color:var(--pi-text-secondary); font:var(--pi-text-xs) var(--pi-font-ui); }
   .projects-heading button { border:0; background:transparent; color:var(--pi-muted); padding:4px; border-radius:var(--pi-radius-sm); }
   .projects-area app-navigate-page { flex:1 1 auto; min-height:0; }
+  .projects-area project-sessions-panel { flex:1 1 auto; min-height:0; }
   .conversation-column { grid-column:3; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
-  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:0 14px; border-bottom:1px solid var(--pi-border-muted); background:var(--pi-bg); }
-  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text); font:var(--pi-text-sm) var(--pi-font-ui); font-weight:var(--pi-weight-semibold); }
-  .conversation-subtitle { color:var(--pi-muted); font:var(--pi-text-2xs) var(--pi-font-ui); }
-  .conversation-header-actions { display:flex; align-items:center; gap:5px; flex:none; }
-  .conversation-header-actions button { width:28px; height:28px; padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
-  .conversation-header-actions button:hover { background:var(--pi-surface-hover); color:var(--pi-text); }
-  .conversation-subagents { flex:none; }
+  /* The transcript's reading measure: a message line is as wide as a reader can follow, and the column's extra width is left as margin, not stretched into 90-character rows. ChatView reads this token in its .msg rule; narrow layouts keep the full width. */
+  @media (min-width: 1024px) { .conversation-column { --pi-chat-measure: min(100%, 46rem); } }
+  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--pi-space-5); min-height:52px; padding:0 var(--pi-space-7); border-bottom:1px solid var(--pi-border-muted); background:var(--pi-bg); }
+  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text-bright); font:var(--pi-text-sm) var(--pi-font-ui); font-weight:var(--pi-weight-semibold); letter-spacing:0.01em; }
+  .conversation-subtitle { margin-top:1px; color:var(--pi-muted); font:var(--pi-text-2xs) var(--pi-font-ui); }
+  .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-2); flex:none; }
+  .conversation-header-actions button { width: var(--pi-control-height); height: var(--pi-control-height); padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
+@media (hover: hover) { .conversation-header-actions button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
+  .conversation-header-actions button[aria-expanded="true"] { background:var(--pi-selection-bg); color:var(--pi-text); }
+  .conversation-rail { flex:none; display:flex; flex-direction:column; gap:var(--pi-space-3); padding:var(--pi-space-4) var(--pi-chat-gutter) 0; }
+  .conversation-subagents { flex:none; padding:var(--pi-space-4) var(--pi-chat-gutter) 0; }
   .conversation-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   .conversation-body chat-view { flex:1 1 auto; min-height:0; }
   .conversation-body prompt-editor { flex:none; }
   .conversation-bottom { flex:none; }
-  .sidebar-footer { flex:none; display:flex; align-items:center; gap:4px; padding:8px 10px; border-top:1px solid var(--pi-border-muted); }
-  .sidebar-footer button { width:28px; height:28px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
-  .sidebar-footer button:hover { background:var(--pi-surface-hover); color:var(--pi-text); }
+  .sidebar-footer { flex:none; display:flex; align-items:center; gap:4px; padding:var(--pi-space-4) var(--pi-space-5); border-top:1px solid var(--pi-border-muted); }
+  .sidebar-footer button { width: var(--pi-control-height); height: var(--pi-control-height); display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
+@media (hover: hover) { .sidebar-footer button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
   .edited-file-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
   .edited-file-list code { overflow-wrap:anywhere; color:var(--pi-text-secondary); font:var(--pi-text-2xs) var(--pi-font-mono); }
-  #workspace-panel { grid-column:5; display:flex; min-width:0; min-height:0; flex-direction:column; overflow:hidden; border-left:0; background:var(--pi-bg); }
-  #workspace-panel > workspace-tab-bar { flex:none; }
   .workspace-panel-content { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-  @media (max-width:980px) { .shell { --workspace-panel-size:300px; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(280px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); } }
-  @media (max-width:760px) { .shell { display:flex; } aside#navigation-panel { display:none; } .conversation-column { flex:1 1 auto; } #workspace-panel { position:fixed; inset:0; z-index:var(--pi-layer-overlay); width:100%; } }
+  .workspace-panel-content workspace-panel { flex:1 1 auto; min-height:0; --pi-bar-inset: var(--pi-chat-gutter); }
+  @media (max-width:1023px) { .shell { --navigation-panel-size:240px; --workspace-panel-size:320px; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(300px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); } }
+  /* A phone keeps the same four tabs: the workbench stacks under the session in
+     its own band, so the conversation stays on screen and a tool page is never a
+     dead end. A full-screen tool page is the plugin's own request, not the tab. */
+  @media ${unsafeCSS(MOBILE_NAVIGATION_MEDIA_QUERY)} { .workbench-shell { flex-basis: min(38%, 46dvh); } }
   /* Over the session, not instead of it: the page covers the screen while it
      is open and the close returns to the conversation underneath. */
   .navigate-overlay { position: fixed; top: 0; right: 0; left: 0; height: var(--pi-app-visible-height, calc(100dvh - var(--pi-app-keyboard-inset))); box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--pi-app-safe-area-bottom) env(safe-area-inset-left); z-index: var(--pi-layer-overlay); background: var(--pi-bg); }
@@ -276,8 +282,7 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
      generalised from a chip that carried its own border width. */
   .empty { border: 1px dashed var(--pi-border); border-radius: var(--pi-radius-lg); padding: var(--pi-space-7); color: var(--pi-muted); }
   /* A page's rows keep the edge of the bar above them, whose keys sit on the conversation gutter (cornerKeys). */
-  workspace-panel { grid-column: 5; min-width: 0; min-height: 0; overflow: hidden; --pi-bar-inset: var(--pi-chat-gutter); }
-  @media (min-width: 1181px) {
+  @media ${unsafeCSS(DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY)} {
     /* A workspace tool can request the content area without owning or changing
        the surrounding shell. The selected panel keeps its own tabs and state. */
     /* Expanded review tools need the full desktop canvas; their own toolbar
@@ -285,29 +290,38 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
     .shell.workspace-panel-fullscreen { grid-template-columns: minmax(0, 1fr); }
     .shell.workspace-panel-fullscreen > aside, .shell.workspace-panel-fullscreen > main,
     .shell.workspace-panel-fullscreen > app-panel-edge-control { display: none; }
-    .shell.workspace-panel-fullscreen > workspace-panel { grid-column: 1; }
+    .shell.workspace-panel-fullscreen > .workbench-shell { grid-column: 1; border-left: 0; }
     .shell.navigation-panel-collapsed { --navigation-panel-width: 0px; --navigation-divider-width: 0px; }
     .shell.navigation-panel-collapsed > aside { display: none; }
     .shell.workspace-panel-collapsed { --workspace-panel-width: 0px; --workspace-divider-width: 0px; }
-    .shell.workspace-panel-collapsed > workspace-panel { display: none; }
+    .shell.workspace-panel-collapsed > .workbench-shell { display: none; }
   }
-  @media (max-width: 1180px) {
-    .shell { grid-template-columns: var(--navigation-panel-width) var(--navigation-divider-width) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  @media ${unsafeCSS(WORKSPACE_STACKED_MEDIA_QUERY)} {
+    /* Below the desktop floor the workbench keeps its tab bar and stacks under
+       the session: the same four tabs, the same selection, in a shorter box. */
+    .shell { grid-template-columns: var(--navigation-panel-width) var(--navigation-divider-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr); }
     .shell.navigation-panel-collapsed { --navigation-panel-width: 0px; --navigation-divider-width: 0px; }
     .shell.navigation-panel-collapsed > aside { display: none; }
+    .shell.workspace-panel-collapsed { grid-template-rows: minmax(0, 1fr); }
+    .shell.workspace-panel-collapsed > .workbench-shell { display: none; }
     aside { grid-row: 1 / 3; }
-    main { grid-column: 3; grid-row: 1 / 3; }
-    .shell.workspace-view main { grid-row: 1; min-height: auto; }
-    .shell.workspace-view > workspace-panel { grid-column: 3; grid-row: 2; display: flex; border-left: 0; }
-    .shell:not(.workspace-view) > workspace-panel { display: none; }
-    main.workspace-view chat-view, main.workspace-view prompt-editor, main.workspace-view status-bar,
-    main.workspace-view .empty { display: none; }
-    main.workspace-view { overflow: hidden; }
+    main { grid-column: 3; grid-row: 1; }
+    .shell > .workbench-shell { grid-column: 3; grid-row: 2; border-left: 0; border-top: 1px solid var(--pi-workbench-border, var(--pi-border-muted)); }
   }
+  /* A phone and a touch tablet in the phone layout share one shell: the sidebar
+     is a layer, so its grid column is given up rather than left as a blank band,
+     and the workbench stacks under the session in its own band, tab strip and
+     all. The transcript keeps a floor of its own, and the conversation column
+     scrolls when the keyboard takes the rest: a session whose message list is
+     0px tall is a conversation the reader cannot read. A full-screen tool page is
+     the plugin's own request, not the tab strip's doing. */
   @media ${unsafeCSS(PHONE_LAYOUT_MEDIA_QUERY)} {
-    .shell { grid-template-columns: minmax(0, 1fr); }
-    aside { display: none; }
-    main, .shell.workspace-view > workspace-panel { grid-column: 1; }
+    .shell { display: flex; flex-direction: column; }
+    aside#navigation-panel { display: none; }
+    .conversation-column { flex: 1 1 auto; min-height: 0; border-inline: 0; overflow: auto; }
+    .conversation-body chat-view { min-height: 45dvh; }
+    .workbench-shell { flex: 0 0 min(34%, 42dvh); min-height: 0; border-left: 0; border-top: 1px solid var(--pi-workbench-border, var(--pi-border-muted)); }
+    .shell.workspace-panel-collapsed .workbench-shell { display: none; }
     main.navigation-view chat-view, main.navigation-view prompt-editor, main.navigation-view status-bar,
     main.navigation-view .archived-strip, main.navigation-view .empty { display: none; }
     /* One place at a time: a div shows by default, so without this the session
@@ -479,7 +493,25 @@ import { rowedClientMessageIds } from "../messageDelivery";
 import { frontedPageShown } from "../frontedPage";
 import { directMachinesOf, setDirectMachines } from "../directMachineUrl";
 import { extensionWidgetPanels } from "./ExtensionWidgetPage";
-import "./NativeWorkspaceChrome";
+import "./workspace/RunningSessionsPanel";
+import "./workspace/ProjectSessionsPanel";
+import "./workspace/WorkbenchTabBar";
+import "./workspace/ConversationDisclosure";
+import "./workspace/SubagentsPanel";
+import "./workspace/BackgroundPanel";
+import "./workspace/EditedFilesPanel";
+import type { SubagentsRead } from "./workspace/SubagentsPanel";
+import { editedFileRows } from "../workspace/editedFiles";
+import type { EditedFileRow } from "../workspace/editedFiles";
+import { runningSessionRows } from "../workspace/runningSessionRows";
+import { projectSessionModel } from "../workspace/projectSessionModel";
+import type { ProjectSessionModel } from "../workspace/projectSessionModel";
+import { backgroundRows } from "../workspace/backgroundRows";
+import type { BackgroundRow } from "../workspace/backgroundRows";
+import { subagentRows } from "../workspace/subagentRows";
+import type { SubagentRow } from "../workspace/subagentRows";
+import { WORKBENCH_KINDS, workbenchKindOfPanel, workbenchTabs, WORKBENCH_UNAVAILABLE_MESSAGES, type WorkbenchKind, type WorkbenchSlots } from "../workspace/workbenchTabs";
+import { readSubsessions } from "../api/subsessions";
 
 /**
  * A visual viewport scale above this is a pinch zoom rather than rounding. `connectedCallback` reads it, and an element already
@@ -508,7 +540,29 @@ function outboxMiss(entry: { readonly machineId: string; readonly since: number;
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
+  const record: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) record[key] = entry;
+  return record;
+}
+
+/**
+ * How many files a Git panel's `/status` answer reports as changed.
+ *
+ * The answer belongs to a plugin, so its shape is read and not assumed: a reply
+ * that carries none of the path lists is no count, and the Git tab then says
+ * nothing. Counting the union of the lists is what the panel itself shows, so the
+ * badge and the panel cannot disagree about a repository at rest.
+ */
+function gitChangedFileCount(answer: unknown): number | undefined {
+  const record = recordValue(answer);
+  if (record === undefined) return undefined;
+  const paths = new Set<string>();
+  for (const key of ["status", "conflicts", "untracked"]) {
+    const list = record[key];
+    if (!Array.isArray(list)) continue;
+    for (const entry of list) if (typeof entry === "string") paths.add(entry);
+  }
+  return paths.size;
 }
 
 /** Extract only explicit file paths from known file-writing tool records. */
@@ -548,6 +602,24 @@ export class PiWebApp extends LitElement {
   /** Whether the settings surface's module has been asked for this opening. */
   private settingsLoadAnnounced = false;
   @state() private workspacePanelFullscreen = false;
+  /** What the reader typed into the sidebar's session search. */
+  @state() private sidebarQuery = "";
+  /**
+   * The projects the reader folded open. The project of the session on screen is
+   * added when the tree is drawn, so a fold can never hide the reader's own
+   * session; the set itself is the reader's, and is not rewritten by selection.
+   */
+  @state() private expandedProjectIds: ReadonlySet<string> = new Set();
+  /** The children of the session on screen, as its record answered. */
+  @state() private subagentsRead: SubagentsRead = { kind: "unknown" };
+  /** The Git tab's changed-file count, or undefined while the app has not been told. */
+  @state() private gitChangedFileCount: number | undefined = undefined;
+  private subagentsReadKey = "";
+  private subagentsReadSequence = 0;
+  /** The sessions whose Subagents card the reader has opened, machine + session scoped. */
+  private readonly subagentsReadRequests = new Set<string>();
+  private gitBadgeKey = "";
+  private gitBadgeSequence = 0;
   @query("chat-view") private chatView?: ChatView;
   private prunedSessionsSignature = "";
 
@@ -1337,6 +1409,8 @@ export class PiWebApp extends LitElement {
     const chatIdentity = selectedChatIdentity(this.state);
     this.committedChatIdentity = chatIdentity;
     this.syncSelectedSessionReadState();
+    this.syncSubagentsRead();
+    this.syncGitBadge();
     this.syncFleetOnSettingsSection();
     this.syncDocumentTitle();
     this.notifySessionEvents();
@@ -2511,12 +2585,16 @@ export class PiWebApp extends LitElement {
    * Show a page by id or by slot alias. The id is resolved at the door: a stored alias matched no
    * page, so "Go to terminal" drew Files and named nothing (review triage, go-to-global-pages).
    */
-  private openWorkspaceTool(requested: QualifiedContributionId) {
+  private openWorkspaceTool(requested: QualifiedContributionId, options?: { keepConversation?: boolean }) {
     if (requested === WORKSPACE_TERMINAL_SLOT) this.terminalAutoStartWorkspaceId = this.state.selectedWorkspace?.id;
     const tool = this.resolvePageRouteId(requested) ?? requested;
     if (!this.appShell.isMobileNavigationLayout) this.panelCollapse.expandWorkspacePanel();
     if (tool !== this.state.workspaceTool) this.workspacePanelFullscreen = false;
-    this.setState({ workspaceTool: tool, mainView: tool });
+    /* A workbench tab chooses what the side panel shows, not what the middle of the
+       window is: with the panel on screen the session stays on screen. A phone shows
+       the page as the whole view, where a tool is a place, so mainView follows the tool. */
+    const keepConversation = options?.keepConversation === true && !this.appShell.isMobileNavigationLayout;
+    this.setState({ workspaceTool: tool, mainView: keepConversation ? "chat" : tool });
     this.updateUrl();
     this.refreshSelectedWorkspaceTool(tool);
   }
@@ -3096,16 +3174,10 @@ export class PiWebApp extends LitElement {
     const emptyState = workspace === undefined ? this.workspacePanelEmptyState() : undefined;
     return html`
       <div class="workbench-shell" id="workspace-panel">
-        <workspace-tab-bar active=${(["git", "files", "terminal", "goals"] as const).find((kind) => this.workbenchPanel(kind)?.id === this.shownWorkspaceToolId()) ?? ""}
-          editedCount=${0}
-          .tabs=${(["git", "files", "terminal", "goals"] as const).map((kind) => ({
-            id: kind,
-            label: kind === "git" ? "Git" : kind === "files" ? "Files" : kind === "terminal" ? "Terminal" : "Goals",
-            disabled: this.workbenchPanel(kind) === undefined,
-            detail: this.workbenchPanel(kind)?.title,
-          }))}
-          .onSelect=${(kind: "git" | "files" | "terminal" | "goals") => { this.openShellToolTab(kind); }}
-        ></workspace-tab-bar>
+        <workbench-tab-bar
+          .tabs=${workbenchTabs(this.workbenchSlots(), this.shownWorkspaceToolId(), this.gitChangedFileCount)}
+          .onSelect=${(kind: WorkbenchKind) => { this.openShellToolTab(kind); }}
+        ></workbench-tab-bar>
         <div class="workspace-panel-content">
           <workspace-panel
             .workspace=${workspace}
@@ -3695,7 +3767,18 @@ export class PiWebApp extends LitElement {
       return;
     }
     this.closeNavigate();
-    this.openShellToolTab(id);
+    const kind = this.workbenchKindOfPanelId(id);
+    if (kind === undefined) {
+      // Go to's destinations are qualified page ids; anything else is not a view.
+      if (isQualifiedContributionId(id)) this.selectMainView(id);
+      return;
+    }
+    this.openShellToolTab(kind);
+  }
+
+  /** Which workbench tab a page id belongs to, when it is one of the four. */
+  private workbenchKindOfPanelId(id: string): WorkbenchKind | undefined {
+    return WORKBENCH_KINDS.find((kind) => this.workbenchSlots()[kind]?.id === id);
   }
 
   /**
@@ -6909,40 +6992,265 @@ export class PiWebApp extends LitElement {
     });
   }
 
-  /** Resolve the row id back to its typed view; unknown ids are ignored. */
-  private workbenchPanel(kind: "git" | "files" | "terminal" | "goals"): QualifiedWorkspacePanelContribution | QualifiedGlobalPanelContribution | undefined {
+  /**
+   * The panel standing under one workbench tab.
+   *
+   * The panel list is the one the workbench renders, classified by `workbenchKindOfPanel`:
+   * Files and Terminal are host-resolved slots, Git and Goals are found by the
+   * panel's own words, and a panel that fronts a conversation surface (`session-changes`) is
+   * that conversation's Changes view, not a repository tool.
+   */
+  private workbenchSlots(): WorkbenchSlots {
     const machineId = selectedMachineId(this.state);
-    const workspacePanels = this.visibleWorkspacePanels();
-    const globalPanels = this.visibleGlobalPanels();
-    if (kind === "files") {
-      const id = this.plugins.resolveWorkspacePanelRouteId(WORKSPACE_FILES_SLOT, machineId);
-      return [...workspacePanels, ...globalPanels].find((panel) => panel.id === id);
+    const resolved = {
+      files: this.plugins.resolveWorkspacePanelRouteId(WORKSPACE_FILES_SLOT, machineId),
+      terminal: this.workspaceTerminalPage() ?? this.plugins.resolveGlobalPanelRouteId(GLOBAL_TERMINAL_SLOT, machineId),
+    };
+    const slots: WorkbenchSlots = {};
+    for (const panel of [...this.visibleWorkspacePanels(), ...this.visibleGlobalPanels()]) {
+      const kind = workbenchKindOfPanel(panel, resolved);
+      if (kind === undefined || slots[kind] !== undefined) continue;
+      slots[kind] = panel;
     }
-    if (kind === "terminal") {
-      const id = this.workspaceTerminalPage() ?? this.plugins.resolveGlobalPanelRouteId(GLOBAL_TERMINAL_SLOT, machineId);
-      return [...workspacePanels, ...globalPanels].find((panel) => panel.id === id);
+    return slots;
+  }
+
+  /**
+   * How many files the repository of the project on screen has changed.
+   *
+   * The count is the Git panel's own `/status` answer - the read its panel makes -
+   * asked when the project under the workbench changes. Absent means the app has
+   * not been told, and the tab then says nothing: a zero drawn before the first
+   * answer is the app claiming a clean repository it has not looked at.
+   */
+  private syncGitBadge(): void {
+    const workspace = this.state.selectedWorkspace;
+    const key = workspace === undefined ? "" : `${workspace.projectId}\n${workspace.id}`;
+    const operations = this.workbenchSlots().git?.operations;
+    if (key === this.gitBadgeKey) return;
+    this.gitBadgeKey = key;
+    if (key === "" || operations === undefined) {
+      this.gitChangedFileCount = undefined;
+      return;
     }
-    const candidates = [...workspacePanels, ...globalPanels];
-    return candidates.find((panel) => {
-      const haystack = `${panel.title} ${panel.localId} ${panel.id}`.toLowerCase();
-      return kind === "git" ? /\bgit\b|source control|version control/u.test(haystack) : /\bgoals?\b|project objectives/u.test(haystack);
+    const sequence = ++this.gitBadgeSequence;
+    void this.readGitChangedCount(operations).then((count) => {
+      if (sequence !== this.gitBadgeSequence) return;
+      this.gitChangedFileCount = count;
     });
   }
 
-  private openShellToolTab(kind: "git" | "files" | "terminal" | "goals"): void {
-    const panel = this.workbenchPanel(kind);
-    if (panel === undefined) {
-      const message = kind === "git"
-        ? "No Git workspace panel is registered for the selected project."
-        : kind === "goals"
-          ? "No Goals workspace panel is registered for the selected project."
-          : kind === "files"
-            ? "The Files workspace panel is not available on this machine."
-            : "The Terminal workspace panel is not available on this machine.";
-      this.setState(noticePatch(noticeForReader(message)));
+  private async readGitChangedCount(operations: (path: string, init?: RequestInit) => Promise<unknown>): Promise<number | undefined> {
+    try {
+      return gitChangedFileCount(await operations("/status"));
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The sessions of the machine being browsed, each row carrying that machine. */
+  private sidebarSessionRows(): readonly SessionInfo[] {
+    const machineId = this.browsedMachineId();
+    const browsingElsewhere = machineId !== selectedMachineId(this.state);
+    return this.shownSessions(browsingElsewhere ? this.quickSwitcherSessions : this.state.sessions, machineId);
+  }
+
+  /** The sidebar's project tree: every project, its sessions, and what is folded. */
+  private sidebarProjectModel(): ProjectSessionModel {
+    return projectSessionModel({
+      projects: this.state.projects,
+      workspaces: this.state.workspaces,
+      sessions: this.sidebarSessionRows(),
+      sessionStates: this.sessionStateKinds(),
+      selectedProjectId: this.state.selectedProject?.id,
+      selectedSessionId: this.state.selectedSession?.id,
+      expandedProjectIds: this.sidebarExpandedProjectIds(),
+      query: this.sidebarQuery,
+    });
+  }
+
+  /**
+   * Which projects are unfolded: the reader's folds, plus the project on screen.
+   * A tree that folds away the reader's own project reads as "the session I am
+   * in is gone".
+   */
+  private sidebarExpandedProjectIds(): ReadonlySet<string> {
+    const openProject = this.state.selectedProject?.id;
+    if (openProject === undefined || this.expandedProjectIds.has(openProject)) return this.expandedProjectIds;
+    return new Set([...this.expandedProjectIds, openProject]);
+  }
+
+  /** How many projects the tree lists, as the heading's count. */
+  private sidebarProjectCount(): number {
+    return this.state.projects.length;
+  }
+
+  /** Why the tree is short of projects, when a server said why (absence is not negation). */
+  private sidebarProblem(): string {
+    return this.projectsRefusal().projectsProblem ?? "";
+  }
+
+  private openSidebarSession(sessionId: string): void {
+    const session = this.sidebarSessionRows().find((row) => row.id === sessionId);
+    if (session === undefined) return;
+    void this.openSessionFromQuickSwitcher(session, this.browsedMachineId());
+  }
+
+  /**
+   * One row folds its sessions and selects its project, the way the navigate
+   * page's rows do. A sidebar that only folded would send the reader to Go to to
+   * choose a project that is on screen under their cursor.
+   */
+  private toggleSidebarProject(projectId: string): void {
+    const expanded = new Set(this.expandedProjectIds);
+    if (expanded.has(projectId)) expanded.delete(projectId);
+    else expanded.add(projectId);
+    this.expandedProjectIds = expanded;
+    if (projectId !== this.state.selectedProject?.id) void this.navigateChoose("project", projectId);
+  }
+
+  /**
+   * The children of the session on screen, read from that session's record.
+   *
+   * Read on selection and not per render: the read is one request, and an answer
+   * for a session the reader left is dropped by the sequence number, so a slow
+   * reply cannot repaint the rail of a conversation that is no longer shown.
+   */
+  /**
+   * Whether the Subagents rail is somewhere a reader can see right now.
+   *
+   * The rail belongs to the conversation column, so its read happens when that
+   * column is on screen: a hidden tab, a phone with the session list stacked
+   * over the chat, a full-screen tool page. Reading for a surface nobody can
+   * see spends a request on a number no one is looking at, and it puts an extra
+   * call inside flows (an unread acknowledge, a reveal) that must stay quiet.
+   */
+  private subagentsSurfaceOnScreen(): boolean {
+    if (document.visibilityState !== "visible") return false;
+    if (this.navigateOpen) return false;
+    if (this.appShell.isMobileNavigationLayout && this.state.mainView !== "chat") return false;
+    return true;
+  }
+
+  /**
+   * The Subagents card's read, asked for by the reader and never by the app.
+   *
+   * The card is collapsed by default, so reading it at session selection would
+   * spend a request on a number nobody is looking at, and it would put a fetch
+   * inside flows that must stay quiet: an unread acknowledge, a tab reveal, a
+   * disconnect, a layout change. Until the card is opened the read is "not
+   * read", which is what it is: no count, no list, no zero.
+   */
+  private syncSubagentsRead(): void {
+    const session = this.state.selectedSession;
+    const machineId = selectedMachineId(this.state);
+    const key = session === undefined || !this.subagentsSurfaceOnScreen() ? "" : `${machineId}\n${session.id}`;
+    if (key === this.subagentsReadKey) return;
+    this.subagentsReadKey = key;
+    const sequence = ++this.subagentsReadSequence;
+    if (session === undefined || key === "" || !this.subagentsReadRequests.has(key)) {
+      this.subagentsRead = { kind: "unknown" };
       return;
     }
-    this.selectMainView(panel.id);
+    this.subagentsRead = { kind: "loading" };
+    const knownSessions = new Map(this.sidebarSessionRows().map((row) => [row.id, row]));
+    void readSubsessions(session.id, session.cwd, machineId).then(
+      (snapshot) => {
+        if (sequence !== this.subagentsReadSequence) return;
+        this.subagentsRead = { kind: "available", rows: subagentRows(snapshot.subsessions, knownSessions) };
+      },
+      (error: unknown) => {
+        if (sequence !== this.subagentsReadSequence) return;
+        const reason = error instanceof Error && error.message !== "" ? error.message : "the request did not answer";
+        this.subagentsRead = { kind: "unavailable", reason };
+      },
+    );
+  }
+
+  /** The reader opened the Subagents card: ask for this session's children now. */
+  private openSubagentsRead(): void {
+    const session = this.state.selectedSession;
+    if (session === undefined) return;
+    const key = `${selectedMachineId(this.state)}\n${session.id}`;
+    if (this.subagentsReadRequests.has(key) && this.subagentsReadKey === key) return;
+    this.subagentsReadRequests.add(key);
+    this.subagentsReadKey = "";
+    this.syncSubagentsRead();
+  }
+
+  private subagentRowsForScreen(): SubagentRow[] {
+    return this.subagentsRead.kind === "available" ? [...this.subagentsRead.rows] : [];
+  }
+
+  private subagentsDetail(): string {
+    const read = this.subagentsRead;
+    if (read.kind === "loading") return "reading";
+    if (read.kind === "unknown") return "not read";
+    if (read.kind === "unavailable") return "unavailable";
+    return read.rows.length === 0 ? "none tracked" : `${String(read.rows.length)} tracked`;
+  }
+
+  /**
+   * The panel that lists pi's subagent runs, by its own name.
+   *
+   * The rail counts the children the app tracks; the runs pi's subagent tool
+   * started belong to a plugin panel, and the rail names that panel rather than
+   * quietly pointing at a list it does not keep. A build with no such panel gets
+   * no sentence about it.
+   */
+  private subagentPluginPanelTitle(): string {
+    const panels = [...this.visibleGlobalPanels(), ...this.visibleWorkspacePanels()];
+    const panel = panels.find((candidate) => candidate.fronts === "session-subagents" || /subagent/iu.test(candidate.title));
+    return panel?.title ?? "";
+  }
+
+  /**
+   * The panel that lists the individual background runs, by its own name. The
+   * rail counts what the session states; a plugin that owns the run list offers
+   * its own surface, and the rail names it instead of implying its rows are the
+   * whole list.
+   */
+  private backgroundPluginPanelTitle(): string {
+    const panels = [...this.visibleGlobalPanels(), ...this.visibleWorkspacePanels()];
+    const panel = panels.find((candidate) => /background\s*runs/iu.test(candidate.title));
+    return panel?.title ?? "";
+  }
+
+  /** What is running behind the conversation, as the session states it. Absent means not reported. */
+  private backgroundRowsForScreen(): BackgroundRow[] | undefined {
+    if (this.state.selectedSession === undefined) return undefined;
+    if (this.state.status === undefined && this.state.activity === undefined) return undefined;
+    return backgroundRows({ status: this.state.status, activity: this.state.activity });
+  }
+
+  private backgroundDetail(): string {
+    const rows = this.backgroundRowsForScreen();
+    if (rows === undefined) return "not reported";
+    return rows.length === 0 ? "nothing running" : `${String(rows.length)} running`;
+  }
+
+  /** The filenames the loaded transcript's write tools named. */
+  private editedFileRowsForScreen(): EditedFileRow[] {
+    return editedFileRows(editedFilePaths(this.state.messages));
+  }
+
+  private editedFilesDetail(): string {
+    const rows = this.editedFileRowsForScreen();
+    return rows.length === 0 ? "this transcript" : `${String(rows.length)} in this transcript`;
+  }
+
+  private openShellToolTab(kind: WorkbenchKind): void {
+    const panel = this.workbenchSlots()[kind];
+    if (panel === undefined) {
+      this.setState(noticePatch(noticeForReader(WORKBENCH_UNAVAILABLE_MESSAGES[kind])));
+      return;
+    }
+    if (!isQualifiedContributionId(panel.id)) return;
+    if (this.appShell.isMobileNavigationLayout) {
+      this.selectMainView(panel.id);
+      return;
+    }
+    this.openWorkspaceTool(panel.id, { keepConversation: true });
   }
 
   /**
@@ -6978,31 +7286,50 @@ export class PiWebApp extends LitElement {
         <aside id="navigation-panel">
           <div class="navigation-stack">
             <running-sessions-panel class="running-sessions-panel"
-              .sessions=${this.withCreatingRows(this.quickSwitcherSessionsWithPins(), this.rowsMachineId())}
+              .rows=${runningSessionRows({
+                sessions: this.withCreatingRows(this.quickSwitcherSessionsWithPins(), this.rowsMachineId()),
+                statuses: state.sessionStatuses,
+                activities: state.sessionActivities,
+              })}
               .selectedSessionId=${state.selectedSession?.id}
-              .sessionStatuses=${state.sessionStatuses}
-              .sessionActivities=${state.sessionActivities}
-              .onSelectSession=${(session: SessionInfo) => { void this.openSessionFromQuickSwitcher(session, this.rowsMachineId()); }}
+              .onSelectSession=${(sessionId: string) => { this.openSidebarSession(sessionId); }}
             ></running-sessions-panel>
             <section class="projects-area">
-              <div class="projects-heading"><span>Projects</span><button type="button" title="New session" aria-label="New session" @click=${() => this.startNewSession()}>${renderCommandIcon()}</button></div>
-              ${this.renderNavigatePage(false)}
+              <project-sessions-panel
+                .model=${this.sidebarProjectModel()}
+                .query=${this.sidebarQuery}
+                .projectCount=${this.sidebarProjectCount()}
+                .selectedProjectId=${state.selectedProject?.id}
+                .selectedSessionId=${state.selectedSession?.id}
+                .loading=${this.navigateChoicesLoading()}
+                .problem=${this.sidebarProblem()}
+                .onQueryChange=${(query: string) => { this.sidebarQuery = query; }}
+                .onToggleProject=${(projectId: string) => { this.toggleSidebarProject(projectId); }}
+                .onSelectSession=${(sessionId: string) => { this.openSidebarSession(sessionId); }}
+                .onNewSession=${(projectId: string | undefined) => { this.startNewSession(projectId); }}
+                .onOpenAllProjects=${() => { void this.navigateWiden("project"); }}
+              ></project-sessions-panel>
             </section>
             ${this.renderNavigationPanelEdgeControl()}
-            <div class="sidebar-footer"><button type="button" aria-label="Settings" title="Settings" @click=${() => this.openSettings()}>${renderGearIcon()}</button><button type="button" aria-label="Actions" title="Actions" @click=${() => this.openActionPalette()}>${renderCommandIcon()}</button></div>
           </div>
         </aside>
         <main class="conversation-column ${mainViewClass(displayView)}" @dragenter=${this.handleChatDragEnter} @dragover=${this.handleChatDragOver} @dragleave=${this.handleChatDragLeave} @drop=${this.handleChatDrop}>
           <header class="conversation-header">
             <div class="conversation-title" title=${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}>${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}<div class="conversation-subtitle">${state.selectedProject?.name ?? ""}</div></div>
             <div class="conversation-header-actions">
-              <button type="button" aria-label="Settings" title="Settings" @click=${() => this.openSettings()}>${renderGearIcon()}</button>
-              <button type="button" aria-label="Actions" title="Actions" @click=${() => this.openActionPalette()}>${renderCommandIcon()}</button>
+              <button type="button" aria-label="Settings" title="Settings" @click=${() => { this.openSettings(); }}>${renderGearIcon()}</button>
+              <button type="button" aria-label="Actions" title="Actions" @click=${() => { this.openActionPalette(); }}>${renderCommandIcon()}</button>
             </div>
           </header>
           <div class="conversation-subagents">
-            <conversation-disclosure heading="Subagents" description="Child sessions" panelId="subagents-content">
-              <p>Subagent details are available when a selected session exposes child-session records.</p>
+            <conversation-disclosure heading="Subagents" panelId="subagents-content"
+              .icon=${renderRobotIcon()}
+              .count=${this.subagentsRead.kind === "available" ? this.subagentsRead.rows.length : undefined}
+              .detail=${this.subagentsDetail()}
+              .onExpand=${() => { this.openSubagentsRead(); }}
+            >
+              <subagents-panel .read=${this.subagentsRead} .pluginPanelTitle=${this.subagentPluginPanelTitle()}
+                .onSelectSession=${(sessionId: string) => { this.openSidebarSession(sessionId); }}></subagents-panel>
             </conversation-disclosure>
           </div>
           ${this.renderAppRowAt("main")}
@@ -7014,11 +7341,19 @@ export class PiWebApp extends LitElement {
               ${state.selectedSession.archived === true ? this.renderArchivedComposerSlot(state.selectedSession) : html`<prompt-editor .rowedMessageIds=${rowedClientMessageIds(state.messages, state.status?.queuedMessages ?? [])} .sessionId=${state.selectedSession.id} .cwd=${composerCwd(state)} .sessionPrompts=${this.sessionPromptsFor(state)} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${isSessionActive(state.status, state.activity)} .status=${state.status} .statusArrival=${state.statusArrival} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .onLocalCommand=${this.handleLocalCommand} .onOutgoingWritten=${this.handleOutgoingWritten} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .composerContributions=${this.plugins.getComposerContributions(selectedMachineId(state))} .onPluginNotice=${(message: string) => { this.setState(noticePatch(noticeForReader(message))); }}></prompt-editor>`}
               ${this.renderStatusBar(state)}
               <div class="conversation-bottom">
-                <conversation-disclosure heading="Background" description="Session activity">
-                  ${state.activity || state.status?.pendingMessageCount ? html`<p>${state.activity ? activityDockWords(sessionActivityCategory(state.status, state.activity) ?? "background", { activity: state.activity, status: state.status }) : ""}${state.status?.pendingMessageCount ? ` · ${state.status.pendingMessageCount} queued messages` : ""}</p>` : html`<p>No background activity is currently reported for this session.</p>`}
+                <conversation-disclosure heading="Background" panelId="background-content"
+                  .icon=${renderActivityIcon()}
+                  .count=${this.backgroundRowsForScreen()?.length ?? 0}
+                  .detail=${this.backgroundDetail()}
+                >
+                  <background-panel .rows=${this.backgroundRowsForScreen()} .pluginPanelTitle=${this.backgroundPluginPanelTitle()}></background-panel>
                 </conversation-disclosure>
-                <conversation-disclosure heading="Edited Files" description="Files recorded by write/edit tools">
-                  ${editedFilePaths(state.messages).length > 0 ? html`<ul class="edited-file-list">${editedFilePaths(state.messages).map((path) => html`<li><code>${path}</code></li>`)}</ul>` : html`<p>No written-file paths are present in the loaded session transcript.</p>`}
+                <conversation-disclosure heading="Edited Files" panelId="edited-files-content"
+                  .icon=${renderDocumentIcon()}
+                  .count=${this.editedFileRowsForScreen().length}
+                  .detail=${this.editedFilesDetail()}
+                >
+                  <edited-files-panel .rows=${this.editedFileRowsForScreen()}></edited-files-panel>
                 </conversation-disclosure>
               </div>
               ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
@@ -7027,6 +7362,7 @@ export class PiWebApp extends LitElement {
               ${state.thinkingDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} title=${state.thinkingDialog.title} .options=${state.thinkingDialog.options} .selectedValue=${state.thinkingDialog.selectedValue} .onPick=${(value: string) => { void this.pickThinking(value); }} .onCancel=${() => { this.setState({ thinkingDialog: undefined }); }}></command-picker>` : null}
             ` : this.renderNoSession()}
           </div>
+        </main>
         ${this.contextSheetOpen || !this.workspacePanelOnScreen() ? null : this.renderWorkspacePanelEdgeControl()}
         ${this.renderWorkspacePanel()}
         ${state.authDialog !== undefined ? html`<auth-dialog .state=${state.authDialog} .onChooseMethod=${(authType: "oauth" | "api_key") => { void this.auth.chooseLoginMethod(authType); }} .onSelectProvider=${(providerId: string, authType: "oauth" | "api_key") => { void this.auth.selectLoginProvider(providerId, authType); }} .onLogoutProvider=${(providerId: string) => { void this.auth.logoutProvider(providerId); }} .onOAuthInput=${(value: string) => { this.auth.updateOAuthInput(value); }} .onOAuthRespond=${(value?: string) => { void this.auth.respondOAuth(value); }} .onOAuthCancel=${() => { void this.auth.cancelOAuth(); }} .onCancel=${() => { this.auth.closeDialog(); }}></auth-dialog>` : null}

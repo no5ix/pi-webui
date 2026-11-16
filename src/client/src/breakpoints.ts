@@ -22,14 +22,22 @@ export const NARROW_CHAT_MAX_PX = 640;
 /** The mobile navigation layout: nav becomes a layer, the context bar appears. */
 export const MOBILE_NAVIGATION_MAX_PX = 760;
 
-/** Chat and a workspace tool render side by side from this width up. */
-export const WORKSPACE_SIDE_BY_SIDE_MIN_PX = 1181;
+/**
+ * Chat and a workspace tool render side by side from this width up: the three-column desktop
+ * floor. It is the narrowest composition that keeps a usable session column between the two
+ * panels (240 + 380 + 320 at the resize minimums), so no column can push another offscreen.
+ */
+export const WORKSPACE_SIDE_BY_SIDE_MIN_PX = 1024;
+
+/** Below the desktop floor, the workspace panel stacks under the session, tab bar and all. */
+export const WORKSPACE_STACKED_MAX_PX = WORKSPACE_SIDE_BY_SIDE_MIN_PX - 1;
 
 /** Short viewports (a phone keyboard up): vertical chrome shrinks. */
 export const SHORT_VIEWPORT_MAX_PX = 620;
 
 export const MOBILE_NAVIGATION_MEDIA_QUERY = `(max-width: ${String(MOBILE_NAVIGATION_MAX_PX)}px)`;
 export const DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY = `(min-width: ${String(WORKSPACE_SIDE_BY_SIDE_MIN_PX)}px)`;
+export const WORKSPACE_STACKED_MEDIA_QUERY = `(max-width: ${String(WORKSPACE_STACKED_MAX_PX)}px)`;
 export const SHORT_VIEWPORT_MEDIA_QUERY = `(max-height: ${String(SHORT_VIEWPORT_MAX_PX)}px)`;
 
 /**

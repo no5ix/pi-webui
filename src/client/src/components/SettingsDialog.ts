@@ -45,6 +45,23 @@ import type { ApprovedMachineOrigin } from "../../../shared/machineAccess";
 /** The reads the dialog makes, each read again by itself when it does not answer. */
 type SettingsRead = "config" | "access" | "plugins" | "packages" | "skills" | "mcp";
 
+/**
+ * The versions the machine's own components report, in one line.
+ *
+ * A machine that has not answered its runtime says "Not reported": the Info
+ * section is where a reader checks which build they are on, and an empty value
+ * reads as "no version" the way an empty session list reads as "no sessions".
+ */
+function machineRuntimeVersions(runtime: MachineRuntime | undefined): string {
+  const components = runtime?.components;
+  if (components === undefined) return "Not reported";
+  const parts = [
+    components.web.runtimeVersion === undefined ? undefined : `web ${components.web.runtimeVersion}`,
+    components.sessiond.runtimeVersion === undefined ? undefined : `session daemon ${components.sessiond.runtimeVersion}`,
+  ].filter((part) => part !== undefined);
+  return parts.length === 0 ? "Not reported" : parts.join(" · ");
+}
+
 @customElement("settings-dialog")
 export class SettingsDialog extends LitElement {
   @state() private phoneLayout = false;
@@ -387,20 +404,23 @@ export class SettingsDialog extends LitElement {
     if (this.activeSection === "info") {
       return html`<section class="settings-info">
         <h2>PI WEB information</h2>
-        <p>Information currently reported to this Settings dialog.</p>
+        <p>What this browser and the machine on screen report about themselves.</p>
         <dl>
           <dt>Client version</dt><dd>${typeof __PI_WEB_CLIENT_VERSION__ === "string" ? __PI_WEB_CLIENT_VERSION__ : "Unknown"}</dd>
           <dt>Selected machine</dt><dd>${this.machine?.name ?? "Local machine"}</dd>
-          <dt>Machine runtime</dt><dd>${this.machineRuntime?.version ?? "Not reported"}</dd>
+          <dt>Machine runtime</dt><dd>${machineRuntimeVersions(this.machineRuntime)}</dd>
         </dl>
       </section>`;
     }
     if (this.activeSection === "updates") {
       return html`<section class="settings-updates">
         <h2>Updates</h2>
-        <p>PI WEB update behavior is configured through the machine update command.</p>
-        <p>Open <button type="button" class="settings-inline-link" @click=${() => this.navigate("general")}>General settings</button> to review that command.</p>
-        <p class="muted">This dialog does not currently receive a live update-status feed, so it does not claim that an update check has completed.</p>
+        <dl>
+          <dt>This browser</dt><dd>${typeof __PI_WEB_CLIENT_VERSION__ === "string" ? __PI_WEB_CLIENT_VERSION__ : "Not reported"}</dd>
+          <dt>${this.machine?.name ?? "Local machine"}</dt><dd>${machineRuntimeVersions(this.machineRuntime)}</dd>
+        </dl>
+        <p>PI WEB is installed on the machine as an npm package. Pi Packages is where that package is read, checked, and updated.</p>
+        <button type="button" class="settings-inline-link" @click=${() => { this.navigate("packages"); }}>Open Pi Packages</button>
       </section>`;
     }
     // Keep the section -> panel routing in sync with the public
@@ -1322,7 +1342,7 @@ export class SettingsDialog extends LitElement {
 
     .settings-info h2, .settings-updates h2 { margin:0 0 var(--pi-space-4); font-size:var(--pi-text-lg); }
     .settings-info p, .settings-updates p { color:var(--pi-text-secondary); line-height:1.55; }
-    .settings-info dl { display:grid; grid-template-columns:minmax(120px, auto) minmax(0,1fr); gap:8px 16px; margin-top:20px; }
+    .settings-info dl { display:grid; grid-template-columns:minmax(120px, auto) minmax(0,1fr); gap:var(--pi-space-4) var(--pi-space-7); margin-top:var(--pi-space-8); }
     .settings-info dt { color:var(--pi-muted); }
     .settings-info dd { margin:0; overflow-wrap:anywhere; }
     .settings-inline-link { border:0; padding:0; background:transparent; color:var(--pi-accent); text-decoration:underline; cursor:pointer; font:inherit; }

@@ -1120,7 +1120,7 @@ function scopeOf(machineId: string | undefined, sourcePluginId: string | undefin
   return { ...(machineId === undefined ? {} : { machineId }), ...(sourcePluginId === undefined ? {} : { sourcePluginId }) };
 }
 
-function isQualifiedContributionId(value: string): value is QualifiedContributionId {
+export function isQualifiedContributionId(value: string): value is QualifiedContributionId {
   return qualifiedContributionIdPattern.test(value);
 }
 

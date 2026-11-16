@@ -38,8 +38,8 @@ export type PanelResizeConstraintsBySide = Partial<Record<ResizablePanelSide, Pa
 
 export const PANEL_SIZE_STORAGE_KEY = "pi-web:panel-sizes:v1";
 export const PANEL_RESIZE_CONSTRAINTS = {
-  navigation: { minWidth: 180, maxWidth: 4096, defaultWidth: 340, keyboardStep: 24, largeKeyboardStep: 72 },
-  workspace: { minWidth: 240, maxWidth: 4096, defaultWidth: 480, keyboardStep: 24, largeKeyboardStep: 72 },
+  navigation: { minWidth: 220, maxWidth: 4096, defaultWidth: 280, keyboardStep: 24, largeKeyboardStep: 72 },
+  workspace: { minWidth: 320, maxWidth: 4096, defaultWidth: 400, keyboardStep: 24, largeKeyboardStep: 72 },
 } as const satisfies Record<ResizablePanelSide, PanelResizeConstraints>;
 
 interface StoredPanelSizeEnvelope {
