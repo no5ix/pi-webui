@@ -10,10 +10,11 @@ function edge(previous: SessionActivityCategory | undefined, next: SessionActivi
 }
 
 describe("the notification edge", () => {
-  it("calls a finished task completed, from every kind of work", () => {
+  it("calls a finished task completed, from agent work but not session startup", () => {
     expect(edge("working", "idle")).toBe("completed");
-    expect(edge("opening", "idle")).toBe("completed");
     expect(edge("background", "idle")).toBe("completed");
+    // Opening is runtime construction and extension loading. Ending that phase is not a task.
+    expect(edge("opening", "idle")).toBe("none");
   });
 
   it("calls a session that died mid-task failed, from every kind of work", () => {
