@@ -2,7 +2,6 @@
 # Production foreground stack with the same Tailscale lifecycle as scripts/dev.sh.
 # Starts the built session daemon and web/API server (no Vite or file watchers).
 set -uo pipefail
-set -o pipefail
 
 PROD_PORT="${PI_WEB_PROD_TAILSCALE_PORT:-8504}"
 PROD_HOST_SUFFIX="${PI_WEB_PROD_TAILSCALE_HOST_SUFFIX:-.ts.net}"
