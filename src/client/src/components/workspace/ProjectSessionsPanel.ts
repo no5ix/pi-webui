@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { interactiveSurfaceStyles, pageScrollerStyles } from "../shared";
+import { workspaceBandStyles } from "../appShell/workspaceBandStyles";
 import type { ProjectSessionModel } from "../../workspace/projectSessionModel";
 import { renderCrossIcon, renderPlusIcon, renderProjectIcon, renderSearchIcon, uiIconStyle } from "../uiIcons";
 import { disclosureIconStyle, renderDisclosureIcon } from "../disclosureIcon";
@@ -82,7 +83,7 @@ export class ProjectSessionsPanel extends LitElement {
                 ${group.expanded ? html`
                   <div class="sessions">
                     ${group.rows.map((row) => html`
-                      <button class="session" type="button" role="treeitem" data-selected=${row.selected ? "true" : "false"}
+                      <button class="session" type="button" role="treeitem" data-selected=${row.selected ? "true" : "false"} aria-selected=${row.selected ? "true" : "false"}
                         title=${row.label} @click=${() => this.onSelectSession?.(row.id)}>
                         <span class="state-dot" data-state=${row.state} aria-hidden="true"></span>
                         <span class="session-name" data-unopenable=${row.unopenable ? "true" : "false"}>${row.label}</span>
@@ -101,48 +102,57 @@ export class ProjectSessionsPanel extends LitElement {
 
   static override styles = [
     interactiveSurfaceStyles,
+    workspaceBandStyles,
     pageScrollerStyles,
     css`${unsafeCSS(uiIconStyle)}`,
     css`${unsafeCSS(disclosureIconStyle)}`,
     css`
       :host { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; }
       .panel { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; }
-      .head { box-sizing: border-box; flex: none; display: flex; align-items: center; gap: var(--pi-space-3); min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-6); color: var(--pi-text-secondary); font: var(--pi-text-xs) var(--pi-font-ui); }
-      .title { font-weight: var(--pi-weight-semibold); letter-spacing: 0.02em; }
-      .count { color: var(--pi-muted); font-weight: var(--pi-weight-regular); font-variant-numeric: tabular-nums; }
-      .new { margin-inline-start: auto; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); cursor: pointer; }
+      .head { box-sizing: border-box; flex: none; display: flex; align-items: center; gap: var(--pi-space-3); min-height: var(--pi-control-height-comfort); padding: var(--pi-space-3) var(--pi-row-edge) var(--pi-space-2); color: var(--pi-text-bright); font: var(--pi-text-md) var(--pi-font-ui); font-weight: var(--pi-weight-semibold); }
+      .title { letter-spacing: var(--pi-tracking-tight); }
+      .count { color: var(--pi-muted); font-size: var(--pi-text-sm); font-weight: var(--pi-weight-regular); font-variant-numeric: tabular-nums; }
+      .new { margin-inline-start: auto; width: var(--pi-control-height); height: var(--pi-control-height); display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); cursor: pointer; }
 @media (hover: hover) { .new:hover { background: var(--pi-surface-hover); color: var(--pi-text); } }
-      .search { flex: none; position: relative; display: flex; align-items: center; margin: 0 var(--pi-space-5) var(--pi-space-4); }
-      .search-icon { position: absolute; inset-inline-start: 7px; display: inline-flex; color: var(--pi-dim); pointer-events: none; }
-      .search-icon .ui-icon { width: 12px; height: 12px; }
-      .search-input { box-sizing: border-box; width: 100%; min-width: 0; height: var(--pi-control-height); padding: 0 26px; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); font: var(--pi-text-xs) var(--pi-font-ui); }
-      .search-input:focus { border-color: var(--pi-accent-border); background: var(--pi-surface); outline: none; }
+      .new:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+      .search { flex: none; position: relative; display: flex; align-items: center; margin: 0 var(--pi-row-edge) var(--pi-space-4); }
+      .search-icon { position: absolute; inset-inline-start: var(--pi-space-2); display: inline-flex; color: var(--pi-dim); pointer-events: none; }
+      .search-icon .ui-icon { width: 13px; height: 13px; }
+      .search-input { box-sizing: border-box; width: 100%; min-width: 0; height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-9); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); font: var(--pi-text-base) var(--pi-font-ui); }
+      .search-input::placeholder { color: var(--pi-muted); }
+      .search-input:focus-visible { border-color: var(--pi-accent-border); background: var(--pi-surface); outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
       .search-input::-webkit-search-cancel-button { display: none; }
-      .search-clear { position: absolute; inset-inline-end: 5px; width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); cursor: pointer; }
-      .search-clear .ui-icon { width: 11px; height: 11px; }
+      .search-clear { position: absolute; inset-inline-end: var(--pi-space-2); width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); cursor: pointer; }
+      .search-clear .ui-icon { width: 12px; height: 12px; }
 @media (hover: hover) { .search-clear:hover { background: var(--pi-surface-hover); color: var(--pi-text); } }
-      .all-projects { flex: none; align-self: start; margin: 0 var(--pi-space-5) var(--pi-space-3); padding: 3px var(--pi-space-4); border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; }
+      .all-projects { flex: none; align-self: start; margin: 0 var(--pi-row-edge) var(--pi-space-3); padding: var(--pi-space-1) var(--pi-space-3); border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
 @media (hover: hover) { .all-projects:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
-      .all-projects[data-selected="true"] { background: var(--pi-selection-bg); color: var(--pi-text); border-color: var(--pi-accent-border); }
-      .note { flex: none; margin: 0 var(--pi-space-5) var(--pi-space-3); color: var(--pi-muted); font-size: var(--pi-text-2xs); }
+      .all-projects[data-selected="true"] { background: var(--pi-selection-bg); color: var(--pi-text-bright); border-color: transparent; }
+      .note { flex: none; margin: 0 var(--pi-row-edge) var(--pi-space-3); color: var(--pi-muted); font-size: var(--pi-text-2xs); }
       .note.problem { color: var(--pi-warning); }
-      .tree { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 var(--pi-space-3) var(--pi-space-5); }
+      .tree { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 calc(var(--pi-row-edge) - var(--pi-space-3)) var(--pi-space-5); }
       .group { display: flex; flex-direction: column; }
-      .project { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-4); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: start; font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; }
+      .project { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-3); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: start; font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
 @media (hover: hover) { .project:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
-      .group[data-active="true"] > .project { color: var(--pi-text); background: var(--pi-surface-hover); }
-      .group[data-active="true"] .folder { color: var(--pi-accent); }
+      .project:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+      /* The project that holds the open session is marked by its own words and
+         its folder, not by a fill: the fill is what hover and the chosen row use,
+         and a container state that wears the same fill as a row state cannot be
+         told apart from them. */
+      .group[data-active="true"] > .project { color: var(--pi-text-bright); background: transparent; }
+      .group[data-active="true"] .folder { color: var(--pi-text-secondary); }
       .chevron { flex: none; display: inline-flex; color: var(--pi-dim); }
       .chevron .disclosure-icon { width: 12px; height: 12px; }
       .folder { flex: none; display: inline-flex; color: var(--pi-dim); }
-      .folder .ui-icon { width: 15px; height: 15px; }
+      .folder .ui-icon { width: 16px; height: 16px; }
       .project-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--pi-weight-medium); }
       .project-name[data-missing="true"] { color: var(--pi-muted); text-decoration: line-through; }
-      .project-count { flex: none; color: var(--pi-dim); font-variant-numeric: tabular-nums; font-size: var(--pi-text-2xs); }
+      .project-count { flex: none; color: var(--pi-dim); font-variant-numeric: tabular-nums; font-size: var(--pi-text-xs); }
       .sessions { display: flex; flex-direction: column; padding-inline-start: var(--pi-space-6); }
-      .session { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-4); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: start; font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; }
+      .session { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-3); border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: start; font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
 @media (hover: hover) { .session:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
-      .session[data-selected="true"] { background: var(--pi-selection-bg); color: var(--pi-text); }
+      .session:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+      .session[data-selected="true"] { background: var(--pi-selection-bg); color: var(--pi-text-bright); }
       .state-dot { flex: none; width: var(--pi-dot-sm); height: var(--pi-dot-sm); border-radius: 50%; background: transparent; }
       .state-dot[data-state="working"] { background: var(--pi-success); }
       .state-dot[data-state="opening"] { background: var(--pi-accent); }
@@ -151,11 +161,11 @@ export class ProjectSessionsPanel extends LitElement {
       .state-dot[data-state="error"] { background: var(--pi-danger); }
       .session-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .session-name[data-unopenable="true"] { color: var(--pi-muted); }
-      .age { flex: none; color: var(--pi-dim); font-variant-numeric: tabular-nums; font-size: var(--pi-text-2xs); }
-      .show-more { box-sizing: border-box; align-self: start; margin: 2px 0 0 var(--pi-space-4); padding: 2px var(--pi-space-3); border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-accent); font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; }
-@media (hover: hover) { .show-more:hover { background: var(--pi-row-hover); } }
-      .empty { margin: 0; padding: var(--pi-space-3) var(--pi-space-4); color: var(--pi-muted); font-size: var(--pi-text-2xs); }
-      .group-empty { padding: 2px var(--pi-space-4); }
+      .age { flex: none; color: var(--pi-dim); font-variant-numeric: tabular-nums; font-size: var(--pi-text-xs); }
+      .show-more { box-sizing: border-box; align-self: start; margin: var(--pi-space-1) 0 0 var(--pi-space-3); padding: var(--pi-space-1) var(--pi-space-3); border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-text-secondary); font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
+@media (hover: hover) { .show-more:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
+      .empty { margin: 0; padding: var(--pi-space-3) var(--pi-space-3); color: var(--pi-muted); font-size: var(--pi-text-xs); }
+      .group-empty { padding: var(--pi-space-1) var(--pi-space-3); }
     `,
   ];
 }

@@ -147,7 +147,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      rhythm: the transcript read as a table of unrelated widths before, with the
      events row flush left against an inset message. Desktop and phone differ only in
      how much room the gutter gets, never in whether the rows line up. */
-  .chat { --pi-row-gutter: var(--pi-space-6); --pi-row-inset: var(--pi-space-6); --pi-row-rhythm: var(--pi-space-7); flex: 1 1 auto; --pi-chat-sticky-top: calc(-1 * var(--pi-space-9)); height: 100%; min-height: 0; overflow: auto; overflow-anchor: none; padding: var(--pi-space-9) var(--pi-chat-gutter) var(--pi-space-7); box-sizing: border-box;
+  .chat { --pi-row-gutter: var(--pi-space-6); --pi-row-inset: var(--pi-space-6); --pi-row-rhythm: var(--pi-space-7); font-size: var(--pi-text-md); flex: 1 1 auto; --pi-chat-sticky-top: calc(-1 * var(--pi-space-9)); height: 100%; min-height: 0; overflow: auto; overflow-anchor: none; padding: var(--pi-space-9) var(--pi-chat-gutter) var(--pi-space-7); box-sizing: border-box;
   /* The top edge cuts scrolled lines mid-glyph with no card boundary to the
      left or right (assistant surfaces are border-less), which read as stray
      text. A short fade makes the same clip read as intentional depth. */
@@ -177,7 +177,7 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
      twice narrows the held card. Every kind of row starts its text on the same edge. */
   .msg.event-group > summary, .session-activity, .msg-notice { padding-inline: var(--pi-row-inset); }
   .waiting-slot, .group-msg { padding-inline: 0; }
-  .activity-dock { overflow: hidden; flex: 0 0 auto; margin: 0 var(--pi-chat-gutter) var(--pi-space-3); margin-top: calc(-1 * var(--pi-space-4)); z-index: var(--pi-layer-sticky); display: flex; align-items: center; gap: var(--pi-space-4); min-width: 0; box-sizing: border-box; border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-bg-overlay); color: var(--pi-muted); padding: var(--pi-space-4) var(--pi-space-6); font-size: var(--pi-text-sm); pointer-events: none; box-shadow: var(--pi-elevation-2); backdrop-filter: blur(6px); }
+  .activity-dock { overflow: hidden; flex: 0 0 auto; margin: 0 var(--pi-chat-gutter) var(--pi-space-3); margin-top: calc(-1 * var(--pi-space-4)); z-index: var(--pi-layer-sticky); display: flex; align-items: center; gap: var(--pi-space-4); min-width: 0; box-sizing: border-box; border: 0; border-radius: var(--pi-radius-pill); background: var(--pi-bg-overlay); color: var(--pi-muted); padding: var(--pi-space-2) var(--pi-space-4); font-size: var(--pi-text-sm); pointer-events: none; backdrop-filter: blur(6px); }
   /* Idle is the state nobody needs a full-width banner for: keep the signal,
      drop the bar that looked like an empty card above the composer.
 
@@ -448,16 +448,25 @@ export const chatStyles = css`${unsafeCSS(uiIconStyle)}
   .msg.user .msg-action[data-action="retry"] { color: var(--pi-accent); border-color: var(--pi-accent); }
   /* Who spoke is metadata, so it is set as metadata: the smallest legal size, the
      tracking that makes a short word read as a label, and the muted colour. */
-  .label { display: block; min-width: 0; overflow: hidden; color: var(--pi-muted); font: var(--pi-text-2xs) var(--pi-font-mono); letter-spacing: var(--pi-tracking-label); text-transform: uppercase; line-height: inherit; white-space: nowrap; text-overflow: ellipsis; }
-  .msg-header .label { margin: 0; }
+  .label { display: block; min-width: 0; overflow: hidden; color: var(--pi-muted); font: var(--pi-text-2xs) var(--pi-font-ui); letter-spacing: var(--pi-tracking-label); text-transform: uppercase; line-height: inherit; white-space: nowrap; text-overflow: ellipsis; }
+  .msg-header .label { margin: 0; flex: 0 0 auto; }
   /* The row under a response: who is not repeated here, this row answers when and what the reader
      can do with it. It is never sticky - the header strip above already pins the card's identity,
      and a second pinned strip would pin the copy button over the text it describes. */
   .msg-meta-row { display: flex; align-items: center; justify-content: flex-end; gap: var(--pi-space-5); min-height: 22px; margin-top: var(--pi-space-3); }
+  /* A message's meta row is the flex item next to the role label: without an
+     explicit basis it keeps its content width (a full timestamp plus a model id)
+     and pushes off the right edge of a phone. It shrinks, and the text inside
+     tail-clips. */
+  .msg-header > .msg-meta-row, .msg > .msg-meta-row { flex: 1 1 auto; min-width: 0; }
   .msg-meta-row .label { margin: 0; }
   /* Quiet, but never below the non-text contrast floor: .28 measured 1.37:1
      at rest, and the round-four remedy had only reached the coarse branch. */
-  .msg-meta { min-width: 0; border: 0; background: transparent; color: var(--pi-muted); padding: 0; font: var(--pi-text-2xs) var(--pi-font-ui); line-height: inherit; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pi-motion-fast) var(--pi-ease); cursor: pointer; user-select: text; -webkit-user-select: text; }
+  .msg-meta { min-width: 0; border: 0; background: transparent; color: var(--pi-muted); padding: 0; font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity var(--pi-motion-fast) var(--pi-ease); cursor: pointer; user-select: text; -webkit-user-select: text; }
+  /* A model id is the longest thing a row can say, and at full length the meta
+     line is wider than the sentence it describes. It is capped, keeps its
+     whole text in the tooltip, and opens to full width when tapped. */
+  .msg-meta:not(.expanded) { max-width: 46ch; }
   .msg:focus-within .msg-meta-row .msg-meta, .group-msg:focus-within .msg-meta-row .msg-meta, .msg-meta:focus, .msg-meta.expanded { opacity: 1; }
   @media (hover: hover) { .msg:hover .msg-meta-row .msg-meta, .group-msg:hover .msg-meta-row .msg-meta { opacity: 1; } }
   .msg-meta.expanded { flex: 1 1 auto; max-width: 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }

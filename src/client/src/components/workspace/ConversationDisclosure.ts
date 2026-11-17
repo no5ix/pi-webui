@@ -63,16 +63,20 @@ export class ConversationDisclosure extends LitElement {
     css`${unsafeCSS(disclosureIconStyle)}`,
     css`
       :host { display: block; flex: none; }
-      .card { border: 1px solid var(--pi-rail-border, var(--pi-border)); border-radius: var(--pi-radius-lg); background: var(--pi-rail-bg, var(--pi-surface-raised)); overflow: hidden; }
-      .toggle { width: 100%; min-height: var(--pi-control-height-touch); box-sizing: border-box; display: flex; align-items: center; gap: var(--pi-space-4); padding: 0 var(--pi-space-6); border: 0; border-radius: inherit; background: transparent; color: var(--pi-text); text-align: start; font: var(--pi-text-sm) var(--pi-font-ui); cursor: pointer; }
-@media (hover: hover) { .toggle:hover { background: color-mix(in srgb, var(--pi-surface-hover) 70%, transparent); } }
+      /* A disclosure inside the conversation is a row of the transcript, not a
+         card on top of it: one muted border and the card surface, so five of
+         them stacked do not read as five products. */
+      .card { border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-lg); background: var(--pi-surface-card); overflow: hidden; }
+      .toggle { width: 100%; min-height: var(--pi-control-height-touch); box-sizing: border-box; display: flex; align-items: center; gap: var(--pi-space-4); padding: 0 var(--pi-space-6); border: 0; border-radius: inherit; background: transparent; color: var(--pi-text); text-align: start; font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
+@media (hover: hover) { .toggle:hover { background: var(--pi-row-hover); } }
+      .toggle:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
       .icon { display: inline-flex; color: var(--pi-text-secondary); }
       .icon .ui-icon { width: 16px; height: 16px; }
-      .heading { font-weight: var(--pi-weight-semibold); letter-spacing: 0.01em; }
-      .count { color: var(--pi-muted); font-weight: var(--pi-weight-regular); font-variant-numeric: tabular-nums; }
+      .heading { font-size: var(--pi-text-md); font-weight: var(--pi-weight-semibold); letter-spacing: var(--pi-tracking-tight); color: var(--pi-text-bright); }
+      .count { color: var(--pi-muted); font-weight: var(--pi-weight-regular); font-size: var(--pi-text-sm); font-variant-numeric: tabular-nums; }
       .detail { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: end; color: var(--pi-muted); font-size: var(--pi-text-xs); }
       .chevron { margin-inline-start: auto; display: inline-flex; color: var(--pi-muted); }
-      .content { max-height: 220px; overflow: auto; padding: var(--pi-space-2) var(--pi-space-6) var(--pi-space-5); border-top: 1px solid var(--pi-rail-border, var(--pi-border)); color: var(--pi-text-secondary); font-size: var(--pi-text-xs); }
+      .content { max-height: 220px; overflow: auto; padding: var(--pi-space-3) var(--pi-space-6) var(--pi-space-5); border-top: 1px solid var(--pi-divider); color: var(--pi-text-secondary); font-size: var(--pi-text-xs); }
       :host([disabled]) .toggle { cursor: default; opacity: 0.6; }
     `,
   ];

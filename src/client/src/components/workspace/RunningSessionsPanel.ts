@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { interactiveSurfaceStyles, pageScrollerStyles } from "../shared";
+import { workspaceBandStyles } from "../appShell/workspaceBandStyles";
 import type { RunningSessionRow } from "../../workspace/runningSessionRows";
 import { uiIconStyle } from "../uiIcons";
 import { disclosureIconStyle, renderDisclosureIcon } from "../disclosureIcon";
@@ -42,7 +43,7 @@ export class RunningSessionsPanel extends LitElement {
             ${count === 0
               ? html`<p class="empty">No sessions are running.</p>`
               : this.rows.map((row) => html`
-                <button type="button" role="listitem" class="row" data-selected=${row.id === this.selectedSessionId ? "true" : "false"}
+                <button type="button" role="listitem" class="row" data-selected=${row.id === this.selectedSessionId ? "true" : "false"} aria-current=${row.id === this.selectedSessionId ? "true" : "false"}
                   @click=${() => this.onSelectSession?.(row.id)}>
                   <span class="dot" data-state=${row.state} aria-hidden="true"></span>
                   <span class="name" title=${row.label}>${row.label}</span>
@@ -55,26 +56,33 @@ export class RunningSessionsPanel extends LitElement {
 
   static override styles = [
     interactiveSurfaceStyles,
+    workspaceBandStyles,
     pageScrollerStyles,
     css`${unsafeCSS(uiIconStyle)}`,
     css`${unsafeCSS(disclosureIconStyle)}`,
     css`
-      :host { display: flex; flex: none; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--pi-border-muted); }
-      .section { display: flex; flex: none; flex-direction: column; min-height: 0; max-height: min(38%, 260px); }
+      :host { display: flex; flex: none; flex-direction: column; min-height: 0; }
+      .section { display: flex; flex: none; flex-direction: column; min-height: 0; }
       .section[data-collapsed="true"] { max-height: none; }
-      .head { box-sizing: border-box; flex: none; display: flex; align-items: center; gap: var(--pi-space-3); min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-6); border: 0; border-radius: 0; background: transparent; color: var(--pi-text-secondary); text-align: start; font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; }
-@media (hover: hover) { .head:hover { background: var(--pi-surface-hover); color: var(--pi-text); } }
-      .title { font-weight: var(--pi-weight-semibold); letter-spacing: 0.02em; }
-      .count { color: var(--pi-muted); font-weight: var(--pi-weight-regular); font-variant-numeric: tabular-nums; }
+      /* The sidebar's first row is the header band: the same height and the same
+         rule as the session header and the workbench tabs above the window. */
+      .head { box-sizing: border-box; flex: none; display: flex; align-items: center; gap: var(--pi-space-3); min-height: var(--pi-panel-band-height); padding: 0 var(--pi-row-edge); border: 0; border-bottom: 1px solid var(--pi-divider); border-radius: 0; background: transparent; color: var(--pi-text-bright); text-align: start; font: var(--pi-text-md) var(--pi-font-ui); font-weight: var(--pi-weight-semibold); cursor: pointer; }
+@media (hover: hover) { .head:hover { background: var(--pi-surface-hover); } }
+      .head:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+      .title { letter-spacing: var(--pi-tracking-tight); }
+      .count { color: var(--pi-muted); font-size: var(--pi-text-sm); font-weight: var(--pi-weight-regular); font-variant-numeric: tabular-nums; }
       .chevron { margin-inline-start: auto; display: inline-flex; color: var(--pi-muted); }
       .chevron .disclosure-icon { width: 14px; height: 14px; }
-      .rows { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 var(--pi-space-3) var(--pi-space-4); }
-      .row { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-4); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text); text-align: start; font: var(--pi-text-xs) var(--pi-font-ui); cursor: pointer; }
+      .rows { flex: 0 1 auto; min-height: 0; max-height: min(180px, 26dvh); overflow: auto; padding: var(--pi-space-2) calc(var(--pi-row-edge) - var(--pi-space-3)) var(--pi-space-4); }
+      .row { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-3); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text); text-align: start; font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
 @media (hover: hover) { .row:hover { background: var(--pi-row-hover); } }
-      .row[data-selected="true"] { background: var(--pi-selection-bg); }
+      .row:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+      /* The chosen row is a fill, not an outlined chip: the mark of a choice in
+         this app is the surface the row sits on, and its words stay bright ink. */
+      .row[data-selected="true"] { background: var(--pi-selection-bg); color: var(--pi-text-bright); }
       .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .elapsed { flex: none; color: var(--pi-muted); font-variant-numeric: tabular-nums; font-size: var(--pi-text-2xs); }
-      .dot { flex: none; width: width: var(--pi-dot-md); height: height: var(--pi-dot-md); border-radius: 50%; background: var(--pi-dim); }
+      .dot { flex: none; width: var(--pi-dot-md); height: var(--pi-dot-md); border-radius: 50%; background: var(--pi-dim); }
       .dot[data-state="working"] { background: var(--pi-success); }
       .dot[data-state="opening"] { background: var(--pi-accent); }
       .dot[data-state="background"] { background: var(--pi-accent); opacity: 0.7; }

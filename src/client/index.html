@@ -104,6 +104,19 @@
         --pi-panel-header-height: 44px;
         --pi-panel-header-control-height: 36px;
         --pi-bar-inset: var(--pi-space-4);
+        /* The workspace header band: the sidebar's first row, the session header
+           and the workbench tab strip are one band of one height with one
+           continuous rule under them, so the top of the window reads as a single
+           bar. They had been 44, 52 and 54px, which made the top edge ragged. */
+        --pi-panel-band-height: 64px;
+        --pi-panel-band-control-height: 36px;
+        /* The wider bar inset: a panel that carries a tree, a tab strip or a
+           search field starts its content further in than a phone toolbar, and
+           every one of them wants the same answer. */
+        --pi-bar-inset-comfort: var(--pi-space-7);
+        /* The edge a sidebar row starts its mark at, shared by the section
+           heads, the search field and the tree so they line up. */
+        --pi-row-edge: var(--pi-space-7);
         /* Touch floor first: a control is 44px on a finger, 32px under a mouse.
            The comfort step between them is what search fields, model chips and
            menu rows want; leaving it unnamed is how 30, 34, 36, 38 and 40 all

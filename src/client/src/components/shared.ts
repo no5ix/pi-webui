@@ -242,22 +242,26 @@ export const workspacePanelStyles = css`
 
   ${attachmentZoomStyles}
   :host { display: flex; flex-direction: column; min-height: 0; color: var(--pi-text); background: var(--pi-bg); font: var(--pi-text-sm) var(--pi-font-ui); line-height: inherit; container-type: inline-size; }
-  .workspace-tool-toolbar { flex: 0 0 auto; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--pi-space-4); min-height: var(--pi-panel-header-height); padding: var(--pi-space-2) var(--pi-bar-inset); border-bottom: 1px solid var(--pi-border-muted); }
-  .workspace-tool-toolbar button { box-sizing: border-box; min-height: var(--pi-panel-header-control-height); }
+  .workspace-tool-toolbar { flex: 0 0 auto; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--pi-space-2); min-height: var(--pi-panel-header-height); padding: var(--pi-space-2) var(--pi-bar-inset); border-bottom: 1px solid var(--pi-divider); }
+  /* A tool's own actions belong to the panel, not to the page: a bordered box
+     beside the tab strip made every plugin look like a separate product. */
+  .workspace-tool-toolbar button { box-sizing: border-box; min-height: var(--pi-panel-header-control-height); padding: 0 var(--pi-space-4); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); }
   .workspace-tool-toolbar button:disabled { opacity: var(--pi-disabled-opacity); cursor: wait; }
-  button { box-sizing: border-box; min-height: var(--pi-control-height); font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; display: inline-flex; align-items: center; gap: var(--pi-space-3); border: 1px solid var(--pi-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text); padding: var(--pi-space-3) var(--pi-space-4); cursor: pointer; }
-  button.selected { border-color: var(--pi-accent); background: var(--pi-selection-bg); }
+  button { box-sizing: border-box; min-height: var(--pi-control-height); font: var(--pi-text-xs) var(--pi-font-ui); line-height: inherit; display: inline-flex; align-items: center; gap: var(--pi-space-3); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); padding: var(--pi-space-3) var(--pi-space-4); cursor: pointer; }
+  button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+  @media (hover: hover) { .workspace-tool-toolbar button:hover:not(:disabled) { background: var(--pi-surface-hover); color: var(--pi-text); } }
+  button.selected { border-color: var(--pi-accent-border); background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
   .panel-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
   .empty-state { box-sizing: border-box; width: min(100%, 380px); margin: auto; padding: var(--pi-space-9); display: grid; gap: var(--pi-space-4); color: var(--pi-muted); text-align: center; }
-  .empty-state h2 { margin: 0; color: var(--pi-text); font-family: var(--pi-font-display); font-size: var(--pi-text-lg); font-weight: var(--pi-weight-semibold); letter-spacing: -0.01em; line-height: 1.3; }
-  .empty-state p { margin: 0; line-height: 1.45; }
+  .empty-state h2 { margin: 0; color: var(--pi-text); font-family: var(--pi-font-display); font-size: var(--pi-text-lg); font-weight: var(--pi-weight-semibold); letter-spacing: var(--pi-tracking-tight); line-height: var(--pi-leading-normal); }
+  .empty-state p { margin: 0; line-height: var(--pi-leading-normal); }
   small, .muted { color: var(--pi-muted); font-size: var(--pi-text-2xs); }
   .workspace-label-item { box-sizing: border-box; border: 1px solid var(--pi-border-muted); border-radius: var(--pi-radius-xs); background: var(--pi-surface); color: var(--pi-muted); padding: 0 var(--pi-space-2); font-size: var(--pi-text-2xs); line-height: 16px; }
   .workspace-label-item, .workspace-label-render, .workspace-label-separator { color: var(--pi-muted); }
   .workspace-label-link { color: var(--pi-accent); text-decoration: none; }
   .workspace-label-link:focus { text-decoration: underline; }
   @media (hover: hover) { .workspace-label-link:hover { text-decoration: underline; } }
-  .toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: var(--pi-space-4); box-sizing: border-box; min-height: var(--pi-panel-header-height); padding: 0 var(--pi-bar-inset); border-bottom: 1px solid var(--pi-border-muted); }
+  .toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: var(--pi-space-4); box-sizing: border-box; min-height: var(--pi-panel-header-height); padding: 0 var(--pi-bar-inset); border-bottom: 1px solid var(--pi-divider); }
   .toolbar button { margin-left: auto; box-sizing: border-box; min-height: var(--pi-panel-header-control-height); }
   .split { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: minmax(160px, 34%) minmax(0, 1fr); }
   /* With nothing selected there is no second pane to show, so the list takes
@@ -270,15 +274,15 @@ export const workspacePanelStyles = css`
     .split.list-only > .list { scrollbar-width: none; }
     .split.list-only > .list::-webkit-scrollbar { display: none; }
   }
-  .list { min-height: 0; overflow: auto; border-bottom: 1px solid var(--pi-border); padding: var(--pi-space-3); }
-  .row { box-sizing: border-box; display: grid; min-height: var(--pi-control-height); align-items: center; grid-template-columns: 18px minmax(0, 1fr); gap: var(--pi-space-2); width: 100%; border: 0; border-radius: var(--pi-radius-sm); background: transparent; text-align: left; padding: var(--pi-space-2) var(--pi-space-3) var(--pi-space-2) calc(var(--pi-space-3) + var(--depth, 0) * var(--pi-space-6)); }
-  .row.selected { background: var(--pi-selection-bg); }
-  @media (hover: hover) { .row:hover { background: var(--pi-selection-bg); } }
+  .list { min-height: 0; overflow: auto; border-bottom: 1px solid var(--pi-divider); padding: var(--pi-space-3); }
+  .row { box-sizing: border-box; display: grid; min-height: var(--pi-control-height); align-items: center; grid-template-columns: 18px minmax(0, 1fr); gap: var(--pi-space-2); width: 100%; border: 0; border-radius: var(--pi-radius-md); background: transparent; text-align: left; padding: var(--pi-space-2) var(--pi-space-3) var(--pi-space-2) calc(var(--pi-space-3) + var(--depth, 0) * var(--pi-space-6)); }
+  .row.selected { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
+  @media (hover: hover) { .row:hover { background: var(--pi-row-hover); } }
   .row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .summary { margin: var(--pi-space-2) var(--pi-space-3) var(--pi-space-4); color: var(--pi-muted); }
   /* File preview presentation lives in <workspace-file-viewer>'s own shadow root. */
   .viewer { min-height: 0; overflow: auto; display: flex; flex-direction: column; }
-  pre { margin: 0; padding: var(--pi-space-5); overflow: auto; font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre { margin: 0; padding: var(--pi-space-5); overflow: auto; font: var(--pi-text-xs) var(--pi-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); line-height: var(--pi-leading-normal); white-space: pre-wrap; overflow-wrap: anywhere; }
   p { margin: var(--pi-space-5); }
 `;
 

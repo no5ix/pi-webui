@@ -68,7 +68,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
     /* Control chrome, not content: buttons and labels here are not copy targets. (T1/T3) */
     :host, :host * { -webkit-user-select: none; user-select: none; }
     :host textarea, :host input, :host [contenteditable], :host .attachment-error { -webkit-user-select: text; user-select: text; }
-  footer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pi-space-4); padding: var(--pi-space-6) var(--pi-chat-gutter); border-top: 1px solid var(--pi-border); max-width: var(--pi-chat-measure, var(--pi-measure-reading, 100%)); margin-inline: auto; }
+  footer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--pi-space-4); padding: var(--pi-space-6) var(--pi-chat-gutter); max-width: var(--pi-chat-measure, var(--pi-measure-reading, 100%)); margin-inline: auto; }
   /* Same column as the expanded composer and the transcript: the private
      10px inset made the box edge jump 6px one way on desktop and the other
      way on the phone when the composer collapsed. */
@@ -108,8 +108,8 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .select-model-missing .opening-spinner { width: 12px; height: 12px; }
   .status-loading .select-thinking .opening-spinner { width: 16px; height: 16px; }
   @media (prefers-reduced-motion: reduce) { .status-loading .opening-spinner { border-color: currentColor; } }
-  .select-model { max-width: min(42vw, 320px); min-height: var(--pi-control-height-comfort); display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); padding: 0 var(--pi-space-4); }
-  @media (hover: hover) { .select-model:hover:not(:disabled) { background: var(--pi-row-hover); } }
+  .select-model { max-width: min(42vw, 320px); min-height: var(--pi-control-height-comfort); display: inline-flex; align-items: center; box-sizing: border-box; border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); padding: 0 var(--pi-space-4); }
+  @media (hover: hover) { .select-model:hover:not(:disabled) { background: var(--pi-row-hover); color: var(--pi-text); } }
   .select-model-not-configured { border-color: var(--pi-warning-border); background: var(--pi-warning-surface); color: var(--pi-warning); }
   .select-model-label { position: relative; flex: 1 1 auto; min-width: 0; display: inline-grid; grid-template-columns: minmax(0, 1fr); align-items: center; overflow: hidden; }
   .select-model-natural, .select-model-visible-label { grid-area: 1 / 1; min-width: 0; }
@@ -123,6 +123,13 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   .select-model-label:not([data-mode="provider"]) .select-model-visible-label .select-model-provider { display: none; }
   .select-model-label:not([data-mode="provider"]) .select-model-visible-label .select-model-id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .icon-button { position: relative; flex: 0 0 auto; display: inline-grid; place-items: center; width: var(--pi-control-height-comfort); height: var(--pi-control-height-comfort); box-sizing: border-box; padding: 0; }
+  /* The composer row's controls are the app's own, not the user agent's: left
+     alone they arrive as the platform's bevelled grey buttons, in a row under a
+     flat field, at a font size that is on no scale. One quiet default for the
+     row, and each control says when it is louder (send) or coloured (stop). */
+  .icon-button, .send-button, .stop-button { box-sizing: border-box; border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); font: var(--pi-text-sm) var(--pi-font-ui); line-height: inherit; cursor: pointer; }
+  .actions button:disabled { opacity: var(--pi-disabled-opacity); cursor: default; }
+  @media (hover: hover) { .icon-button:hover:not(:disabled), .stop-button:hover:not(:disabled) { background: var(--pi-row-hover); } }
   .icon-button .prompt-action-icon, .icon-button .prompt-thinking-gauge { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
   .icon-button .prompt-action-icon-filled { fill: currentColor; stroke: none; }
   .icon-button[aria-pressed="true"] { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); border-color: var(--pi-accent-border); }
@@ -154,13 +161,15 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   button.editor-attach { position: absolute; right: var(--pi-space-3); bottom: var(--pi-space-3); z-index: 2; box-sizing: border-box; width: min(var(--pi-control-height), calc(100% - 2 * var(--pi-space-3))); height: min(var(--pi-control-height), calc(100% - 2 * var(--pi-space-3))); aspect-ratio: 1; }
   .editor-attach .prompt-action-icon { width: 18px; height: 18px; }
   /* The one surface on the screen that asks to be typed in, so it is the one
-     surface that is lifted: the content surface under the ink, a hairline that is
-     not an accent, and the app's lowest elevation. Focus is a ring, never a
-     permanent accent border - an accent outline that is always on reads as
-     "already focused" and stops being a signal. */
-  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 54px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 1px solid var(--pi-chip-border); background: var(--pi-surface); color: var(--pi-text); box-shadow: var(--pi-elevation-1); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
-  textarea:focus-visible, .markdown-editor .cm-editor.cm-focused { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset); }
-  textarea { overflow-y: auto; padding: var(--pi-space-5); padding-right: calc(var(--pi-space-3) + var(--pi-control-height) + var(--pi-space-3)); }
+     surface with a fill of its own: the card surface under the ink and a hairline
+     that is not an accent. It carries no shadow - the composer sits on the
+     canvas with the transcript, and an elevation under it read as a tray pulled
+     out of the window. Focus is a ring drawn inside, never a permanent accent
+     border: an accent outline that is always on reads as "already focused" and
+     stops being a signal. */
+  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 44px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 1px solid var(--pi-border-muted); background: var(--pi-surface-card); color: var(--pi-text); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
+  textarea:focus-visible, .markdown-editor .cm-editor.cm-focused { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+  textarea { overflow-y: auto; padding: var(--pi-space-3); padding-right: calc(var(--pi-space-3) + var(--pi-control-height) + var(--pi-space-3)); }
   /* A phone with the keyboard open leaves roughly 400px of viewport, and a
      composer sized for a full screen took 119px of it - the transcript was
      left with about two lines. The composer keeps a floor so it stays usable
@@ -171,7 +180,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
     .markdown-editor .cm-content { min-height: 28px; }
   }
   .markdown-editor .cm-scroller { max-height: 220px; overflow-y: auto; font-family: var(--pi-control-font-family, system-ui, sans-serif); line-height: 1.4; }
-  .markdown-editor .cm-content { min-height: 38px; padding: var(--pi-space-4) 44px var(--pi-space-4) var(--pi-space-4); caret-color: var(--pi-text); text-align: start; unicode-bidi: plaintext; --pi-composer-pad: 8px; }
+  .markdown-editor .cm-content { min-height: 20px; padding: var(--pi-space-3) 44px var(--pi-space-3) var(--pi-space-3); caret-color: var(--pi-text); text-align: start; unicode-bidi: plaintext; }
   .markdown-editor .cm-cursor, .markdown-editor .cm-dropCursor { border-left-width: 2px; }
   /* The caret should sit on the line the text will occupy: 1.4 * font-size is
      the line's height, and centering a caret of that height in the line box

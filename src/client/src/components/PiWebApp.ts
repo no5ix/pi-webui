@@ -187,6 +187,7 @@ import { QUIET_WINDOW_MS, retryDelayMs } from "../sync/readPhase";
 import { interruptedRunsReadPlan } from "../interruptedRunsRead";
 import { deprecatedAgentInputsBanner, deprecatedAgentInputsWarnings } from "./deprecatedAgentInputsBanner";
 import { interactiveSurfaceStyles, attachmentZoomStyles } from "./shared";
+import { workspaceBandStyles } from "./appShell/workspaceBandStyles";
 import { documentTitleFor } from "../contextName";
 
 export interface PluginDialogEntry {
@@ -222,50 +223,61 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
      screen, and a shell pinned to its edges ran off the right of it. Layout containment makes the shell
      the box every fixed dialog, sheet and menu inside it is placed against, so they fit what is visible;
      a showModal() dialog sits in the top layer, which containment does not reach (visibleViewportDialogBox). */
-  :host { --pi-app-safe-area-bottom: 0px; --pi-app-keyboard-inset: 0px; --pi-app-viewport-offset-top: 0px; --pi-app-viewport-offset-left: 0px; --pi-workbench-bg: color-mix(in srgb, var(--pi-surface-panel) 96%, var(--pi-bg)); --pi-workbench-border: color-mix(in srgb, var(--pi-accent-border) 42%, var(--pi-border-muted)); position: fixed; top: var(--pi-app-viewport-offset-top); left: var(--pi-app-viewport-offset-left); display: block; width: var(--pi-app-visible-width, 100%); height: var(--pi-app-visible-height, calc(100dvh - var(--pi-app-keyboard-inset))); contain: layout; box-sizing: border-box; overflow: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--pi-app-safe-area-bottom) env(safe-area-inset-left); color: var(--pi-text); background: var(--pi-bg); font: var(--pi-text-base) var(--pi-font-ui); line-height: inherit; }
+  :host { --pi-app-safe-area-bottom: 0px; --pi-app-keyboard-inset: 0px; --pi-app-viewport-offset-top: 0px; --pi-app-viewport-offset-left: 0px; --pi-workbench-bg: color-mix(in srgb, var(--pi-surface-panel) 45%, var(--pi-bg)); --pi-workbench-border: var(--pi-divider); position: fixed; top: var(--pi-app-viewport-offset-top); left: var(--pi-app-viewport-offset-left); display: block; width: var(--pi-app-visible-width, 100%); height: var(--pi-app-visible-height, calc(100dvh - var(--pi-app-keyboard-inset))); contain: layout; box-sizing: border-box; overflow: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--pi-app-safe-area-bottom) env(safe-area-inset-left); color: var(--pi-text); background: var(--pi-bg); font: var(--pi-text-base) var(--pi-font-ui); line-height: inherit; }
   :host([pwa-display-mode]) { --pi-app-safe-area-bottom: env(safe-area-inset-bottom); }
   @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
     :host { --pi-app-safe-area-bottom: env(safe-area-inset-bottom); }
   }
-  .shell { --navigation-panel-size: 280px; --workspace-panel-size: 400px; --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display:grid; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); height:100%; min-height:0; background:var(--pi-bg); }
+  .shell { --navigation-panel-size: clamp(232px, 19.5vw, 288px); --workspace-panel-size: clamp(372px, 26.5vw, 392px); --navigation-panel-width: var(--navigation-panel-size); --workspace-panel-width: var(--workspace-panel-size); --navigation-divider-width: 1px; --workspace-divider-width: 1px; display:grid; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(320px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); height:100%; min-height:0; background:var(--pi-bg); }
 
   .shell > main.conversation-column { grid-column:3; }
-  .shell > .workbench-shell { grid-column:5; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; background:var(--pi-workbench-bg, var(--pi-surface-panel)); border-left:1px solid var(--pi-workbench-border, var(--pi-border-muted)); }
+  .shell > .workbench-shell { grid-column:5; min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; background:var(--pi-workbench-bg, var(--pi-surface-panel)); }
   .shell > aside#navigation-panel { grid-column:1; }
-  aside { grid-column:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--pi-surface-panel); border-right:1px solid var(--pi-border-muted); }
+  /* The column between the panes is the seam: the edge control paints the one
+     hairline, and a border on the pane next to it drew a second line beside it. */
+  aside { grid-column:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--pi-surface-panel); }
   aside app-navigation-panel { flex:1 1 auto; min-height:0; }
   aside app-navigate-page { flex:1 1 auto; min-height:0; }
   .navigation-stack { display:flex; flex-direction:column; min-height:0; height:100%; }
   .running-sessions-panel { flex:none; }
   .projects-area { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; }
-  .projects-heading { box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; min-height: var(--pi-control-height); padding:var(--pi-space-2) var(--pi-space-5); color:var(--pi-text-secondary); font:var(--pi-text-xs) var(--pi-font-ui); }
-  .projects-heading button { border:0; background:transparent; color:var(--pi-muted); padding:4px; border-radius:var(--pi-radius-sm); }
+  .projects-heading { box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; min-height: var(--pi-control-height-comfort); padding:var(--pi-space-2) var(--pi-row-edge); color:var(--pi-text-bright); font:var(--pi-text-sm) var(--pi-font-ui); font-weight:var(--pi-weight-semibold); }
+  .projects-heading button { border:0; background:transparent; color:var(--pi-muted); padding:var(--pi-space-2); border-radius:var(--pi-radius-sm); }
   .projects-area app-navigate-page { flex:1 1 auto; min-height:0; }
   .projects-area project-sessions-panel { flex:1 1 auto; min-height:0; }
   .conversation-column { grid-column:3; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
-  /* The transcript's reading measure: a message line is as wide as a reader can follow, and the column's extra width is left as margin, not stretched into 90-character rows. ChatView reads this token in its .msg rule; narrow layouts keep the full width. */
-  @media (min-width: 1024px) { .conversation-column { --pi-chat-measure: min(100%, 46rem); } }
-  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--pi-space-5); min-height:52px; padding:0 var(--pi-space-7); border-bottom:1px solid var(--pi-border-muted); background:var(--pi-bg); }
-  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text-bright); font:var(--pi-text-sm) var(--pi-font-ui); font-weight:var(--pi-weight-semibold); letter-spacing:0.01em; }
-  .conversation-subtitle { margin-top:1px; color:var(--pi-muted); font:var(--pi-text-2xs) var(--pi-font-ui); }
+  /* The transcript's reading measure: a message line is as wide as a reader can follow, and the column's extra width is left as margin, not stretched into 90-character rows. ChatView reads this token in its .msg rule; narrow layouts keep the full width. The disclosure rows wear the same measure, so the session's own panels are the width of its words. */
+  @media (min-width: 1024px) { .conversation-column { --pi-chat-measure: min(100%, 40rem); } }
+  /* One band across the top of the window: the sidebar's first row, this header
+     and the workbench tab strip are the same height with the same rule under
+     them, so the three columns read as one surface and not three products. */
+  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--pi-space-5); min-height:var(--pi-panel-band-height); padding:0 var(--pi-bar-inset-comfort); border-bottom:1px solid var(--pi-divider); background:var(--pi-bg); }
+  .conversation-heading { display:grid; min-width:0; gap:var(--pi-space-1); align-content:center; }
+  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text-bright); font-family:var(--pi-font-display); font-size:var(--pi-text-xl); font-weight:var(--pi-weight-strong); letter-spacing:var(--pi-tracking-tight); line-height:var(--pi-leading-tight); }
+  .conversation-subtitle { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-muted); font:var(--pi-text-xs) var(--pi-font-ui); }
+  @media (max-width:1023px) { .conversation-title { font-size:var(--pi-text-lg); } }
   .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-2); flex:none; }
-  .conversation-header-actions button { width: var(--pi-control-height); height: var(--pi-control-height); padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
+  .conversation-header-actions button { width: var(--pi-panel-band-control-height); height: var(--pi-panel-band-control-height); padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
 @media (hover: hover) { .conversation-header-actions button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
-  .conversation-header-actions button[aria-expanded="true"] { background:var(--pi-selection-bg); color:var(--pi-text); }
-  .conversation-rail { flex:none; display:flex; flex-direction:column; gap:var(--pi-space-3); padding:var(--pi-space-4) var(--pi-chat-gutter) 0; }
-  .conversation-subagents { flex:none; padding:var(--pi-space-4) var(--pi-chat-gutter) 0; }
+  .conversation-header-actions button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+  .conversation-header-actions button[aria-expanded="true"] { background:var(--pi-accent-soft); color:var(--pi-on-accent-soft); }
+  .conversation-subagents { flex:none; width:100%; max-width:var(--pi-chat-measure); margin-inline:auto; padding:var(--pi-space-4) var(--pi-space-4) 0; }
   .conversation-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   .conversation-body chat-view { flex:1 1 auto; min-height:0; }
   .conversation-body prompt-editor { flex:none; }
-  .conversation-bottom { flex:none; }
-  .sidebar-footer { flex:none; display:flex; align-items:center; gap:4px; padding:var(--pi-space-4) var(--pi-space-5); border-top:1px solid var(--pi-border-muted); }
-  .sidebar-footer button { width: var(--pi-control-height); height: var(--pi-control-height); display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
-@media (hover: hover) { .sidebar-footer button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
+  .conversation-bottom { flex:none; display:grid; gap:var(--pi-space-3); width:100%; max-width:var(--pi-chat-measure); margin-inline:auto; padding:var(--pi-space-3) var(--pi-space-4) var(--pi-space-4); }
   .edited-file-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
   .edited-file-list code { overflow-wrap:anywhere; color:var(--pi-text-secondary); font:var(--pi-text-2xs) var(--pi-font-mono); }
   .workspace-panel-content { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-  .workspace-panel-content workspace-panel { flex:1 1 auto; min-height:0; --pi-bar-inset: var(--pi-chat-gutter); }
+  .workspace-panel-content workspace-panel { flex:1 1 auto; min-height:0; --pi-bar-inset: var(--pi-bar-inset-comfort); }
   @media (max-width:1023px) { .shell { --navigation-panel-size:240px; --workspace-panel-size:320px; grid-template-columns:var(--navigation-panel-width) var(--navigation-divider-width) minmax(300px,1fr) var(--workspace-divider-width) var(--workspace-panel-width); } }
+  /* The rails are fluid, not stepped: at 1600px they are the desktop measures
+     (288 and 392) and they shrink with the window to their floors (232 and 372),
+     so one pixel of resize never moves a hundred pixels of reading width, and the
+     conversation keeps what is left above its 320px floor. The workbench floor is
+     the width that still seats the whole tab strip - Git, Files, Terminal, Goals -
+     at the bar inset, so no tab is ever clipped. A user-dragged rail overrides
+     this as an inline declaration on the same element. */
   /* A phone keeps the same four tabs: the workbench stacks under the session in
      its own band, so the conversation stays on screen and a tool page is never a
      dead end. A full-screen tool page is the plugin's own request, not the tab. */
@@ -280,7 +292,7 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .file-drop-frame span { padding: var(--pi-space-3) var(--pi-space-4); border: 1px solid var(--pi-accent-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-text-bright); font-weight: var(--pi-weight-strong); }
   /* A dashed hairline, not the browser's medium default: this rule was
      generalised from a chip that carried its own border width. */
-  .empty { border: 1px dashed var(--pi-border); border-radius: var(--pi-radius-lg); padding: var(--pi-space-7); color: var(--pi-muted); }
+  .empty { padding: var(--pi-space-7); color: var(--pi-muted); }
   /* A page's rows keep the edge of the bar above them, whose keys sit on the conversation gutter (cornerKeys). */
   @media ${unsafeCSS(DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY)} {
     /* A workspace tool can request the content area without owning or changing
@@ -338,7 +350,8 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .archived-strip { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--pi-space-5); padding: var(--pi-space-5) var(--pi-space-7); border-top: 1px solid var(--pi-border); color: var(--pi-muted); }
   .archived-strip p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
   .empty .empty-link { min-height: var(--pi-control-height-touch); border-color: transparent; background: transparent; color: var(--pi-muted); text-decoration: underline; }
-  .empty button, .archived-strip button { box-sizing: border-box; min-height: var(--pi-control-height-touch); padding: var(--pi-space-4) var(--pi-space-6); border: 1px solid var(--pi-accent-border); border-radius: var(--pi-radius-md); background: var(--pi-surface); color: var(--pi-accent); font: var(--pi-text-sm) var(--pi-font-ui); line-height: inherit; cursor: pointer; }
+  .empty button, .archived-strip button { box-sizing: border-box; min-height: var(--pi-control-height-touch); padding: var(--pi-space-4) var(--pi-space-6); border: 1px solid var(--pi-accent); border-radius: var(--pi-radius-md); background: var(--pi-accent); color: var(--pi-on-accent); font: var(--pi-text-sm) var(--pi-font-ui); font-weight: var(--pi-weight-strong); line-height: inherit; cursor: pointer; }
+  @media (hover: hover) { .empty button:hover, .archived-strip button:hover { background: color-mix(in srgb, var(--pi-accent) 88%, var(--pi-text)); border-color: var(--pi-accent); color: var(--pi-on-accent); } }
   .error { display: flex; gap: var(--pi-space-4); align-items: flex-start; padding: var(--pi-space-5) var(--pi-space-7); border-bottom: 1px solid var(--pi-border); color: var(--pi-danger); }
   .error.transient { color: var(--pi-warning); background: color-mix(in srgb, var(--pi-warning) 8%, transparent); }
   .error.info { color: var(--pi-text); }
@@ -7315,7 +7328,10 @@ export class PiWebApp extends LitElement {
         </aside>
         <main class="conversation-column ${mainViewClass(displayView)}" @dragenter=${this.handleChatDragEnter} @dragover=${this.handleChatDragOver} @dragleave=${this.handleChatDragLeave} @drop=${this.handleChatDrop}>
           <header class="conversation-header">
-            <div class="conversation-title" title=${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}>${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}<div class="conversation-subtitle">${state.selectedProject?.name ?? ""}</div></div>
+            <div class="conversation-heading">
+              <div class="conversation-title" title=${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}>${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}</div>
+              <div class="conversation-subtitle">${state.selectedProject?.name ?? ""}</div>
+            </div>
             <div class="conversation-header-actions">
               <button type="button" aria-label="Settings" title="Settings" @click=${() => { this.openSettings(); }}>${renderGearIcon()}</button>
               <button type="button" aria-label="Actions" title="Actions" @click=${() => { this.openActionPalette(); }}>${renderCommandIcon()}</button>
@@ -7464,7 +7480,7 @@ export class PiWebApp extends LitElement {
     else style.removeProperty("--pi-app-row-inset");
   }
 
-  static override styles = [interactiveSurfaceStyles, sessionStateBadgeStyles, appStyles];
+  static override styles = [interactiveSurfaceStyles, workspaceBandStyles, sessionStateBadgeStyles, appStyles];
 }
 
 
