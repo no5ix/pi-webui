@@ -69,7 +69,6 @@ export const iconPaths = {
 
 export type IconName = keyof typeof iconPaths;
 
-export const iconNames = Object.keys(iconPaths) as IconName[];
 
 export interface IconProps {
   name: IconName;
@@ -80,7 +79,7 @@ export interface IconProps {
 
 export function Icon({ name, className, size = "base", label }: IconProps): ReactNode {
   const paths = iconPaths[name];
-  const dimensions = size === "small" ? "var(--piw-icon-size-small)" : size === "large" ? "var(--piw-icon-size-large)" : "var(--piw-icon-size)";
+  const dimensions = size === "small" ? 12 : size === "large" ? 20 : 16;
   return (
     <svg
       aria-hidden={label === undefined ? true : undefined}
@@ -105,7 +104,7 @@ export function Icon({ name, className, size = "base", label }: IconProps): Reac
 export interface IconTriggerProps {
   icon: IconName;
   label: string;
-  onClick(): void;
+  onClick: () => void;
   active?: boolean;
   disabled?: boolean;
   className?: string;

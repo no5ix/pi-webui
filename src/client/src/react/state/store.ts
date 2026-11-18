@@ -10,12 +10,12 @@ import { useCallback, useRef, useSyncExternalStore } from "react";
  * fact, and it is the same owner the Lit tree had.
  */
 export interface ReadableStore<T> {
-  get(): T;
+  get: () => T;
   subscribe(listener: () => void): () => void;
 }
 
 export interface Store<T> extends ReadableStore<T> {
-  set(next: T): void;
+  set: (next: T) => void;
   update(mutate: (previous: T) => T): void;
 }
 
@@ -47,11 +47,6 @@ export function createStore<T>(initial: T): Store<T> {
   };
 }
 
-export function useStoreSnapshot<T>(store: ReadableStore<T>): T {
-  const subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
-  const snapshot = useCallback(() => store.get(), [store]);
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
-}
 
 /**
  * Read part of a store without re-rendering on unrelated writes.

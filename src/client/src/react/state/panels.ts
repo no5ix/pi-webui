@@ -123,6 +123,23 @@ export function keyboardPanelWidth(side: ResizablePanelSide, currentWidth: numbe
   return panelWidthFromKeyboard(side, currentWidth, key);
 }
 
+/**
+ * Collapses or opens a side panel by name. The phone layout needs to put the
+ * navigation away when the window narrows, where `togglePanel` can only flip it.
+ */
+export function setPanelCollapsed(side: ResizablePanelSide, collapsed: boolean): void {
+  panelStore.update((current) => {
+    const next = side === "navigation"
+      ? { ...current, navigationCollapsed: collapsed }
+      : { ...current, workbenchCollapsed: collapsed };
+    if (next.navigationCollapsed === current.navigationCollapsed && next.workbenchCollapsed === current.workbenchCollapsed) {
+      return current;
+    }
+    writeCollapsed(next);
+    return next;
+  });
+}
+
 export function togglePanel(side: ResizablePanelSide): void {
   panelStore.update((current) => {
     const next = side === "navigation"
@@ -139,6 +156,36 @@ export function setWorkbenchTab(tab: WorkbenchTab, pluginId?: string): void {
     writeCollapsed(next);
     return next;
   });
+}
+
+/**
+ * Which layer is open, spelled as a key.
+ *
+ * The shell, the panels and the overlays all speak the same word for "the layer
+ * on screen": a panel registers a command that opens `settings:appearance`, the
+ * layer key names the surface, and the browser's Back closes the top layer first
+ * because the key travels with the history frame the dialog pushes.
+ */
+export type LayerKey = "none" | "palette" | "switcher" | "new-project" | (string & {});
+
+const layerStore = createStore<{ key: LayerKey }>({ key: "none" });
+
+export function openLayer(key: LayerKey): void {
+  layerStore.set({ key });
+}
+
+export function closeLayer(): void {
+  layerStore.set({ key: "none" });
+}
+
+export function useLayerKey(): LayerKey {
+  return useStoreSelect(layerStore, (state) => state.key);
+}
+
+export function selectWorkbenchTab(tab: number): void {
+  const target = workbenchTabOrder[tab - 1];
+  if (target === undefined) return;
+  setWorkbenchTab(target);
 }
 
 export function panelConstraints(side: ResizablePanelSide): { minWidth: number; maxWidth: number } {

@@ -10,12 +10,12 @@ import type { WorkbenchTab } from "./panels";
  * table is one place, so a chord cannot be claimed twice.
  */
 export interface ShellShortcutHandlers {
-  onCommandPalette(): void;
-  onQuickSwitcher(): void;
-  onSettings(): void;
-  onToggleNavigation(): void;
-  onToggleWorkbench(): void;
-  onWorkbenchTab(tab: WorkbenchTab): void;
+  onCommandPalette: () => void;
+  onQuickSwitcher: () => void;
+  onSettings: () => void;
+  onToggleNavigation: () => void;
+  onToggleWorkbench: () => void;
+  onWorkbenchTab: (tab: WorkbenchTab) => void;
 }
 
 const tabByKey: Record<string, WorkbenchTab> = {

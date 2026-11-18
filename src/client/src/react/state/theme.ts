@@ -97,7 +97,7 @@ export function useThemeSystemFollow(): void {
       repaintTheme();
     };
     media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
+    return () => { media.removeEventListener("change", onChange); };
   }, []);
 }
 

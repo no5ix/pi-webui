@@ -150,6 +150,7 @@ PI WEB has no user accounts and assumes trusted users, repositories and server p
 - [FAQ](docs/faq.md): the reading toolbar's word and sentence translation, response footers, the branch and running time in the status bar
 - [Machines](docs/machines.md): use several PI WEB machines from one page
 - [Remote-first development](docs/remote-first.md)
+- [The React frontend](docs/react-frontend.md): how the workspace UI is built, how plugins are hosted, and `?ui=legacy`
 - [Plugins](docs/plugins.md): PI WEB plugins and Pi packages
 - [Skills, MCP servers, and Pi packages](docs/pi-resources.md): what Settings reads, writes, and needs to apply a change
 - [FAQ and troubleshooting](docs/faq.md)

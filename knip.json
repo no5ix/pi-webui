@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "src/cli.ts",
-    "src/client/src/bootstrap.ts",
     "src/client/src/react/main.tsx",
     "src/plugin-api.ts",
     "src/server-plugin-api.ts",

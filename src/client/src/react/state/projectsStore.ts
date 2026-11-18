@@ -68,12 +68,6 @@ export async function readWorkspaces(projectId: string, machineId: string): Prom
   }
 }
 
-export async function addProject(path: string, name: string | undefined, create: boolean, machineId: string): Promise<Project> {
-  const project = await projectsApi.addProject(path, name, create, machineId);
-  await readProjects(machineId);
-  return project;
-}
-
 export async function closeProject(projectId: string, machineId: string): Promise<void> {
   await projectsApi.closeProject(projectId, machineId);
   projectsStore.update((current) => {
@@ -84,12 +78,3 @@ export async function closeProject(projectId: string, machineId: string): Promis
   await readProjects(machineId);
 }
 
-export async function reorderProjects(order: readonly string[], machineId: string): Promise<void> {
-  const projects = await projectsApi.reorderProjects(order, machineId);
-  projectsStore.update((current) => ({ ...current, projects, read: { value: projects, phase: "ready", error: undefined } }));
-}
-
-export function projectName(projects: readonly Project[], projectId: string | undefined): string | undefined {
-  if (projectId === undefined) return undefined;
-  return projects.find((project) => project.id === projectId)?.name;
-}

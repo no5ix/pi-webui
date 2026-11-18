@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { machinesApi } from "../../api/clients";
 import type { Machine } from "../../../../shared/apiTypes";
 import { useBoard } from "../state/board";
-import { selectMachine, useSelection, localMachineId } from "../state/selection";
+import { selectMachine, localMachineId } from "../state/selection";
 import { IconButton, Icon } from "../components/common/icons";
 import type { Subject } from "./AppShell";
 import type { ShellLayout } from "./AppShell";
@@ -19,9 +19,9 @@ export interface WindowBarProps {
   machineId: string;
   subject: Subject;
   layout: ShellLayout;
-  onCommandPalette(): void;
-  onQuickSwitcher(): void;
-  onSettings(): void;
+  onCommandPalette: () => void;
+  onQuickSwitcher: () => void;
+  onSettings: () => void;
 }
 
 export function WindowBar(props: WindowBarProps): ReactNode {
@@ -64,7 +64,7 @@ export function WindowBar(props: WindowBarProps): ReactNode {
           <select
             aria-label="Machine"
             className="piw-input"
-            onChange={(event) => selectMachine(event.currentTarget.value)}
+            onChange={(event) => { selectMachine(event.currentTarget.value); }}
             value={props.machineId}
           >
             {machines.map((candidate) => (

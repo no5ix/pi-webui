@@ -147,6 +147,17 @@ class SessionStreamRuntime {
     streamStore.set(blankStream);
   }
 
+  /**
+   * Publish a status the shell just caused — a model change, a cleared queue,
+   * an abort. The machine sends the same status on the socket; applying the
+   * answer the command returned keeps the footer honest between the click and
+   * that frame.
+   */
+  applyStatus(status: SessionStatus): void {
+    if (this.key === "") return;
+    streamStore.update((current) => ({ ...current, status }));
+  }
+
   /** Read the newest page, the session's status, and the in-flight partial. */
   private async read(generation: number, intent: "join" | "newest" | "older" | "newer" = "newest", options: { before?: number } = {}): Promise<void> {
     const session = this.session;
@@ -207,7 +218,10 @@ class SessionStreamRuntime {
         if (generation !== this.generation) return;
         if (sync.kind === "replay") {
           const frames = sync.frames
-            .map((frame) => parseSessionSocketEvent(JSON.parse(frame) as unknown))
+            .map((frame) => {
+              const parsed: unknown = JSON.parse(frame);
+              return parseSessionSocketEvent(parsed);
+            })
             .filter((frame): frame is SessionUiEvent => frame !== undefined && frame.type !== "status.update" && frame.type !== "activity.update");
           streamStore.update((current) => {
             let messages = [...current.messages];

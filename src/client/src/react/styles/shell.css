@@ -11,6 +11,7 @@
 .piw-canvas {
   box-sizing: border-box;
   display: flex;
+  height: 100dvh;
   min-height: 100dvh;
   padding: var(--piw-window-inset);
   background: var(--piw-canvas);
@@ -77,6 +78,7 @@
   flex: 1;
   min-height: 0;
   grid-template-columns: var(--piw-columns-template);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .piw-panel {
@@ -160,10 +162,23 @@
   cursor: col-resize;
 }
 
-@media (max-width: 1023px) {
-  .piw-columns[data-navigation-collapsed="false"][data-layout="phone"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.piw-columns[data-navigation-collapsed="false"][data-layout="phone"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/*
+ * On the phone the navigation is a drawer, not a column: the conversation owns
+ * the viewport, and the rail lies over it while it is open. `data-layout` is the
+ * shell's own layout state, computed from the breakpoints module, so no
+ * viewport number is repeated here.
+ */
+.piw-columns[data-layout="phone"] .piw-panel--navigation {
+  position: fixed;
+  inset-block: calc(var(--piw-window-inset) + var(--piw-window-bar-height)) var(--piw-window-inset);
+  inset-inline-start: var(--piw-window-inset);
+  width: min(86vw, 340px);
+  z-index: var(--pi-layer-overlay);
+  box-shadow: var(--pi-elevation-3);
 }
 
 .piw-scrim {

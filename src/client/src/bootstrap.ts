@@ -39,11 +39,14 @@ function mountLegacy(root: HTMLElement): void {
 }
 
 function mountReact(root: HTMLElement): void {
-  import("./react/main").then((module) => {
-    module.mountReactApp(root);
-  }).catch((error: unknown) => {
-    reportBootFailure(root, error);
-  });
+  import("./react/plugins/coreElements")
+    .then(() => import("./react/main"))
+    .then((module) => {
+      module.mountReactApp(root);
+    })
+    .catch((error: unknown) => {
+      reportBootFailure(root, error);
+    });
 }
 
 function reportBootFailure(root: HTMLElement, error: unknown): void {

@@ -1,0 +1,157 @@
+/*
+  The navigation rail's own measurements.
+
+  Everything that is a nav row, a section header, a dot, a field or a badge comes from
+  primitives.css and shell.css. This file only carries what is specific to the rail: the
+  two stacked sections and the divider between them, the indent that puts a session row
+  under its project row, the kebab button that appears where a pointer can hover, and the
+  tabular timestamp column.
+*/
+
+.piw-navigation {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.piw-navigation__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--piw-nav-group-gap);
+  min-height: 0;
+  padding-bottom: var(--pi-space-6);
+  overflow: auto;
+}
+
+.piw-navigation__divider {
+  flex: none;
+  height: 1px;
+  margin: 0 var(--piw-nav-inset);
+  background: var(--piw-divider);
+}
+
+.piw-navigation__search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--pi-space-3);
+  padding: var(--pi-space-3) var(--piw-nav-inset);
+}
+
+.piw-navigation__search .piw-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.piw-navigation__search-icon {
+  flex: none;
+  color: var(--pi-dim);
+}
+
+.piw-navigation__list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--piw-nav-row-gap);
+  margin: 0;
+  padding: 0 var(--piw-nav-inset);
+  list-style: none;
+}
+
+.piw-navigation__list--indented {
+  padding-left: calc(var(--piw-nav-inset) + var(--pi-space-6));
+}
+
+.piw-navigation__row {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+}
+
+.piw-navigation__row .piw-row:focus-visible {
+  outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring);
+  outline-offset: var(--pi-focus-ring-offset-tight);
+}
+
+.piw-navigation__kebab {
+  flex: none;
+  opacity: 0;
+}
+
+.piw-navigation__row:hover .piw-navigation__kebab,
+.piw-navigation__row:focus-within .piw-navigation__kebab {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .piw-navigation__kebab {
+    opacity: 1;
+  }
+}
+
+.piw-navigation__status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--pi-space-3);
+  min-width: 0;
+}
+
+.piw-navigation__time {
+  flex: none;
+  min-width: 3.5ch;
+  text-align: right;
+  font-size: var(--pi-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--pi-dim);
+}
+
+.piw-navigation__path {
+  flex: none;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--pi-text-2xs);
+  color: var(--pi-dim);
+}
+
+.piw-navigation__missing {
+  flex: none;
+  font-size: var(--pi-text-2xs);
+  color: var(--pi-danger);
+}
+
+.piw-navigation__project-icon {
+  flex: none;
+  color: var(--pi-muted);
+}
+
+.piw-navigation__show-more {
+  justify-content: flex-start;
+  color: var(--pi-muted);
+}
+
+.piw-navigation__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-3);
+  margin: 0 var(--piw-nav-inset);
+  padding: var(--pi-space-3) var(--pi-space-4);
+  border: 1px solid var(--pi-danger-border, var(--pi-danger));
+  border-radius: var(--piw-nav-row-radius);
+  font-size: var(--pi-text-xs);
+  color: var(--pi-text-secondary);
+}
+
+.piw-navigation__note {
+  margin: 0 var(--piw-nav-inset);
+  font-size: var(--pi-text-2xs);
+  color: var(--pi-dim);
+}
+
+.piw-navigation__skeleton {
+  margin: var(--pi-space-2) var(--piw-nav-inset) 0;
+}

@@ -18,6 +18,8 @@ export interface LitBoundaryProps {
   tag: string;
   properties?: Record<string, unknown>;
   events?: Record<string, (event: Event) => void>;
+  /** Handed the element once it exists, for a host that calls the element's own methods. */
+  onElement?(element: HTMLElement): void;
   className?: string;
   style?: CSSProperties;
   testId?: string;
@@ -32,9 +34,10 @@ export function LitBoundary(props: LitBoundaryProps): ReactNode {
   useEffect(() => {
     const container = host.current;
     if (container === null) return;
-    const created = document.createElement(props.tag) as HTMLElement;
+    const created = document.createElement(props.tag);
     element.current = created;
     container.append(created);
+    props.onElement?.(created);
     const bound = new Map<string, EventListener>();
     for (const name of Object.keys(handlers.current)) {
       const listener: EventListener = (event) => {
@@ -69,6 +72,6 @@ export function LitBoundary(props: LitBoundaryProps): ReactNode {
 function applyProperties(target: HTMLElement, properties: Record<string, unknown> | undefined): void {
   if (properties === undefined) return;
   for (const [name, value] of Object.entries(properties)) {
-    (target as unknown as Record<string, unknown>)[name] = value;
+    Reflect.set(target, name, value);
   }
 }

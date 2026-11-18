@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { realtimeEvents } from "../../api";
 import { sessionsApi, projectsApi, workspacesApi } from "../../api/clients";
 import { RealtimeSocket, type BrowserRealtimeEvent } from "../../sessionSocket";
 import { boardAnswer, boardEventOf, boardWithEvent, readSessionBoard, type SessionBoard } from "../../sync/sessionBoard";
@@ -45,13 +44,7 @@ export function useBoard(): BoardSnapshot {
   return useStoreSelect(boardStore, (value) => value);
 }
 
-export function useBoardStatus(sessionId: string | undefined): SessionStatus | undefined {
-  return useStoreSelect(boardStore, (value) => (sessionId === undefined ? undefined : value.statuses.get(sessionId)));
-}
 
-export function useBoardActivity(sessionId: string | undefined): SessionActivity | undefined {
-  return useStoreSelect(boardStore, (value) => (sessionId === undefined ? undefined : value.activities.get(sessionId)));
-}
 
 const quietWindowSeconds = (): number => 300;
 
@@ -68,8 +61,8 @@ class BoardRuntime {
     this.machineId = machineId;
     boardStore.update((current) => ({ ...current, phase: "loading", board: undefined, statuses: new Map(), activities: new Map(), connection: "connecting", error: undefined }));
     this.socket.connect(
-      (event) => this.apply(event),
-      () => boardStore.update((current) => ({ ...current, connection: "open" })),
+      (event) => { this.apply(event); },
+      () => { boardStore.update((current) => ({ ...current, connection: "open" })); },
       machineId,
       () => {
         void this.read({ force: true });

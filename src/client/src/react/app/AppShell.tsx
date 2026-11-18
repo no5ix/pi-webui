@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY, PHONE_LAYOUT_MEDIA_QUERY } from "../../breakpoints";
 import type { Project, SessionInfo, SessionRef, Workspace } from "../../../../shared/apiTypes";
-import { useBoard } from "../state/board";
-import { usePanels, usePanelPersistence, setPanelWidth, togglePanel, type ResizablePanelSide } from "../state/panels";
+import { useBoard, useBoardMachine } from "../state/board";
+import { usePanels, usePanelPersistence, setPanelWidth, setPanelCollapsed, togglePanel, selectWorkbenchTab, openLayer, closeLayer, type ResizablePanelSide } from "../state/panels";
 import { useProjects, readProjects } from "../state/projectsStore";
 import { selectSession, useSelection } from "../state/selection";
 import { useSessionStreamSession } from "../state/sessionStream";
@@ -14,11 +14,11 @@ import { QuickSwitcher } from "../components/common/QuickSwitcher";
 import { SettingsOverlay } from "../components/common/SettingsOverlay";
 import { NewProjectDialog } from "../components/common/NewProjectDialog";
 import { Toasts } from "../components/common/Toasts";
+import { PluginDialogLayer, loadPlugins } from "../plugins/pluginBridge";
 import { WindowBar } from "./WindowBar";
 import { NavigationPanel } from "../components/navigation/NavigationPanel";
 import { ConversationPanel } from "../components/conversation/ConversationPanel";
 import { WorkbenchPanel } from "../components/workbench/WorkbenchPanel";
-import { selectWorkbenchTab } from "../state/shellCommands";
 import { useShellShortcuts } from "../state/shellShortcuts";
 
 /**
@@ -46,27 +46,40 @@ export function AppShell(): ReactNode {
   const panels = usePanels();
   const selected = useSelection();
   const [layout, setLayout] = useState<ShellLayout>(readLayout);
-  const [layer, setLayer] = useState<Layer>("none");
+  const setLayer = (key: string): void => {
+    if (key === "none") closeLayer();
+    else openLayer(key);
+  };
   const dragging = useRef<ResizablePanelSide | undefined>(undefined);
 
   usePanelPersistence();
   useSelectionUrl();
   useThemeSystemFollow();
+  useBoardMachine(selected.machineId);
+
+  useEffect(() => {
+    void loadPlugins(selected.machineId);
+  }, [selected.machineId]);
 
   useEffect(() => {
     void readProjects(selected.machineId);
   }, [selected.machineId]);
 
   useEffect(() => {
-    const onResize = (): void => setLayout(readLayout());
+    const onResize = (): void => { setLayout(readLayout()); };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    return () => { window.removeEventListener("resize", onResize); };
   }, []);
+
+  useEffect(() => {
+    if (layout === "phone") setPanelCollapsed("navigation", true);
+  }, [layout]);
 
   const subject = useMemo<Subject>(() => resolveSubject(board, projects.projects, selected), [board, projects.projects, selected]);
   useSessionStreamSession(subject.session, selected.machineId);
 
   const grid = useMemo(() => gridTemplate(panels, layout), [panels, layout]);
+  const columnsStyle: CSSProperties & Record<string, string> = { "--piw-columns-template": grid };
 
   const onNavigate = useCallback((session: SessionInfo, workspace: Workspace): void => {
     selectSession({
@@ -79,12 +92,12 @@ export function AppShell(): ReactNode {
   }, [layout, selected.machineId]);
 
   useShellShortcuts({
-    onCommandPalette: () => setLayer("palette"),
-    onQuickSwitcher: () => setLayer("switcher"),
-    onSettings: () => setLayer("settings"),
-    onToggleNavigation: () => togglePanel("navigation"),
-    onToggleWorkbench: () => togglePanel("workspace"),
-    onWorkbenchTab: (tab) => selectWorkbenchTab(tab),
+    onCommandPalette: () => { setLayer("palette"); },
+    onQuickSwitcher: () => { setLayer("switcher"); },
+    onSettings: () => { setLayer("settings"); },
+    onToggleNavigation: () => { togglePanel("navigation"); },
+    onToggleWorkbench: () => { togglePanel("workspace"); },
+    onWorkbenchTab: (tab) => { selectWorkbenchTab(Number(tab)); },
   });
 
   const columns = (
@@ -93,20 +106,20 @@ export function AppShell(): ReactNode {
       data-layout={layout}
       data-navigation-collapsed={String(panels.navigationCollapsed)}
       data-workbench-collapsed={String(panels.workbenchCollapsed)}
-      style={{ "--piw-columns-template": grid } as CSSProperties}
+      style={columnsStyle}
     >
-      {showsNavigation(layout, panels) === true ? (
+      {showsNavigation(layout, panels) ? (
         <>
           <section aria-label="Navigation" className="piw-panel piw-panel--navigation">
-            <NavigationPanel machineId={selected.machineId} onNavigate={onNavigate} onNewProject={() => setLayer("new-project")} onQuickSwitcher={() => setLayer("switcher")} />
+            <NavigationPanel machineId={selected.machineId} onNavigate={onNavigate} onNewProject={() => { setLayer("new-project"); }} onQuickSwitcher={() => { setLayer("switcher"); }} />
           </section>
           <ResizeHandle side="navigation" />
         </>
       ) : null}
       <section aria-label="Conversation" className="piw-panel piw-panel--conversation">
-        <ConversationPanel machineId={selected.machineId} subject={subject} layout={layout} onOpenSettings={() => setLayer("settings")} />
+        <ConversationPanel machineId={selected.machineId} subject={subject} layout={layout} onOpenSettings={() => { setLayer("settings"); }} />
       </section>
-      {showsWorkbench(layout, panels) === true ? (
+      {showsWorkbench(layout, panels) ? (
         <>
           <ResizeHandle side="workspace" />
           <section aria-label="Workbench" className="piw-panel piw-panel--workbench">
@@ -124,22 +137,22 @@ export function AppShell(): ReactNode {
           machineId={selected.machineId}
           subject={subject}
           layout={layout}
-          onCommandPalette={() => setLayer("palette")}
-          onQuickSwitcher={() => setLayer("switcher")}
-          onSettings={() => setLayer("settings")}
+          onCommandPalette={() => { setLayer("palette"); }}
+          onQuickSwitcher={() => { setLayer("switcher"); }}
+          onSettings={() => { setLayer("settings"); }}
         />
         {columns}
       </div>
-      <CommandPalette open={layer === "palette"} onClose={() => setLayer("none")} machineId={selected.machineId} subject={subject} />
-      <QuickSwitcher open={layer === "switcher"} onClose={() => setLayer("none")} machineId={selected.machineId} />
-      <SettingsOverlay open={layer === "settings"} onClose={() => setLayer("none")} machineId={selected.machineId} />
-      <NewProjectDialog open={layer === "new-project"} onClose={() => setLayer("none")} machineId={selected.machineId} />
+      <CommandPalette />
+      <QuickSwitcher onNewSession={() => { setLayer("new-project"); }} />
+      <SettingsOverlay machineId={selected.machineId} />
+      <NewProjectDialog />
       <Toasts />
+      <PluginDialogLayer />
     </div>
   );
 }
 
-type Layer = "none" | "palette" | "switcher" | "settings" | "new-project";
 
 function ResizeHandle(props: { side: ResizablePanelSide }): ReactNode {
   const panels = usePanels();

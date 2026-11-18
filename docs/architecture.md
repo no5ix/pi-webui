@@ -23,12 +23,25 @@ The daemon is reached only by its own web process. `pnpm run dev` runs all three
 | `src/server/daemon/` | the session daemon only: sessions, terminals, realtime hub, status, workspace providers |
 | `src/server/shared/` | both: project store, plugin catalog and runtime, the daemon client (`shared/sessiondClient/`) |
 | `src/shared/` | server and client: wire types (`apiTypes.ts`), the federated route allowlist (`federatedRoutes.ts`), the interactive card types |
-| `src/client/src/` | the browser |
+| `src/client/src/` | the browser: the data layer (API clients, sockets, board, transcript, theme) and the React presentation layer (`src/client/src/react/`) |
 | `pi-web-plugins/` | the plugins bundled with PI WEB (files, git, info, machines, mermaid, terminal, updates, workspaces) |
 | `packages/pi-web-plugin-api/` | lightweight plugin declarations and public runtime helpers, without the host application |
 | `examples/workspace-provider-plugin/` | an example plugin |
 
 A `web/` module never imports from `daemon/`, or the reverse; code both need lives in `shared/`. `src/server/processOwnership.test.ts` enforces it.
+
+## Frontend
+
+The browser's presentation layer is React (`src/client/src/react/`): the shell owns the
+columns, the subject the URL names, and the overlay layers, and every panel reads its
+own data from stores that wrap the existing engines — the API clients, the session
+socket, the session board, the transcript store, the panel-resize controller, the
+theme engine. Nothing in the data layer was duplicated. Plugin UI is Custom Elements,
+so the React shell hosts Custom Elements through one boundary (`LitBoundary`) and one
+`PluginRegistry`; the plugin API is unchanged. `bootstrap.ts` picks the shell: React by
+default, the previous Lit shell with `?ui=legacy`, which is also where plugin
+workspace panels and global panels run. See [react-frontend.md](react-frontend.md)
+for the surfaces and the stated gaps.
 
 ## A request's path
 
