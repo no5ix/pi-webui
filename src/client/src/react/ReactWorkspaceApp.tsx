@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "./icons";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
+import { ReactTerminalPanel } from "./ReactTerminalPanel";
 
 type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
 const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals"];
@@ -178,7 +179,7 @@ export function ReactWorkspaceApp() {
       {rightOpen && <button className="rw-resize rw-resize-right" aria-label="Resize workbench" onPointerDown={e => startResize("right", e)}/>}
       <aside className="rw-workbench">
         <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
-        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><button title="Upload"><Icon name="upload"/></button></> : <><strong>{activeTab}</strong><button><Icon name="refresh-cw"/></button></>}</div>
+        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><button title="Upload" disabled><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh session branch information" onClick={data.refresh}><Icon name="refresh-cw"/></button>}</>}</div>
         {activeTab === "Files" ? <div className="rw-file-tree">
           {data.filesError && <div className="rw-data-error">{data.filesError}</div>}
           {data.selectedWorkspace && <div className="rw-file-tree-path">
@@ -188,7 +189,33 @@ export function ReactWorkspaceApp() {
           </div>}
           {!data.selectedWorkspace && <div className="rw-empty-state">Select a project to browse its files.</div>}
           {data.fileEntries.filter(file => file.name.toLowerCase().includes(fileFilter.toLowerCase())).map(file => <button key={file.path} onClick={() => { if (file.type === "directory") void data.loadDirectory(file.path); }}><Icon name={file.type === "directory" ? "chevron-right" : "file-text"}/>{file.name}</button>)}
-        </div> : <div className="rw-empty-panel">{activeTab} is not connected in this integration slice.</div>}
+        </div> : activeTab === "Terminal" ? (
+          data.selectedWorkspace
+            ? <ReactTerminalPanel key={data.selectedWorkspace.id} workspace={data.selectedWorkspace} machineId={data.state.selectedMachine?.id ?? "local"}/>
+            : <div className="rw-empty-panel">Select a workspace before opening a terminal.</div>
+        ) : activeTab === "Git" ? (
+          <div className="rw-git-panel">
+            <div className="rw-git-card">
+              <span className="rw-git-label">WORKING DIRECTORY</span>
+              <strong>{data.selectedWorkspace?.path ?? "No workspace selected"}</strong>
+            </div>
+            <div className="rw-git-card">
+              <span className="rw-git-label">CURRENT BRANCH</span>
+              <strong>{data.sessionStatus?.gitBranch ?? "Branch information is available after a session status read."}</strong>
+            </div>
+            <p>Read-only branch information comes from the selected session's live status. Use the Terminal tab for Git commands and worktree operations.</p>
+            <button disabled={!data.selectedWorkspace} onClick={() => setActiveTab("Terminal")}><Icon name="terminal"/> Open terminal</button>
+          </div>
+        ) : (
+          <div className="rw-goals-panel">
+            <section><span className="rw-git-label">SESSION OBJECTIVE</span><p>{data.selectedSession?.firstMessage || "No initial objective is recorded for this session."}</p></section>
+            <section><span className="rw-git-label">CURRENT ACTIVITY</span><p>{data.sessionStatus?.activity?.label ?? "No active step reported."}</p>{data.sessionStatus?.activity?.detail && <small>{data.sessionStatus.activity.detail}</small>}</section>
+            <section className="rw-goal-metrics">
+              <span>{data.sessionStatus?.pendingMessageCount ?? 0} pending messages</span>
+              <span>{data.sessionStatus?.backgroundRunCount ?? 0} background runs</span>
+            </section>
+          </div>
+        )}
       </aside>
     </div>
   </div>;
