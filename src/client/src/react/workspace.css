@@ -64,3 +64,12 @@ button { cursor: pointer; }
 .rw-git-panel p,.rw-goals-panel p{font-size:12px;line-height:1.5;color:var(--rw-muted);margin:0}
 .rw-goals-panel small{color:var(--rw-muted);font-size:11px}
 .rw-goal-metrics{flex-direction:row!important;justify-content:space-between;color:var(--rw-muted);font-size:11px}
+
+.rw-file-tree>button.selected{background:var(--rw-selected);color:var(--rw-text)}
+.rw-file-editor{display:flex;flex-direction:column;min-height:220px;flex:1;gap:6px;margin-top:10px;padding-top:9px;border-top:1px solid var(--rw-line)}
+.rw-file-editor-toolbar{display:flex;align-items:center;gap:6px;min-height:28px}
+.rw-file-editor-toolbar strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.rw-file-editor-toolbar small{color:var(--rw-muted);font-size:10px}
+.rw-file-editor-toolbar button{height:25px;border:1px solid var(--rw-line);border-radius:5px;background:var(--rw-card);padding:0 7px;font-size:10px}
+.rw-file-editor-toolbar button:disabled{opacity:.4;cursor:not-allowed}
+.rw-file-editor textarea{flex:1;min-height:180px;width:100%;resize:vertical;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-window);color:var(--rw-text);padding:9px;font:11px/1.55 var(--rw-font-mono,ui-monospace,monospace);tab-size:2;outline:0}

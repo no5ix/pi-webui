@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "./icons";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
@@ -61,6 +61,9 @@ export function ReactWorkspaceApp() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
   const [fileFilter, setFileFilter] = useState("");
+  const [fileDraft, setFileDraft] = useState("");
+  const [fileDirty, setFileDirty] = useState(false);
+  const [fileSaving, setFileSaving] = useState(false);
   const projectRows = data.projects.map(row => ({
     id: row.project.id,
     name: row.project.name,
@@ -96,6 +99,28 @@ export function ReactWorkspaceApp() {
   const modelLabel = model === undefined ? "Model unavailable" : [model.provider, model.name ?? model.id].filter(Boolean).join(" / ");
   const contextUsage = data.sessionStatus?.contextUsage;
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
+  useEffect(() => {
+    if (data.selectedFile !== undefined) {
+      setFileDraft(data.selectedFile.content);
+      setFileDirty(false);
+    } else {
+      setFileDraft("");
+      setFileDirty(false);
+    }
+  }, [data.selectedFile?.path, data.selectedFile?.modifiedAt]);
+
+  const saveOpenFile = async () => {
+    if (data.selectedFile === undefined || !fileDirty || data.selectedFile.binary || data.selectedFile.truncated) return;
+    setFileSaving(true);
+    try {
+      await data.saveFile(data.selectedFile.path, fileDraft);
+      setFileDirty(false);
+    } catch {
+      // The data adapter keeps the server error visible above the file list.
+    } finally {
+      setFileSaving(false);
+    }
+  };
   const startResize = (side: "left" | "right", event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const startX = event.clientX;
@@ -188,7 +213,17 @@ export function ReactWorkspaceApp() {
             {data.filePath && <span> / {data.filePath}</span>}
           </div>}
           {!data.selectedWorkspace && <div className="rw-empty-state">Select a project to browse its files.</div>}
-          {data.fileEntries.filter(file => file.name.toLowerCase().includes(fileFilter.toLowerCase())).map(file => <button key={file.path} onClick={() => { if (file.type === "directory") void data.loadDirectory(file.path); }}><Icon name={file.type === "directory" ? "chevron-right" : "file-text"}/>{file.name}</button>)}
+          {data.fileEntries.filter(file => file.name.toLowerCase().includes(fileFilter.toLowerCase())).map(file => <button className={data.selectedFile?.path === file.path ? "selected" : ""} key={file.path} onClick={() => { if (file.type === "directory") void data.loadDirectory(file.path); else void data.loadFile(file.path); }}><Icon name={file.type === "directory" ? "chevron-right" : "file-text"}/>{file.name}</button>)}
+          {data.selectedFile && <section className="rw-file-editor">
+            <div className="rw-file-editor-toolbar">
+              <strong title={data.selectedFile.path}>{data.selectedFile.path.split("/").pop()}</strong>
+              {data.selectedFile.truncated && <small>Preview truncated — editing disabled</small>}
+              {data.selectedFile.binary && <small>Binary file — preview unavailable</small>}
+              <button onClick={() => void saveOpenFile()} disabled={!fileDirty || fileSaving || data.selectedFile.binary || data.selectedFile.truncated}>{fileSaving ? "Saving…" : "Save"}</button>
+              <button title="Close file" onClick={() => void data.loadDirectory(data.filePath)}><Icon name="x"/></button>
+            </div>
+            <textarea spellCheck={false} value={fileDraft} readOnly={data.selectedFile.binary || data.selectedFile.truncated} onChange={event => { setFileDraft(event.target.value); setFileDirty(true); }} />
+          </section>}
         </div> : activeTab === "Terminal" ? (
           data.selectedWorkspace
             ? <ReactTerminalPanel key={data.selectedWorkspace.id} workspace={data.selectedWorkspace} machineId={data.state.selectedMachine?.id ?? "local"}/>
