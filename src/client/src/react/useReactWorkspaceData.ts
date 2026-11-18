@@ -168,8 +168,11 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     return () => {
       active = false;
       window.removeEventListener("online", onOnline);
+      realtimeRef.current?.close();
+      realtimeRef.current = undefined;
       runtime.sessions.stopOutbox();
       runtime.sessions.dispose();
+      runtime.boards.dispose();
       runtime.workspaces.dispose();
       runtime.projects.dispose();
       runtime.machines.dispose();
@@ -181,6 +184,58 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       void runtime.projects.loadProjects();
     }
   }, [state.machinesLoad, state.projectsLoad, runtime]);
+
+  useEffect(() => {
+    if (state.machinesLoad !== "loaded") return;
+    const machineId = state.selectedMachine?.id ?? "local";
+    let active = true;
+    const release = runtime.boards.watch(machineId);
+    const updateBoard = () => {
+      if (active) setBoard(runtime.boards.board(machineId));
+    };
+    const unsubscribe = runtime.boards.subscribe(updateBoard);
+    updateBoard();
+    void runtime.boards.browse(machineId).then(updateBoard);
+
+    const socket = new RealtimeSocket();
+    realtimeRef.current?.close();
+    realtimeRef.current = socket;
+    socket.connect(
+      (event) => {
+        if (event.type === "status.update" || event.type === "activity.update" || event.type === "session.created" || event.type === "session.name" || event.type === "session.startup") {
+          runtime.sessions.applyGlobalEvent(event);
+        }
+        const boardEvent = boardEventOf(event);
+        if (boardEvent !== undefined) runtime.boards.applyEvent(machineId, boardEvent);
+      },
+      () => {
+        if (!active) return;
+        void runtime.boards.read(machineId);
+        if (machineId === (stateRef.current.selectedMachine?.id ?? "local")) {
+          void runtime.projects.loadProjects();
+          void runtime.sessions.hydrateSessionStatuses(machineId, { replaceKnown: true });
+          void runtime.sessions.refreshCurrentWorkspaceSessions(machineId);
+        }
+      },
+      machineId,
+      () => {
+        if (!active) return;
+        runtime.boards.missedAnnouncements(machineId);
+        if (machineId === (stateRef.current.selectedMachine?.id ?? "local")) {
+          void runtime.projects.loadProjects();
+          void runtime.sessions.hydrateSessionStatuses(machineId, { replaceKnown: true });
+          void runtime.sessions.refreshCurrentWorkspaceSessions(machineId);
+        }
+      },
+    );
+    return () => {
+      active = false;
+      unsubscribe();
+      release();
+      socket.close();
+      if (realtimeRef.current === socket) realtimeRef.current = undefined;
+    };
+  }, [state.machinesLoad, state.selectedMachine?.id, runtime]);
 
   const restoredRoute = useRef(false);
   useEffect(() => {
