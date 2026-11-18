@@ -73,3 +73,5 @@ button { cursor: pointer; }
 .rw-file-editor-toolbar button{height:25px;border:1px solid var(--rw-line);border-radius:5px;background:var(--rw-card);padding:0 7px;font-size:10px}
 .rw-file-editor-toolbar button:disabled{opacity:.4;cursor:not-allowed}
 .rw-file-editor textarea{flex:1;min-height:180px;width:100%;resize:vertical;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-window);color:var(--rw-text);padding:9px;font:11px/1.55 var(--rw-font-mono,ui-monospace,monospace);tab-size:2;outline:0}
+
+.rw-attachment-list{display:flex;flex-wrap:wrap;gap:6px;padding:2px 4px}.rw-attachment-list>span{display:inline-flex;align-items:center;gap:6px;max-width:220px;padding:5px 8px;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-card);color:var(--rw-text-secondary);font-size:11px}.rw-attachment-list>span svg{width:13px;height:13px;flex:none}.rw-attachment-list>span button{border:0;background:transparent;color:var(--rw-muted);font-size:15px;cursor:pointer}

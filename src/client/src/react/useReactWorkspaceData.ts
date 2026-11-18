@@ -15,6 +15,8 @@ import type { GetState, SetState, UpdateUrl } from "../controllers/types";
 import { machineSessionKey } from "../machineKeys";
 import { saveDraft, loadDraft } from "../promptDraftStorage";
 import { operationKindOf, pageMaySend, writeOutgoingOperation } from "../composerWrites";
+import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
+import type { PromptAttachment } from "../api";
 
 export interface ReactWorkspaceProject {
   readonly project: Project;
@@ -48,7 +50,7 @@ export interface ReactWorkspaceData {
   readonly loadFile: (path: string) => Promise<void>;
   readonly saveFile: (path: string, content: string) => Promise<void>;
   readonly uploadFile: (file: File) => Promise<void>;
-  readonly sendPrompt: (text: string) => Promise<boolean>;
+  readonly sendPrompt: (text: string, attachments?: readonly CapturedAttachment[]) => Promise<boolean>;
   readonly stopSession: () => Promise<void>;
   readonly startSession: () => void;
   readonly runCommand: (text: string) => Promise<void>;
@@ -373,17 +375,17 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     saveDraft(key, value);
   }, []);
 
-  const sendPrompt = useCallback(async (text: string): Promise<boolean> => {
+  const sendPrompt = useCallback(async (text: string, captured: readonly CapturedAttachment[] = []): Promise<boolean> => {
     const current = stateRef.current;
     const session = current.selectedSession;
-    if (session === undefined || session.archived === true || text.trim() === "") return false;
+    if (session === undefined || session.archived === true || (text.trim() === "" && captured.length === 0)) return false;
     const trimmed = text.trim();
-    if (trimmed.startsWith("/") && !pageMaySend(trimmed)) {
+    if (captured.length === 0 && trimmed.startsWith("/") && !pageMaySend(trimmed)) {
       await runtime.sessions.runCommand(trimmed);
       return true;
     }
     const kind = operationKindOf(trimmed, false);
-    if (kind === "command") {
+    if (captured.length === 0 && kind === "command") {
       await runtime.sessions.runCommand(trimmed);
       return true;
     }
@@ -395,7 +397,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       scope,
       text: trimmed,
       behavior: undefined,
-      files: undefined,
+      files: captured.length === 0 ? undefined : {
+        attachments: captured.map(item => ({ kind: item.kind, name: item.name, mimeType: item.mimeType, data: item.data } satisfies PromptAttachment)),
+        delivery: effectivePromptAttachmentDelivery("inline", captured),
+      },
       via: undefined,
     });
     if (record === undefined) return false;

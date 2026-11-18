@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { capturePromptAttachments, type CapturedAttachment } from "../promptAttachmentCapture";
+import { readBlobAsBase64 } from "../sentImages";
 import { Icon } from "./icons";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
@@ -62,6 +64,10 @@ export function ReactWorkspaceApp() {
   const [sendError, setSendError] = useState<string>();
   const [fileFilter, setFileFilter] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<CapturedAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string>();
+  const [attaching, setAttaching] = useState(false);
   const [fileDraft, setFileDraft] = useState("");
   const [fileDirty, setFileDirty] = useState(false);
   const [fileSaving, setFileSaving] = useState(false);
@@ -81,7 +87,7 @@ export function ReactWorkspaceApp() {
   };
   const sendMessage = async () => {
     const text = data.draft.trim();
-    if (text === "" || sending) return;
+    if ((text === "" && attachments.length === 0) || sending || attaching) return;
     setSending(true);
     setSendError(undefined);
     try {
@@ -181,14 +187,14 @@ export function ReactWorkspaceApp() {
             {backgroundCount > 0 && <span><Icon name="layers"/> {backgroundCount} background runs</span>}
           </div>}
           <div className={"rw-composer " + (composerFocused ? "focused" : "")}>
-            <button className="rw-add" title="Attachments are not yet enabled in this React migration slice" disabled><Icon name="plus"/></button>
+            <input ref={attachmentInputRef} type="file" multiple hidden onChange={async event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (!files.length) return; setAttaching(true); setAttachmentError(undefined); try { const result = await capturePromptAttachments(files, readBlobAsBase64); setAttachments(current => [...current, ...result.attachments]); if (result.error) setAttachmentError(result.error); } finally { setAttaching(false); } }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
             <textarea value={data.draft} rows={1} placeholder={data.selectedSession ? "Message Pi..." : "Select a session first"} disabled={!data.selectedSession || data.selectedSession.archived === true} onChange={e => data.setDraft(e.target.value)} onFocus={() => setComposerFocused(true)} onBlur={() => setComposerFocused(false)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }} />
             <div className="rw-composer-tools">
               {isWorking && <button title="Stop current work" onClick={() => void data.stopSession()}><Icon name="square"/></button>}
-              <button className="rw-send" title="Send message" onClick={() => void sendMessage()} disabled={!data.selectedSession || data.selectedSession.archived === true || data.draft.trim() === "" || sending}><Icon name={sending ? "loader-circle" : "send"}/></button>
+              <button className="rw-send" title="Send message" onClick={() => void sendMessage()} disabled={!data.selectedSession || data.selectedSession.archived === true || (data.draft.trim() === "" && attachments.length === 0) || sending || attaching}><Icon name={sending || attaching ? "loader-circle" : "send"}/></button>
             </div>
           </div>
-          {sendError && <div className="rw-composer-error">{sendError}</div>}
+          {attachments.length > 0 && <div className="rw-attachment-list">{attachments.map((item,index) => <span key={index} title={item.name}>{item.kind === "image" ? <Icon name="image"/> : <Icon name="file-text"/>}{item.name}<button aria-label={"Remove " + item.name} onClick={() => setAttachments(current => current.filter((_,i) => i !== index))}>×</button></span>)}</div>}\n          {(sendError || attachmentError) && <div className="rw-composer-error">{sendError ?? attachmentError}</div>}
           <div className="rw-model-row">
             <span><Icon name="folder"/> {data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "No workspace"}</span>
             <span><Icon name="cpu"/> {modelLabel}</span>
