@@ -114,6 +114,7 @@ const packageVersion = typeof parsedPackage === "object" && parsedPackage !== nu
 
 export default defineConfig({
   plugins: [devDocsPlugin()],
+  appType: process.env["PI_WEB_REACT_UI"] === "1" ? "spa" : "mpa",
   define: {
     __PI_WEB_CLIENT_VERSION__: JSON.stringify(packageVersion),
   },

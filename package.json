@@ -83,8 +83,8 @@
     "docker:verify:stop": "./docker/pi-web-docker --dev stop",
     "docker:verify:status": "./docker/pi-web-docker --dev status",
     "prod": "pnpm run build && bash scripts/prod.sh",
-    "dev:react": "vite --host 127.0.0.1 --mode react",
-    "build:react": "vite build --mode react"
+    "dev:react": "PI_WEB_REACT_UI=1 vite --host 127.0.0.1 --port 8506 --strictPort",
+    "build:react": "PI_WEB_REACT_UI=1 vite build"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
