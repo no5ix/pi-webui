@@ -263,14 +263,18 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const selectedSession = state.selectedSession;
 
   const projects = useMemo<ReactWorkspaceProject[]>(() => state.projects.map(project => {
-    const selected = selectedProject?.id === project.id;
+    const workspaces = board?.workspaces.filter(workspace => workspace.projectId === project.id) ?? [];
+    const sessions = workspaces.flatMap(workspace => boardSessionsOf(board, workspace.path) ?? []);
+    const unknown = board === undefined
+      || board.unknownSources.some(source => source.kind === "project" && source.projectId === project.id)
+      || workspaces.some(workspace => boardSessionsOf(board, workspace.path) === undefined);
     return {
       project,
-      workspaces: selected ? state.workspaces : [],
-      sessions: selected ? state.sessions : [],
-      unknown: !selected || state.sessionsLoad !== "loaded",
+      workspaces,
+      sessions: sessions.sort((a, b) => Date.parse(b.modified) - Date.parse(a.modified)),
+      unknown,
     };
-  }), [state.projects, state.workspaces, state.sessions, state.sessionsLoad, selectedProject?.id]);
+  }), [state.projects, board]);
 
   const selectProject = useCallback(async (projectId: string) => {
     const project = stateRef.current.projects.find(item => item.id === projectId);
@@ -398,6 +402,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   return {
     state,
     projects,
+    board,
     selectedProject,
     selectedWorkspace,
     selectedSession,
