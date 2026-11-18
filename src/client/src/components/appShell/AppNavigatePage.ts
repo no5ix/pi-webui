@@ -1335,7 +1335,10 @@ export class AppNavigatePage extends LitElement {
        before it reads as a row of buttons. */
     .kinds { flex: 0 0 auto; display: flex; gap: var(--pi-space-1); margin: var(--pi-space-3) var(--pi-bar-inset) 0; padding: var(--pi-space-1); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); }
     .kind { box-sizing: border-box; flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--pi-space-2); min-height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-3); border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); font: inherit; font-size: var(--pi-text-sm); font-weight: var(--pi-weight-medium); cursor: pointer; }
-    @media (hover: hover) { .kind:not(.current):hover { background: var(--pi-row-hover); color: var(--pi-text); } }
+    @media (hover: hover) {
+      .kind:not(.current):hover { background: var(--pi-row-hover); color: var(--pi-text); }
+      .kind.current:hover { background: var(--pi-accent-soft-hover); }
+    }
     .kind .kind-icon { color: inherit; }
     .kind.current { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); }
     .kind-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

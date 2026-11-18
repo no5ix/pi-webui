@@ -1293,7 +1293,10 @@ export class SettingsDialog extends LitElement {
     .settings-nav { min-height: 0; padding: var(--pi-space-4); border-right: 1px solid var(--pi-divider); background: transparent; overflow: auto; }
     .settings-nav button { display: grid; gap: var(--pi-space-1); box-sizing: border-box; width: 100%; min-height: var(--pi-control-height-comfort); margin: 0 0 var(--pi-space-1); padding: var(--pi-space-3) var(--pi-space-4); border: 0; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: left; }
     .settings-nav button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
-    @media (hover: hover) { .settings-nav button:hover:not(.selected) { background: var(--pi-row-hover); color: var(--pi-text); } }
+    @media (hover: hover) {
+      .settings-nav button:hover:not(.selected) { background: var(--pi-row-hover); color: var(--pi-text); }
+      .settings-nav button.selected:hover { background: var(--pi-accent-soft-hover); }
+    }
     .settings-nav button.selected { background: var(--pi-accent-soft); color: var(--pi-on-accent-soft); font-weight: var(--pi-weight-medium); }
     .settings-nav small { font-size: var(--pi-text-2xs); color: var(--pi-muted); }
     .settings-nav button.selected small { color: color-mix(in srgb, var(--pi-on-accent-soft) 76%, transparent); }
