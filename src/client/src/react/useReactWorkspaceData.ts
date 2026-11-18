@@ -396,7 +396,13 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     await runtime.sessions.runCommand(text);
   }, [runtime]);
 
-  const projectsError = state.error !== "" && state.projectsLoad !== "loaded" ? state.error : undefined;
+  // Keep errors scoped to the read that produced them. AppState.error is a page-wide
+  // notice (for example a machine health/runtime read); attributing it to the
+  // project list made an unrelated transient 502 look like a terminal project
+  // failure. ProjectController owns the project's answered refusal and retries
+  // gateway/link misses while its listing is watched.
+  const machineId = state.selectedMachine?.id ?? "local";
+  const projectsError = runtime.projects.refusal(machineId);
   const sessionError = state.transcriptFailed ?? state.statusReadFailed ?? undefined;
 
   return {
