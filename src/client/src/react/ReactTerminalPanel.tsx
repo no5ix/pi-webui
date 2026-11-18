@@ -16,17 +16,20 @@ function messageText(error: unknown): string {
 
 export function ReactTerminalPanel({ workspace, machineId }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<XTerm>();
-  const fitRef = useRef<FitAddon>();
-  const socketRef = useRef<WebSocket>();
-  const inputRef = useRef<{ dispose(): void }>();
+  const terminalRef = useRef<XTerm | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const inputRef = useRef<{ dispose(): void } | null>(null);
   const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
+  const selectedIdRef = useRef<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   const sessions = useMemo(() => workspaceTerminalSessions(workspace, machineId), [workspace.id, workspace.projectId, machineId]);
+
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
   const refresh = useCallback(async (preferId?: string) => {
     setLoading(true);
@@ -34,22 +37,24 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
     try {
       const result = await sessions.list();
       setTerminals(result);
+      const currentId = selectedIdRef.current;
       const nextId = preferId && result.some(item => item.id === preferId)
         ? preferId
-        : selectedId && result.some(item => item.id === selectedId)
-          ? selectedId
+        : currentId && result.some(item => item.id === currentId)
+          ? currentId
           : result.find(item => !item.exited)?.id ?? result[0]?.id;
+      selectedIdRef.current = nextId;
       setSelectedId(nextId);
     } catch (cause) {
       setError(messageText(cause));
     } finally {
       setLoading(false);
     }
-  }, [sessions, selectedId]);
+  }, [sessions]);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (host === null || terminalRef.current !== undefined) return;
+    if (host === null || terminalRef.current !== null) return;
     const terminal = new XTerm({
       cursorBlink: true,
       convertEol: true,
@@ -86,17 +91,17 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
       observer.disconnect();
       inputRef.current?.dispose();
       socketRef.current?.close();
-      socketRef.current = undefined;
+      socketRef.current = null;
       terminal.dispose();
-      terminalRef.current = undefined;
-      fitRef.current = undefined;
+      terminalRef.current = null;
+      fitRef.current = null;
     };
   }, [refresh]);
 
   const connect = useCallback((terminal: TerminalInfo) => {
     const output = terminalRef.current;
     const fit = fitRef.current;
-    if (output === undefined || fit === undefined) return;
+    if (output === null || fit === null) return;
     socketRef.current?.close();
     socketRef.current = undefined;
     output.reset();
