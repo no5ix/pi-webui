@@ -262,6 +262,10 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text-bright); font-family:var(--pi-font-display); font-size:var(--pi-text-md); font-weight:var(--pi-weight-strong); letter-spacing:var(--pi-tracking-tight); line-height:1.25; }
   .conversation-project-name { min-width:0; overflow:hidden; color:var(--pi-muted); font-size:var(--pi-text-xs); font-weight:var(--pi-weight-regular); line-height:var(--pi-leading-tight); text-overflow:ellipsis; white-space:nowrap; }
   @media (max-width:1023px) { .conversation-title { font-size:var(--pi-text-md); } }
+  .conversation-nav-toggle { flex:none; width:var(--pi-panel-band-control-height); height:var(--pi-panel-band-control-height); padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); cursor:pointer; }
+  .conversation-nav-toggle .ui-icon { width:15px; height:15px; }
+  @media (hover: hover) { .conversation-nav-toggle:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
+  .conversation-nav-toggle:focus-visible { outline:var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset:var(--pi-focus-ring-offset-inset); }
   .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-1); flex:none; }
   .conversation-header-actions .rail-toggle { width:30px; height:30px; }
   .conversation-header-actions .rail-toggle .ui-icon { width:15px; height:15px; }
@@ -7131,7 +7135,6 @@ export class PiWebApp extends LitElement {
     if (expanded.has(projectId)) expanded.delete(projectId);
     else expanded.add(projectId);
     this.expandedProjectIds = expanded;
-    if (projectId !== this.state.selectedProject?.id) void this.navigateChoose("project", projectId);
   }
 
   /**
@@ -7313,7 +7316,6 @@ export class PiWebApp extends LitElement {
             <div class="navigation-toolbar" aria-label="Navigation panel actions">
               <button type="button" aria-label="Settings" title="Settings" @click=${() => { this.openSettings(); }}>${renderGearIcon()}</button>
               <button type="button" aria-label="Actions" title="Actions" @click=${() => { this.openActionPalette(); }}>${renderCommandIcon()}</button>
-              <button type="button" class="rail-toggle" aria-label=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} title=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} aria-expanded=${this.panelCollapse.navigationPanelCollapsed ? "false" : "true"} @click=${() => { this.panelCollapse.toggleNavigationPanel(); }}>${renderGridIcon()}</button>
             </div>
             <running-sessions-panel class="running-sessions-panel"
               .rows=${runningSessionRows({
@@ -7345,8 +7347,9 @@ export class PiWebApp extends LitElement {
         </aside>
         <main class="conversation-column ${mainViewClass(displayView)}" @dragenter=${this.handleChatDragEnter} @dragover=${this.handleChatDragOver} @dragleave=${this.handleChatDragLeave} @drop=${this.handleChatDrop}>
           <header class="conversation-header">
+            <button type="button" class="rail-toggle conversation-nav-toggle" aria-label=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} title=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} aria-expanded=${this.panelCollapse.navigationPanelCollapsed ? "false" : "true"} @click=${() => { this.panelCollapse.toggleNavigationPanel(); }}>${renderGridIcon()}</button>
             <div class="conversation-heading">
-              <div class="conversation-title" title=${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}>${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}</div>
+              <div class="conversation-title" title=${state.selectedSession?.firstMessage?.trim() || state.selectedSession?.name || state.selectedWorkspace?.label || "Pi WebUI"}>${state.selectedSession?.firstMessage?.trim() || state.selectedSession?.name || state.selectedWorkspace?.label || "Pi WebUI"}</div>
               <div class="conversation-project-name">${state.selectedProject?.name ?? state.projects.find((project) => project.id === state.selectedWorkspace?.projectId)?.name ?? state.selectedWorkspace?.label ?? "pi-webui"}</div>
             </div>
             <div class="conversation-header-actions">

@@ -72,7 +72,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   /* Same column as the expanded composer and the transcript: the private
      10px inset made the box edge jump 6px one way on desktop and the other
      way on the phone when the composer collapsed. */
-  .expand-composer { box-sizing: border-box; display: flex; align-items: center; gap: var(--pi-space-4); width: 100%; min-height: var(--pi-control-height-touch); padding: var(--pi-space-2) var(--pi-space-5); border: 0; border-radius: var(--pi-radius-md); background: var(--pi-surface-raised); color: var(--pi-muted); font: inherit; font-size: var(--pi-text-sm); text-align: start; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .expand-composer { box-sizing: border-box; display: flex; align-items: center; gap: var(--pi-space-4); width: 100%; min-height: var(--pi-control-height-touch); padding: var(--pi-space-2) var(--pi-space-5); border: 0; border-radius: var(--pi-radius-md); background: color-mix(in srgb, var(--pi-text) 5%, var(--pi-surface-panel)); color: var(--pi-muted); font: inherit; font-size: var(--pi-text-sm); text-align: start; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .expand-composer:focus-visible { color: var(--pi-text-bright); outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-tight); }
   @media (hover: hover) { .expand-composer:hover { background: var(--pi-surface-hover); color: var(--pi-text-bright); } }
   .expand-composer-label { flex: 0 0 auto; }
