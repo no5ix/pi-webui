@@ -85,7 +85,7 @@ export function ReactWorkspaceApp() {
     const session = data.projects.flatMap(row => row.sessions).find(item => item.id === sessionId);
     if (session !== undefined) void data.selectSession(session);
   };
-  const sendMessage = async () => {
+  const addAttachments = async (files: File[]) => {\n    if (files.length === 0) return;\n    setAttaching(true);\n    setAttachmentError(undefined);\n    try {\n      const result = await capturePromptAttachments(files, readBlobAsBase64);\n      setAttachments(current => [...current, ...result.attachments]);\n      if (result.error) setAttachmentError(result.error);\n    } finally { setAttaching(false); }\n  };\n  const sendMessage = async () => {
     const text = data.draft.trim();
     if ((text === "" && attachments.length === 0) || sending || attaching) return;
     setSending(true);
@@ -186,8 +186,8 @@ export function ReactWorkspaceApp() {
             {queuedCount > 0 && <span><Icon name="list-ordered"/> {queuedCount} queued</span>}
             {backgroundCount > 0 && <span><Icon name="layers"/> {backgroundCount} background runs</span>}
           </div>}
-          <div className={"rw-composer " + (composerFocused ? "focused" : "")}>
-            <input ref={attachmentInputRef} type="file" multiple hidden onChange={async event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (!files.length) return; setAttaching(true); setAttachmentError(undefined); try { const result = await capturePromptAttachments(files, readBlobAsBase64); setAttachments(current => [...current, ...result.attachments]); if (result.error) setAttachmentError(result.error); } finally { setAttaching(false); } }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
+          <div className={"rw-composer " + (composerFocused ? "focused" : "")} onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); } }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void addAttachments(files); } }}>
+            <input ref={attachmentInputRef} type="file" multiple hidden onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void addAttachments(files); }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
             <textarea value={data.draft} rows={1} placeholder={data.selectedSession ? "Message Pi..." : "Select a session first"} disabled={!data.selectedSession || data.selectedSession.archived === true} onChange={e => data.setDraft(e.target.value)} onFocus={() => setComposerFocused(true)} onBlur={() => setComposerFocused(false)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }} />
             <div className="rw-composer-tools">
               {isWorking && <button title="Stop current work" onClick={() => void data.stopSession()}><Icon name="square"/></button>}
