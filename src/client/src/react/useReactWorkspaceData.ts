@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { projectsApi, sessionsApi, workspacesApi, type Project, type SessionInfo, type Workspace, type SessionStatus, type FileTreeEntry } from "../api";
-import { parseSessionBoardAnswer, type SessionBoardAnswer } from "../api/parsers";
-import { request } from "../api/http";
-import type { FileTreeResponse, MessagePage } from "../../../shared/apiTypes";
+import type { SessionBoardAnswer } from "../api/parsers";
+import type { MessagePage } from "../../../shared/apiTypes";
 
 export interface ReactWorkspaceProject {
   readonly project: Project;
@@ -41,7 +40,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [messages, setMessages] = useState<readonly unknown[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>();
   const [fileEntries, setFileEntries] = useState<readonly FileTreeEntry[]>([]);
-  const [filePath, setFilePath] = useState("");
   const [loading, setLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
@@ -59,10 +57,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       try {
         const [projectRows, rawBoard] = await Promise.all([
           projectsApi.projects("local"),
-          request("api/machines/local/session-board", parseSessionBoardAnswer, { signal: controller.signal, cache: "no-store" }).catch(async () => {
-            const fallback = await sessionsApi.sessionBoard("local");
-            return fallback;
-          }),
+          sessionsApi.sessionBoard("local"),
         ]);
         if (!current) return;
         setProjects(projectRows);
@@ -115,7 +110,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       setSessionError(undefined);
       return;
     }
-    const controller = new AbortController();
     let current = true;
     setSessionError(undefined);
     setMessages([]);
@@ -129,15 +123,14 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       setMessages(page.messages);
       setSessionStatus(status);
     }).catch(error => {
-      if (current && !controller.signal.aborted) setSessionError(errorText(error));
+      if (current) setSessionError(errorText(error));
     });
-    return () => { current = false; controller.abort(); };
+    return () => { current = false; };
   }, [selectedSession?.id, selectedSession?.cwd]);
 
   const loadDirectory = useCallback(async (path = "") => {
     if (!selectedProject || !selectedWorkspace) return;
     setFilesError(undefined);
-    setFilePath(path);
     try {
       const result = await workspacesApi.workspaceTree(selectedProject.id, selectedWorkspace.id, path);
       setFileEntries(result.entries);
