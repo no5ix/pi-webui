@@ -1,7 +1,7 @@
 import { css, LitElement, html, nothing, type TemplateResult, unsafeCSS } from "lit";
 import { DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY, MOBILE_NAVIGATION_MEDIA_QUERY, PHONE_LAYOUT_MEDIA_QUERY, WORKSPACE_STACKED_MEDIA_QUERY } from "../breakpoints";
 import { isArchivableSessionInfo, isPendingStartSessionInfo, isTransientNewSessionInfo, writtenSessionIds } from "../sessionPersistence";
-import { uiIconStyle, renderActivityIcon, renderCommandIcon, renderDocumentIcon, renderGearIcon, renderPluginIcon, renderRobotIcon } from "./uiIcons.js";
+import { uiIconStyle, renderActivityIcon, renderCommandIcon, renderDocumentIcon, renderGearIcon, renderGridIcon, renderPluginIcon, renderRobotIcon } from "./uiIcons.js";
 import { loadSurface, warmLazySurfaces, type LazySurface } from "./lazySurfaces.js";
 import { sessionStateBadgeStyles } from "./sessionStateBadgeStyles.js";
 import type { ChatLine } from "./shared";
@@ -7389,7 +7389,7 @@ export class PiWebApp extends LitElement {
                 </conversation-disclosure>
                 </div>
               </div>
-              ${composerMarkup}
+              ${state.selectedSession.archived === true ? this.renderArchivedComposerSlot(state.selectedSession) : html`<prompt-editor .rowedMessageIds=${rowedClientMessageIds(state.messages, state.status?.queuedMessages ?? [])} .sessionId=${state.selectedSession.id} .cwd=${composerCwd(state)} .sessionPrompts=${this.sessionPromptsFor(state)} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${isSessionActive(state.status, state.activity)} .status=${state.status} .statusArrival=${state.statusArrival} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .onLocalCommand=${this.handleLocalCommand} .onOutgoingWritten=${this.handleOutgoingWritten} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .composerContributions=${this.plugins.getComposerContributions(selectedMachineId(state))} .onPluginNotice=${(message: string) => { this.setState(noticePatch(noticeForReader(message))); }}></prompt-editor>`}
               ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
               ${state.commandDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
               ${state.modelDialog !== undefined ? html`<model-picker ?abovedialog=${this.settingsOpen} title=${state.modelDialog.title} .options=${state.modelDialog.options} .catalog=${state.modelDialog.catalog} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onToggleEnabled=${this.handleToggleModelEnabled} .initialQuery=${state.modelDialog.query ?? ""} .initialMode=${state.modelDialog.mode ?? "enabled"} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></model-picker>` : null}
