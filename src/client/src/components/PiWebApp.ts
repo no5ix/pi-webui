@@ -7371,6 +7371,7 @@ export class PiWebApp extends LitElement {
               ${this.renderChatView(state, state.selectedSession)}
 
               <div class="conversation-status-and-disclosures">
+                ${this.renderStatusBar(state)}
                 <div class="conversation-bottom">
                 <conversation-disclosure heading="Background" panelId="background-content"
                   .icon=${renderActivityIcon()}
