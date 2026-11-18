@@ -21,6 +21,14 @@ import type { SessionActivityCategory } from "../../../shared/sessionActivitySta
  */
 export type NotificationEdge = NotificationEvent | "none";
 
+export function daemonInstanceChanged(
+  previous: string | undefined,
+  next: string | undefined,
+  hasPrevious: boolean,
+): boolean {
+  return hasPrevious && previous !== next;
+}
+
 export interface SessionEdgeFacts {
   /** What the session was doing on the previous frame. `undefined` means this frame is the first seen. */
   readonly previous: SessionActivityCategory | undefined;

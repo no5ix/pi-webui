@@ -36,7 +36,7 @@ import { sessionWorkSettled } from "../sessionWorkSettled";
 import type { SessionStateBadgeKind } from "./activityBadge";
 import { isSessionActive } from "../../../shared/activity";
 import { notifyTaskFinished, ensureNotificationRegistration, setTaskNotificationsWanted, taskNotificationsWanted, requestTaskNotificationPermission, notificationAvailability, type NotificationAvailability } from "../notifications/taskNotifications";
-import { notificationEdge, stoppedByReaderFacts } from "../notifications/sessionNotificationEdges";
+import { daemonInstanceChanged, notificationEdge, stoppedByReaderFacts } from "../notifications/sessionNotificationEdges";
 import { notifyBrowserChannel } from "../notifications/notificationDispatcher";
 import { sessionActivityCategory, type SessionActivityCategory } from "../../../shared/sessionActivityState";
 import { TurnRunClock, type FinishedTurn } from "../turnRunClock";
@@ -1292,15 +1292,23 @@ export class PiWebApp extends LitElement {
     if (status === undefined) return;
     if (session?.id !== status.sessionId) return;
     const key = `${selectedMachineId(this.state)}\u0000${session.id}`;
+    const category = sessionActivityCategory(status, this.state.activity);
+    const previous = this.sessionCategory.get(key);
+    const hasPreviousDaemon = this.daemonInstanceBySession.has(key);
+    const previousDaemon = this.daemonInstanceBySession.get(key);
+    this.daemonInstanceBySession.set(key, status.daemonInstanceId);
+    this.sessionCategory.set(key, category);
+    if (daemonInstanceChanged(previousDaemon, status.daemonInstanceId, hasPreviousDaemon)) {
+      this.workingEdge.delete(key);
+      this.turnClock.reset(key);
+      return;
+    }
     const working = isSessionActive(status);
     const wasWorking = this.workingEdge.get(key) === true;
     this.workingEdge.set(key, working);
     if (working) this.turnClock.sawWorking(key, { partial: !wasWorking });
     const finishedTurn = working ? undefined : this.turnClock.sawFinish(key);
     if (finishedTurn !== undefined) this.lastTurnRun = { key, turn: finishedTurn };
-    const category = sessionActivityCategory(status, this.state.activity);
-    const previous = this.sessionCategory.get(key);
-    this.sessionCategory.set(key, category);
     // The first status for a session after the page boots or switches sessions is a baseline,
     // not a transition the reader witnessed. In particular, an already-idle session must not
     // generate a "task finished" notification merely because its initial status was hydrated.
@@ -1330,6 +1338,9 @@ export class PiWebApp extends LitElement {
       if (delivery === "system") this.setState(noticePatch(noticeForReader("PI WEB sent this to the device's notifications.")));
     });
   }
+
+  /** Daemon ownership separates real task transitions from the idle baseline after a restart. */
+  private readonly daemonInstanceBySession = new Map<string, string | undefined>();
 
   /** Which sessions were working the last time a status frame spoke about them. */
   private readonly workingEdge = new Map<string, boolean>();
