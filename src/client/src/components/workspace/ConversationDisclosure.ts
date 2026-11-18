@@ -42,7 +42,7 @@ export class ConversationDisclosure extends LitElement {
   override render() {
     const count = this.count;
     return html`
-      <section class="card" ?data-expanded=${this.expanded}>
+      <section class="card" data-expanded=${this.expanded ? "true" : "false"}>
         <button class="toggle" type="button" aria-expanded=${this.expanded ? "true" : "false"}
           aria-controls=${this.contentId} ?disabled=${this.disabled}
           @click=${() => { const opening = !this.expanded; this.expanded = opening; if (opening) this.onExpand?.(); }}>

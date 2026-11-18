@@ -161,13 +161,13 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
   button.editor-attach { position: absolute; right: var(--pi-space-3); bottom: var(--pi-space-3); z-index: 2; box-sizing: border-box; width: min(var(--pi-control-height), calc(100% - 2 * var(--pi-space-3))); height: min(var(--pi-control-height), calc(100% - 2 * var(--pi-space-3))); aspect-ratio: 1; }
   .editor-attach .prompt-action-icon { width: 18px; height: 18px; }
   /* The one surface on the screen that asks to be typed in, so it is the one
-     surface with a fill of its own: the card surface under the ink and a hairline
-     that is not an accent. It carries no shadow - the composer sits on the
-     canvas with the transcript, and an elevation under it read as a tray pulled
-     out of the window. Focus is a ring drawn inside, never a permanent accent
-     border: an accent outline that is always on reads as "already focused" and
-     stops being a signal. */
-  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 44px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 1px solid var(--pi-border-muted); background: var(--pi-surface-card); color: var(--pi-text); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
+     surface with a fill of its own: a tinted panel under the ink and no
+     hairline, the way the reference draws it. It carries no shadow - the
+     composer sits on the canvas with the transcript, and an elevation under it
+     read as a tray pulled out of the window. Focus is a ring drawn outside the
+     fill, never a permanent accent border: an accent outline that is always on
+     reads as "already focused" and stops being a signal. */
+  textarea, .markdown-editor .cm-editor { box-sizing: border-box; width: 100%; min-height: 44px; max-height: 220px; resize: none; overflow: hidden; border-radius: var(--pi-radius-lg); border: 0; background: color-mix(in srgb, var(--pi-text) 5%, var(--pi-surface-panel)); color: var(--pi-text); font: var(--pi-control-font-size, 16px)/1.4 var(--pi-control-font-family, system-ui, sans-serif); line-height: inherit; }
   textarea:focus-visible, .markdown-editor .cm-editor.cm-focused { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
   textarea { overflow-y: auto; padding: var(--pi-space-3); padding-right: calc(var(--pi-space-3) + var(--pi-control-height) + var(--pi-space-3)); }
   /* A phone with the keyboard open leaves roughly 400px of viewport, and a
@@ -217,7 +217,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
      bordered box the user actually sees. Without this the composer was the one
      control in the app that gave no sign of being focused. */
   .markdown-editor .cm-focused { outline: none; }
-  .markdown-editor:focus-within .cm-editor { border-color: var(--pi-accent); box-shadow: 0 0 0 1px var(--pi-accent-ring, var(--pi-accent)); }
+  .markdown-editor:focus-within .cm-editor { box-shadow: 0 0 0 1px var(--pi-accent-ring, var(--pi-accent)); }
   /* drawSelection() renders the caret and selection itself, and CodeMirror's
      base colors for them assume a light editor (black caret, pale selection).
      Re-theme them so they stay readable in every pi-web theme. The focused
@@ -225,7 +225,7 @@ export const promptEditorStyles = css`${unsafeCSS(uiIconStyle)}
      selection background. */
   .markdown-editor .cm-cursor { border-left-color: var(--pi-text); }
   .markdown-editor .cm-editor .cm-selectionBackground { background: color-mix(in srgb, var(--pi-text) 18%, transparent); }
-  .markdown-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground { background: color-mix(in srgb, var(--pi-accent) 32%, transparent); }  .shell-mode textarea, .shell-mode .markdown-editor .cm-editor { border-color: var(--pi-success); box-shadow: 0 0 0 1px var(--pi-success-ring); }
+  .markdown-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground { background: color-mix(in srgb, var(--pi-accent) 32%, transparent); }  .shell-mode textarea, .shell-mode .markdown-editor .cm-editor { box-shadow: 0 0 0 1px var(--pi-success-ring); }
   .mode-hint { justify-self: start; border: 1px solid var(--pi-success-border); border-radius: var(--pi-radius-pill); background: var(--pi-success-surface); color: var(--pi-success); padding: var(--pi-space-1) var(--pi-space-4); font-size: var(--pi-text-xs); pointer-events: none; margin: 0 0 var(--pi-space-2); }
   .mode-hint-problem { border-color: var(--pi-danger); background: var(--pi-danger-bg, var(--pi-surface)); color: var(--pi-danger); }
   /* A plugin status keeps the strip every composer hint draws. Its close is a small drawn mark like

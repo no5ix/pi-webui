@@ -67,14 +67,14 @@ describe("the sidebar's project tree", () => {
   });
 
   it("folds an opened project's list at the sidebar's limit and names the rest", async () => {
-    const opened: string[] = [];
+    const revealed: string[] = [];
     const sessions = Array.from({ length: 7 }, (_, index) => session(`s${String(index)}`, "/repo/app"));
-    const panel = await mount({ model: model({ sessions, expandedProjectIds: new Set(["app"]) }), onToggleProject: (id) => { opened.push(id); } });
+    const panel = await mount({ model: model({ sessions, expandedProjectIds: new Set(["app"]) }), onShowMore: (id) => { revealed.push(id); } });
     expect(panel.renderRoot.querySelectorAll(".session")).toHaveLength(5);
     const show = q(panel, ".show-more");
     expect(show?.textContent.trim()).toBe("Show 2 more");
     show?.dispatchEvent(new Event("click", { bubbles: true, composed: true }));
-    expect(opened).toEqual(["app"]);
+    expect(revealed).toEqual(["app"]);
   });
 
   it("lists a project's sessions when it is opened, and marks the one on screen", async () => {

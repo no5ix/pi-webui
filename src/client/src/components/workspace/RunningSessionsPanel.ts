@@ -30,7 +30,7 @@ export class RunningSessionsPanel extends LitElement {
   override render() {
     const count = this.rows.length;
     return html`
-      <section class="section" ?data-collapsed=${this.collapsed}>
+      <section class="section" data-collapsed=${this.collapsed ? "true" : "false"}>
         <button class="head" type="button" aria-expanded=${this.collapsed ? "false" : "true"}
           aria-label=${this.collapsed ? "Show running sessions" : "Hide running sessions"}
           @click=${() => { this.collapsed = !this.collapsed; }}>

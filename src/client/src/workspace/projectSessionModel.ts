@@ -76,6 +76,8 @@ export function projectSessionModel(input: {
   sessions: readonly SessionInfo[];
   sessionStates: ReadonlyMap<string, SessionActivityCategory>;
   expandedProjectIds: ReadonlySet<string>;
+  /** Groups whose "Show N more" the reader pressed: every matching row shows, not just the recent few. */
+  revealedProjectIds?: ReadonlySet<string>;
   selectedProjectId: string | undefined;
   selectedSessionId: string | undefined;
   query: string;
@@ -110,7 +112,8 @@ export function projectSessionModel(input: {
     .map((project) => {
       const rows = (rowsByProject.get(project.id) ?? []).slice().sort((a, b) => b.activityAt - a.activityAt);
       const expanded = filtering || input.expandedProjectIds.has(project.id) || project.id === input.selectedProjectId;
-      const shown = expanded ? rows.slice(0, SIDEBAR_SESSIONS_BEFORE_FOLD) : [];
+      const revealed = filtering || input.revealedProjectIds?.has(project.id) === true;
+      const shown = expanded ? (revealed ? rows : rows.slice(0, SIDEBAR_SESSIONS_BEFORE_FOLD)) : [];
       return {
         projectId: project.id,
         name: project.name,

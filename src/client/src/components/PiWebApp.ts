@@ -267,7 +267,7 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   @media (hover: hover) { .conversation-nav-toggle:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
   .conversation-nav-toggle:focus-visible { outline:var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset:var(--pi-focus-ring-offset-inset); }
   .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-1); flex:none; }
-  .conversation-header-actions .rail-toggle { width:30px; height:30px; }
+  .conversation-header-actions .rail-toggle { width:var(--pi-control-height); height:var(--pi-control-height); }
   .conversation-header-actions .rail-toggle .ui-icon { width:15px; height:15px; }
   .conversation-header-actions .rail-toggle[aria-expanded="true"] { background:var(--pi-accent-soft); color:var(--pi-on-accent-soft); }
   .conversation-header-actions .rail-toggle[aria-expanded="false"] { color:var(--pi-muted); }
@@ -639,6 +639,8 @@ export class PiWebApp extends LitElement {
    * session; the set itself is the reader's, and is not rewritten by selection.
    */
   @state() private expandedProjectIds: ReadonlySet<string> = new Set();
+  /** Projects whose "Show N more" the reader pressed, so their whole list shows. */
+  @state() private revealedProjectIds: ReadonlySet<string> = new Set();
   /** The children of the session on screen, as its record answered. */
   @state() private subagentsRead: SubagentsRead = { kind: "unknown" };
   /** The Git tab's changed-file count, or undefined while the app has not been told. */
@@ -7077,11 +7079,21 @@ export class PiWebApp extends LitElement {
     }
   }
 
-  /** The sessions of the machine being browsed, each row carrying that machine. */
+  /**
+   * The sessions of the machine being browsed, each row carrying that machine.
+   *
+   * The tree lists every project the machine reported, not only the project
+   * that happens to be open: without the machine's board a folded project had
+   * no rows to unfold, and its count was the only evidence its sessions
+   * existed. The open project's own listing stays first, so the freshest name
+   * and state for the session on screen win the merge.
+   */
   private sidebarSessionRows(): readonly SessionInfo[] {
     const machineId = this.browsedMachineId();
     const browsingElsewhere = machineId !== selectedMachineId(this.state);
-    return this.shownSessions(browsingElsewhere ? this.quickSwitcherSessions : this.state.sessions, machineId);
+    const boardRows = this.quickSwitcherMachineId === machineId ? this.quickSwitcherSessions : [];
+    const listed = browsingElsewhere ? boardRows : dedupeById([...this.state.sessions, ...boardRows]);
+    return this.shownSessions(listed, machineId);
   }
 
   /** The sidebar's project tree: every project, its sessions, and what is folded. */
@@ -7094,6 +7106,7 @@ export class PiWebApp extends LitElement {
       selectedProjectId: this.state.selectedProject?.id,
       selectedSessionId: this.state.selectedSession?.id,
       expandedProjectIds: this.sidebarExpandedProjectIds(),
+      revealedProjectIds: this.revealedProjectIds,
       query: this.sidebarQuery,
     });
   }
@@ -7126,15 +7139,22 @@ export class PiWebApp extends LitElement {
   }
 
   /**
-   * One row folds its sessions and selects its project, the way the navigate
-   * page's rows do. A sidebar that only folded would send the reader to Go to to
-   * choose a project that is on screen under their cursor.
+   * One row folds or unfolds its sessions without changing the conversation on
+   * screen: unfolding is a read of what the machine already reported.
    */
   private toggleSidebarProject(projectId: string): void {
     const expanded = new Set(this.expandedProjectIds);
+    const revealed = new Set(this.revealedProjectIds);
+    revealed.delete(projectId);
     if (expanded.has(projectId)) expanded.delete(projectId);
     else expanded.add(projectId);
     this.expandedProjectIds = expanded;
+    this.revealedProjectIds = revealed;
+  }
+
+  /** "Show N more" reveals the rest of a project's list; folding it again resets that. */
+  private showMoreSidebarSessions(projectId: string): void {
+    this.revealedProjectIds = new Set([...this.revealedProjectIds, projectId]);
   }
 
   /**
@@ -7307,6 +7327,9 @@ export class PiWebApp extends LitElement {
     // exactly there. Desktop keeps the empty state - its panel is always
     // on screen.
     const displayView = this.displayMainView();
+    const conversationTitle = state.selectedSession === undefined
+      ? state.selectedWorkspace?.label ?? "Pi WebUI"
+      : sessionLabel(state.selectedSession);
     this.appRowView = this.renderAppRow(state.error, state.errorClaim);
     return html`
       <div class=${`${this.panelCollapse.shellClass(displayView, this.workspaceColumnHasContent())}${this.workspacePanelHoldsCanvas() ? " workspace-panel-fullscreen" : ""}`} style=${this.panelResize.shellStyle({ navigation: this.resizablePanelConstraints("navigation"), workspace: this.resizablePanelConstraints("workspace") })}>
@@ -7337,6 +7360,7 @@ export class PiWebApp extends LitElement {
                 .problem=${this.sidebarProblem()}
                 .onQueryChange=${(query: string) => { this.sidebarQuery = query; }}
                 .onToggleProject=${(projectId: string) => { this.toggleSidebarProject(projectId); }}
+                .onShowMore=${(projectId: string) => { this.showMoreSidebarSessions(projectId); }}
                 .onSelectSession=${(sessionId: string) => { this.openSidebarSession(sessionId); }}
                 .onNewSession=${(projectId: string | undefined) => { this.startNewSession(projectId); }}
                 .onOpenAllProjects=${() => { void this.navigateWiden("project"); }}
@@ -7349,7 +7373,7 @@ export class PiWebApp extends LitElement {
           <header class="conversation-header">
             <button type="button" class="rail-toggle conversation-nav-toggle" aria-label=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} title=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} aria-expanded=${this.panelCollapse.navigationPanelCollapsed ? "false" : "true"} @click=${() => { this.panelCollapse.toggleNavigationPanel(); }}>${renderGridIcon()}</button>
             <div class="conversation-heading">
-              <div class="conversation-title" title=${state.selectedSession?.firstMessage?.trim() || state.selectedSession?.name || state.selectedWorkspace?.label || "Pi WebUI"}>${state.selectedSession?.firstMessage?.trim() || state.selectedSession?.name || state.selectedWorkspace?.label || "Pi WebUI"}</div>
+              <div class="conversation-title" title=${conversationTitle}>${conversationTitle}</div>
               <div class="conversation-project-name">${state.selectedProject?.name ?? state.projects.find((project) => project.id === state.selectedWorkspace?.projectId)?.name ?? state.selectedWorkspace?.label ?? "pi-webui"}</div>
             </div>
             <div class="conversation-header-actions">

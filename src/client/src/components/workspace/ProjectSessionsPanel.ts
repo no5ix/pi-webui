@@ -14,11 +14,13 @@ import { disclosureIconStyle, renderDisclosureIcon } from "../disclosureIcon";
  * to; a 280px column is not wide enough for both, and the reference is a tree,
  * not a tile board.
  *
- * A project row does two honest things at once: it selects the project (the
- * app's working scope) and folds or unfolds its sessions, which is what a row
- * with a chevron means everywhere else in the app. A folded project states how
- * many sessions it holds; the fold never hides the session that is open, so
- * selecting a project cannot make the reader's own session vanish.
+ * A project row folds or unfolds its sessions, which is what a row with a
+ * chevron means everywhere else in the app. Unfolding is a read, not a
+ * navigation: it lists the sessions the machine already reported without
+ * closing the conversation on screen. A folded project states how many
+ * sessions it holds; an unfolded one lists the most recent few and offers the
+ * rest behind "Show N more", so a project with dozens of sessions cannot push
+ * every other project out of the column.
  *
  * The counts are of what the app has loaded, and the tree says so when a
  * listing is still arriving or refused: a project list that is silently short
@@ -37,6 +39,7 @@ export class ProjectSessionsPanel extends LitElement {
   @property({ type: String }) problem = "";
   @property({ attribute: false }) onQueryChange?: (query: string) => void;
   @property({ attribute: false }) onToggleProject?: (projectId: string) => void;
+  @property({ attribute: false }) onShowMore?: (projectId: string) => void;
   @property({ attribute: false }) onSelectSession?: (sessionId: string) => void;
   @property({ attribute: false }) onNewSession?: (projectId: string | undefined) => void;
   @property({ attribute: false }) onOpenAllProjects?: () => void;
@@ -80,7 +83,7 @@ export class ProjectSessionsPanel extends LitElement {
                   <span class="project-name" data-missing=${group.folderMissing ? "true" : "false"}>${group.name}</span>
                   ${group.total === 0 ? nothing : html`<span class="project-count">${String(group.total)}</span>`}
                 </button>
-                <div class="sessions-clip" ?data-expanded=${group.expanded}>
+                <div class="sessions-clip" data-expanded=${group.expanded ? "true" : "false"}>
                   <div class="sessions">
                     ${group.rows.map((row) => html`
                       <button class="session" type="button" role="treeitem" data-selected=${row.selected ? "true" : "false"} aria-selected=${row.selected ? "true" : "false"}
@@ -91,7 +94,7 @@ export class ProjectSessionsPanel extends LitElement {
                       </button>`)}
                     ${group.hiddenCount > 0 ? html`
                       <button class="show-more" type="button"
-                        @click=${() => this.onToggleProject?.(group.projectId)}>Show ${String(group.hiddenCount)} more</button>`
+                        @click=${() => this.onShowMore?.(group.projectId)}>Show ${String(group.hiddenCount)} more</button>`
                       : group.rows.length === 0 ? html`<p class="empty group-empty">No sessions in this project.</p>` : nothing}
                   </div>
                 </div>
