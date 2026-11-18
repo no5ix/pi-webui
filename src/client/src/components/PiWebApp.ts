@@ -239,6 +239,12 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   aside app-navigation-panel { flex:1 1 auto; min-height:0; }
   aside app-navigate-page { flex:1 1 auto; min-height:0; }
   .navigation-stack { display:flex; flex-direction:column; min-height:0; height:100%; }
+  .navigation-toolbar { flex:none; height:52px; min-height:52px; box-sizing:border-box; display:flex; align-items:center; justify-content:flex-end; gap:4px; padding:0 10px; }
+  .navigation-toolbar button { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); cursor:pointer; }
+  .navigation-toolbar button .ui-icon { width:15px; height:15px; }
+  .navigation-toolbar button:hover { background:var(--pi-surface-hover); color:var(--pi-text); }
+  .navigation-toolbar button:focus-visible { outline:var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset:var(--pi-focus-ring-offset-inset); }
+  .navigation-toolbar button[aria-expanded="true"] { background:var(--pi-accent-soft); color:var(--pi-on-accent-soft); }
   .running-sessions-panel { flex:none; }
   .projects-area { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; }
   .projects-heading { box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; min-height: var(--pi-control-height-comfort); padding:var(--pi-space-2) var(--pi-row-edge); color:var(--pi-text-bright); font:var(--pi-text-sm) var(--pi-font-ui); font-weight:var(--pi-weight-semibold); }
@@ -251,11 +257,16 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   /* One band across the top of the window: the sidebar's first row, this header
      and the workbench tab strip are the same height with the same rule under
      them, so the three columns read as one surface and not three products. */
-  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--pi-space-5); min-height:var(--pi-panel-band-height); padding:0 var(--pi-bar-inset-comfort); border-bottom:1px solid var(--pi-divider); background:var(--pi-bg); }
-  .conversation-heading { display:grid; min-width:0; gap:var(--pi-space-1); align-content:center; }
-  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text-bright); font-family:var(--pi-font-display); font-size:var(--pi-text-xl); font-weight:var(--pi-weight-strong); letter-spacing:var(--pi-tracking-tight); line-height:var(--pi-leading-tight); }
-  .conversation-subtitle { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-muted); font:var(--pi-text-xs) var(--pi-font-ui); }
-  @media (max-width:1023px) { .conversation-title { font-size:var(--pi-text-lg); } }
+  .conversation-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--pi-space-3); height:52px; min-height:52px; padding:0 var(--pi-space-4); border:0; background:var(--pi-bg); }
+  .conversation-heading { display:grid; min-width:0; gap:0; align-content:center; }
+  .conversation-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pi-text-bright); font-family:var(--pi-font-display); font-size:var(--pi-text-md); font-weight:var(--pi-weight-strong); letter-spacing:var(--pi-tracking-tight); line-height:1.25; }
+  .conversation-subtitle { display:none; }
+  @media (max-width:1023px) { .conversation-title { font-size:var(--pi-text-md); } }
+  .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-1); flex:none; }
+  .conversation-header-actions .rail-toggle { width:30px; height:30px; }
+  .conversation-header-actions .rail-toggle .ui-icon { width:15px; height:15px; }
+  .conversation-header-actions .rail-toggle[aria-expanded="true"] { background:var(--pi-accent-soft); color:var(--pi-on-accent-soft); }
+  .conversation-header-actions .rail-toggle[aria-expanded="false"] { color:var(--pi-muted); }
   .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-2); flex:none; }
   .conversation-header-actions button { width: var(--pi-panel-band-control-height); height: var(--pi-panel-band-control-height); padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
 @media (hover: hover) { .conversation-header-actions button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
@@ -265,7 +276,9 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .conversation-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   .conversation-body chat-view { flex:1 1 auto; min-height:0; }
   .conversation-body prompt-editor { flex:none; }
-  .conversation-bottom { flex:none; display:grid; gap:var(--pi-space-3); width:100%; max-width:var(--pi-chat-measure); margin-inline:auto; padding:var(--pi-space-3) var(--pi-space-4) var(--pi-space-4); }
+  .conversation-status-and-disclosures { flex:none; display:flex; flex-direction:column; }
+  .conversation-bottom { flex:none; display:grid; gap:var(--pi-space-2); width:100%; max-width:var(--pi-chat-measure); margin-inline:auto; padding:var(--pi-space-2) var(--pi-space-4); }
+  .conversation-bottom conversation-disclosure .toggle { min-height:38px; padding:0 var(--pi-space-4); }
   .edited-file-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
   .edited-file-list code { overflow-wrap:anywhere; color:var(--pi-text-secondary); font:var(--pi-text-2xs) var(--pi-font-mono); }
   .workspace-panel-content { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
@@ -7298,6 +7311,11 @@ export class PiWebApp extends LitElement {
         ${this.renderNavigationProgress()}
         <aside id="navigation-panel">
           <div class="navigation-stack">
+            <div class="navigation-toolbar" aria-label="Navigation panel actions">
+              <button type="button" aria-label="Settings" title="Settings" @click=${() => { this.openSettings(); }}>${renderGearIcon()}</button>
+              <button type="button" aria-label="Actions" title="Actions" @click=${() => { this.openActionPalette(); }}>${renderCommandIcon()}</button>
+              <button type="button" class="rail-toggle" aria-label=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} title=${this.panelCollapse.navigationPanelCollapsed ? "Expand left sidebar" : "Collapse left sidebar"} aria-expanded=${this.panelCollapse.navigationPanelCollapsed ? "false" : "true"} @click=${() => { this.panelCollapse.toggleNavigationPanel(); }}>${renderGridIcon()}</button>
+            </div>
             <running-sessions-panel class="running-sessions-panel"
               .rows=${runningSessionRows({
                 sessions: this.withCreatingRows(this.quickSwitcherSessionsWithPins(), this.rowsMachineId()),
@@ -7330,11 +7348,9 @@ export class PiWebApp extends LitElement {
           <header class="conversation-header">
             <div class="conversation-heading">
               <div class="conversation-title" title=${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}>${state.selectedSession?.name ?? state.selectedWorkspace?.label ?? "Pi WebUI"}</div>
-              <div class="conversation-subtitle">${state.selectedProject?.name ?? ""}</div>
             </div>
             <div class="conversation-header-actions">
-              <button type="button" aria-label="Settings" title="Settings" @click=${() => { this.openSettings(); }}>${renderGearIcon()}</button>
-              <button type="button" aria-label="Actions" title="Actions" @click=${() => { this.openActionPalette(); }}>${renderCommandIcon()}</button>
+              <button type="button" class="rail-toggle" aria-label=${this.panelCollapse.workspacePanelCollapsed ? "Expand right panel" : "Collapse right panel"} title=${this.panelCollapse.workspacePanelCollapsed ? "Expand right panel" : "Collapse right panel"} aria-expanded=${this.panelCollapse.workspacePanelCollapsed ? "false" : "true"} @click=${() => { this.panelCollapse.toggleWorkspacePanel(); }}>${renderGridIcon()}</button>
             </div>
           </header>
           <div class="conversation-subagents">
@@ -7354,7 +7370,10 @@ export class PiWebApp extends LitElement {
           <div class="conversation-body">
             ${state.selectedSession ? html`
               ${this.renderChatView(state, state.selectedSession)}
-              ${state.selectedSession.archived === true ? this.renderArchivedComposerSlot(state.selectedSession) : html`<prompt-editor .rowedMessageIds=${rowedClientMessageIds(state.messages, state.status?.queuedMessages ?? [])} .sessionId=${state.selectedSession.id} .cwd=${composerCwd(state)} .sessionPrompts=${this.sessionPromptsFor(state)} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${isSessionActive(state.status, state.activity)} .status=${state.status} .statusArrival=${state.statusArrival} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .onLocalCommand=${this.handleLocalCommand} .onOutgoingWritten=${this.handleOutgoingWritten} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .composerContributions=${this.plugins.getComposerContributions(selectedMachineId(state))} .onPluginNotice=${(message: string) => { this.setState(noticePatch(noticeForReader(message))); }}></prompt-editor>`}
+
+              <div class="conversation-status-and-disclosures">
+                ${this.renderStatusBar(state)}
+                <div class="conversation-bottom">
               ${this.renderStatusBar(state)}
               <div class="conversation-bottom">
                 <conversation-disclosure heading="Background" panelId="background-content"
@@ -7370,8 +7389,9 @@ export class PiWebApp extends LitElement {
                   .detail=${this.editedFilesDetail()}
                 >
                   <edited-files-panel .rows=${this.editedFileRowsForScreen()}></edited-files-panel>
-                </conversation-disclosure>
+                </conversation-disclosure>                </div>
               </div>
+              ${composerMarkup}
               ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
               ${state.commandDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
               ${state.modelDialog !== undefined ? html`<model-picker ?abovedialog=${this.settingsOpen} title=${state.modelDialog.title} .options=${state.modelDialog.options} .catalog=${state.modelDialog.catalog} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onToggleEnabled=${this.handleToggleModelEnabled} .initialQuery=${state.modelDialog.query ?? ""} .initialMode=${state.modelDialog.mode ?? "enabled"} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></model-picker>` : null}

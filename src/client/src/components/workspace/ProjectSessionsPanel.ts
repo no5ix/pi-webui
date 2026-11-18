@@ -80,7 +80,7 @@ export class ProjectSessionsPanel extends LitElement {
                   <span class="project-name" data-missing=${group.folderMissing ? "true" : "false"}>${group.name}</span>
                   ${group.total === 0 ? nothing : html`<span class="project-count">${String(group.total)}</span>`}
                 </button>
-                ${group.expanded ? html`
+                <div class="sessions-clip" ?data-expanded=${group.expanded}>
                   <div class="sessions">
                     ${group.rows.map((row) => html`
                       <button class="session" type="button" role="treeitem" data-selected=${row.selected ? "true" : "false"} aria-selected=${row.selected ? "true" : "false"}
@@ -93,7 +93,8 @@ export class ProjectSessionsPanel extends LitElement {
                       <button class="show-more" type="button"
                         @click=${() => this.onToggleProject?.(group.projectId)}>Show ${String(group.hiddenCount)} more</button>`
                       : group.rows.length === 0 ? html`<p class="empty group-empty">No sessions in this project.</p>` : nothing}
-                  </div>` : nothing}
+                  </div>
+                </div>
               </div>`)}
         </div>
       </section>
@@ -118,9 +119,9 @@ export class ProjectSessionsPanel extends LitElement {
       .search { flex: none; position: relative; display: flex; align-items: center; margin: 0 var(--pi-row-edge) var(--pi-space-4); }
       .search-icon { position: absolute; inset-inline-start: var(--pi-space-2); display: inline-flex; color: var(--pi-dim); pointer-events: none; }
       .search-icon .ui-icon { width: 13px; height: 13px; }
-      .search-input { box-sizing: border-box; width: 100%; min-width: 0; height: var(--pi-control-height-comfort); padding: 0 var(--pi-space-9); border: 1px solid var(--pi-chip-border); border-radius: var(--pi-radius-md); background: var(--pi-chip-bg); color: var(--pi-text); font: var(--pi-text-base) var(--pi-font-ui); }
-      .search-input::placeholder { color: var(--pi-muted); }
-      .search-input:focus-visible { border-color: var(--pi-accent-border); background: var(--pi-surface); outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
+      .search-input { box-sizing:border-box; width:100%; min-width:0; height:var(--pi-control-height-comfort); padding:0 var(--pi-space-9); border:0; border-radius:var(--pi-radius-md); background:color-mix(in srgb, var(--pi-text) 5%, var(--pi-surface-panel)); color:var(--pi-text); font:var(--pi-text-base) var(--pi-font-ui); transition:background-color 140ms ease, box-shadow 140ms ease; }
+      .search-input::placeholder { color:var(--pi-muted); }
+      .search-input:focus-visible { background:var(--pi-surface); outline:var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset:var(--pi-focus-ring-offset-inset); }
       .search-input::-webkit-search-cancel-button { display: none; }
       .search-clear { position: absolute; inset-inline-end: var(--pi-space-2); width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--pi-radius-sm); background: transparent; color: var(--pi-muted); cursor: pointer; }
       .search-clear .ui-icon { width: 12px; height: 12px; }
@@ -148,7 +149,10 @@ export class ProjectSessionsPanel extends LitElement {
       .project-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--pi-weight-medium); }
       .project-name[data-missing="true"] { color: var(--pi-muted); text-decoration: line-through; }
       .project-count { flex: none; color: var(--pi-dim); font-variant-numeric: tabular-nums; font-size: var(--pi-text-xs); }
-      .sessions { display: flex; flex-direction: column; padding-inline-start: var(--pi-space-6); }
+      .sessions-clip { display:grid; grid-template-rows:0fr; opacity:0; overflow:hidden; transition:grid-template-rows 180ms ease, opacity 150ms ease; }
+      .sessions-clip[data-expanded="true"] { grid-template-rows:1fr; opacity:1; }
+      .sessions { display:flex; flex-direction:column; min-height:0; padding-inline-start:var(--pi-space-6); }
+      @media (prefers-reduced-motion: reduce) { .sessions-clip { transition:none; } }
       .session { width: 100%; box-sizing: border-box; min-height: var(--pi-control-height); display: flex; align-items: center; gap: var(--pi-space-3); padding: 0 var(--pi-space-3); border: 1px solid transparent; border-radius: var(--pi-radius-md); background: transparent; color: var(--pi-text-secondary); text-align: start; font: var(--pi-text-base) var(--pi-font-ui); cursor: pointer; }
 @media (hover: hover) { .session:hover { background: var(--pi-row-hover); color: var(--pi-text); } }
       .session:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
