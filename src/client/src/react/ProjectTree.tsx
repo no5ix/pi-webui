@@ -13,8 +13,12 @@ export function ProjectTree({ projects, query, expanded, onExpanded, selectedPro
       const showMore = showMoreByProject[project.id] === true;
       const rows = open ? matching.slice(0, showMore ? matching.length : 5) : [];
       return <section className="rw-project-group" key={project.id}>
-        <button className="rw-project-row" onClick={() => { onSelectProject(project.id); toggle(project.id); }}><Icon name={open ? "chevron-down" : "chevron-right"}/><Icon name="folder"/><span>{project.name}</span><small>{project.unknown ? "…" : project.sessions.length}</small></button>
-        {project.unknown && open && <div className="rw-data-state">The session list could not be loaded.</div>}
+        <div className={"rw-project-row " + (selectedProject === project.id ? "selected" : "")}>
+          <button className="rw-project-toggle" title={open ? "Collapse project" : "Expand project"} onClick={() => toggle(project.id)}><Icon name={open ? "chevron-down" : "chevron-right"}/></button>
+          <button className="rw-project-name" onClick={() => { onSelectProject(project.id); if (!open) toggle(project.id); }}><Icon name="folder"/><span>{project.name}</span></button>
+          <small>{project.unknown ? "…" : project.sessions.length}</small>
+        </div>
+        {project.unknown && open && <div className="rw-data-state">{selectedProject === project.id ? "Loading this workspace's sessions…" : "Select this project to load its sessions."}</div>}
         <div className="rw-session-rows">
           {rows.map(row => <button className={"rw-session-row " + (selectedProject === project.id && selectedSession === row.id ? "selected" : "")} key={row.id} onClick={() => onSelectSession(project.id, row.id)}><span className="rw-session-mark">#</span><span>{row.name}</span><small>{new Date(row.session.modified).toLocaleDateString()}</small></button>)}
           {open && matching.length > 5 && <button className="rw-show-more" onClick={() => onShowMore(project.id)}>{showMore ? "Show less" : "Show 5 more"}</button>}
