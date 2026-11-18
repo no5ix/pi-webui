@@ -4,6 +4,9 @@ import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
 import { MachineController } from "../controllers/machineController";
+import { SessionBoardController } from "../controllers/sessionBoardController";
+import { boardEventOf, boardSessionsOf, type SessionBoard } from "../sync/sessionBoard";
+import { RealtimeSocket } from "../sessionSocket";
 import { SessionController } from "../controllers/sessionController";
 import { SessionStorageSessionSelectionMemory } from "../controllers/sessionSelection";
 import { SessionStorageWorkspaceSelectionMemory } from "../controllers/workspaceSelection";
@@ -23,6 +26,7 @@ export interface ReactWorkspaceProject {
 export interface ReactWorkspaceData {
   readonly state: AppState;
   readonly projects: readonly ReactWorkspaceProject[];
+  readonly board: SessionBoard | undefined;
   readonly selectedProject: Project | undefined;
   readonly selectedWorkspace: Workspace | undefined;
   readonly selectedSession: SessionInfo | undefined;
@@ -56,6 +60,7 @@ type Runtime = {
   workspaces: WorkspaceController;
   machines: MachineController;
   sessions: SessionController;
+  boards: SessionBoardController;
 };
 
 function errorText(error: unknown): string {
@@ -76,6 +81,8 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
   const [filesError, setFilesError] = useState<string>();
   const [draft, setDraftState] = useState("");
+  const [board, setBoard] = useState<SessionBoard>();
+  const realtimeRef = useRef<RealtimeSocket | undefined>(undefined);
 
   if (runtimeRef.current === undefined) {
     const getState: GetState = () => stateRef.current;
@@ -123,6 +130,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     );
     projectController = new ProjectController(getState, setStatePatch, workspaceController);
     const machineController = new MachineController(getState, setStatePatch, updateUrl, projectController);
+    const boardController = new SessionBoardController({
+      knownProjects: (machineId) => machineId === (getState().selectedMachine?.id ?? "local") && getState().projectsLoad === "loaded" ? getState().projects : undefined,
+    });
     runtimeRef.current = {
       getState,
       setState: setStatePatch,
@@ -130,6 +140,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       workspaces: workspaceController,
       machines: machineController,
       sessions: sessionController,
+      boards: boardController,
     };
   }
 
