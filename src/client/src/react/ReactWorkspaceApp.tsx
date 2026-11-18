@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
@@ -61,6 +61,7 @@ export function ReactWorkspaceApp() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
   const [fileFilter, setFileFilter] = useState("");
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [fileDraft, setFileDraft] = useState("");
   const [fileDirty, setFileDirty] = useState(false);
   const [fileSaving, setFileSaving] = useState(false);
@@ -204,7 +205,7 @@ export function ReactWorkspaceApp() {
       {rightOpen && <button className="rw-resize rw-resize-right" aria-label="Resize workbench" onPointerDown={e => startResize("right", e)}/>}
       <aside className="rw-workbench">
         <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
-        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><button title="Upload" disabled><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh session branch information" onClick={data.refresh}><Icon name="refresh-cw"/></button>}</>}</div>
+        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><input ref={uploadInputRef} type="file" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void data.uploadFile(file).catch(() => undefined); event.target.value = ""; }}/><button title="Upload file to the current folder" onClick={() => uploadInputRef.current?.click()} disabled={!data.selectedWorkspace}><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh session branch information" onClick={data.refresh}><Icon name="refresh-cw"/></button>}</>}</div>
         {activeTab === "Files" ? <div className="rw-file-tree">
           {data.filesError && <div className="rw-data-error">{data.filesError}</div>}
           {data.selectedWorkspace && <div className="rw-file-tree-path">

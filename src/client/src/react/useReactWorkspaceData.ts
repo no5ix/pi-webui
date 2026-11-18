@@ -47,6 +47,7 @@ export interface ReactWorkspaceData {
   readonly loadDirectory: (path?: string) => Promise<void>;
   readonly loadFile: (path: string) => Promise<void>;
   readonly saveFile: (path: string, content: string) => Promise<void>;
+  readonly uploadFile: (file: File) => Promise<void>;
   readonly sendPrompt: (text: string) => Promise<boolean>;
   readonly stopSession: () => Promise<void>;
   readonly startSession: () => void;
@@ -335,6 +336,26 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     }
   }, []);
 
+  const uploadFile = useCallback(async (file: File) => {
+    const current = stateRef.current;
+    if (current.selectedProject === undefined || current.selectedWorkspace === undefined) return;
+    const relativePath = [filePath, file.name].filter(Boolean).join("/");
+    setFilesError(undefined);
+    try {
+      await workspacesApi.writeWorkspaceFile(
+        current.selectedProject.id,
+        current.selectedWorkspace.id,
+        relativePath,
+        new Uint8Array(await file.arrayBuffer()),
+        { createDirs: true, overwrite: false },
+      );
+      await loadDirectory(filePath);
+    } catch (error) {
+      setFilesError(errorText(error));
+      throw error;
+    }
+  }, [filePath, loadDirectory]);
+
   useEffect(() => {
     if (selectedSession === undefined) {
       setDraftState("");
@@ -428,6 +449,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     loadDirectory,
     loadFile,
     saveFile,
+    uploadFile,
     sendPrompt,
     stopSession,
     startSession,
