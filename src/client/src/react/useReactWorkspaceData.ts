@@ -25,6 +25,7 @@ export interface ReactWorkspaceData {
   readonly selectSession: (session: SessionInfo, projectId: string, workspaceId: string) => void;
   readonly refresh: () => void;
   readonly loadDirectory: (path?: string) => Promise<void>;
+  readonly filePath: string;
 }
 
 function errorText(error: unknown): string {
@@ -128,9 +129,12 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     return () => { current = false; };
   }, [selectedSession?.id, selectedSession?.cwd]);
 
+  const [filePath, setFilePath] = useState("");
+
   const loadDirectory = useCallback(async (path = "") => {
     if (!selectedProject || !selectedWorkspace) return;
     setFilesError(undefined);
+    setFilePath(path);
     try {
       const result = await workspacesApi.workspaceTree(selectedProject.id, selectedWorkspace.id, path);
       setFileEntries(result.entries);
@@ -162,5 +166,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     selectSession,
     refresh,
     loadDirectory,
+    filePath,
   };
 }

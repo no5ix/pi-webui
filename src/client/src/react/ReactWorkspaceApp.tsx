@@ -132,7 +132,11 @@ export function ReactWorkspaceApp() {
         <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><button title="Upload"><Icon name="upload"/></button></> : <><strong>{activeTab}</strong><button><Icon name="refresh-cw"/></button></>}</div>
         {activeTab === "Files" ? <div className="rw-file-tree">
           {data.filesError && <div className="rw-data-error">{data.filesError}</div>}
-          {data.selectedWorkspace && <strong><Icon name="chevron-down"/> {data.selectedWorkspace.label}</strong>}
+          {data.selectedWorkspace && <div className="rw-file-tree-path">
+            <button disabled={!data.filePath} onClick={() => void data.loadDirectory(data.filePath.split("/").slice(0, -1).join("/"))} title="Go to parent folder"><Icon name="chevron-right"/></button>
+            <button onClick={() => void data.loadDirectory("")} title="Project root">{data.selectedWorkspace.label}</button>
+            {data.filePath && <span> / {data.filePath}</span>}
+          </div>}
           {!data.selectedWorkspace && <div className="rw-empty-state">Select a project to browse its files.</div>}
           {data.fileEntries.filter(file => file.name.toLowerCase().includes(fileFilter.toLowerCase())).map(file => <button key={file.path} onClick={() => { if (file.type === "directory") void data.loadDirectory(file.path); }}><Icon name={file.type === "directory" ? "chevron-right" : "file-text"}/>{file.name}</button>)}
         </div> : <div className="rw-empty-panel">{activeTab} is not connected in this integration slice.</div>}

@@ -23,3 +23,8 @@ button { cursor: pointer; }
 .rw-data-error{margin:10px;padding:10px;border:1px solid #8b5555;border-radius:8px;color:#f1aaaa;font-size:12px;white-space:pre-wrap}
 .rw-data-error button{display:block;margin-top:8px;border:0;border-radius:6px;padding:5px 9px;background:var(--rw-accent-soft);color:var(--rw-text)}
 .rw-composer textarea:disabled,.rw-composer-tools button:disabled{opacity:.42;cursor:not-allowed}
+
+.rw-file-tree-path{min-height:30px;display:flex;align-items:center;gap:4px;padding:0 5px;color:var(--rw-muted);font-size:12px}
+.rw-file-tree-path button{height:26px;border:0;background:transparent;color:var(--rw-text-secondary);padding:0 4px}
+.rw-file-tree-path button:disabled{opacity:.35;cursor:default}
+.rw-file-tree-path span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
