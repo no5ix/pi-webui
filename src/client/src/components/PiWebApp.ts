@@ -7372,10 +7372,7 @@ export class PiWebApp extends LitElement {
               ${this.renderChatView(state, state.selectedSession)}
 
               <div class="conversation-status-and-disclosures">
-                ${this.renderStatusBar(state)}
                 <div class="conversation-bottom">
-              ${this.renderStatusBar(state)}
-              <div class="conversation-bottom">
                 <conversation-disclosure heading="Background" panelId="background-content"
                   .icon=${renderActivityIcon()}
                   .count=${this.backgroundRowsForScreen()?.length ?? 0}
@@ -7389,7 +7386,8 @@ export class PiWebApp extends LitElement {
                   .detail=${this.editedFilesDetail()}
                 >
                   <edited-files-panel .rows=${this.editedFileRowsForScreen()}></edited-files-panel>
-                </conversation-disclosure>                </div>
+                </conversation-disclosure>
+                </div>
               </div>
               ${composerMarkup}
               ${this.fileDropFrame === undefined ? nothing : html`<div class="file-drop-frame" style=${this.fileDropFrame} aria-hidden="true"><span>Drop files to attach</span></div>`}
