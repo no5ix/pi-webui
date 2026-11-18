@@ -239,10 +239,10 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   aside app-navigation-panel { flex:1 1 auto; min-height:0; }
   aside app-navigate-page { flex:1 1 auto; min-height:0; }
   .navigation-stack { display:flex; flex-direction:column; min-height:0; height:100%; }
-  .navigation-toolbar { flex:none; height:52px; min-height:52px; box-sizing:border-box; display:flex; align-items:center; justify-content:flex-end; gap:4px; padding:0 10px; }
-  .navigation-toolbar button { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); cursor:pointer; }
+  .navigation-toolbar { flex:none; height:var(--pi-panel-band-height); min-height:var(--pi-panel-band-height); box-sizing:border-box; display:flex; align-items:center; justify-content:flex-end; gap:var(--pi-space-1); padding:0 var(--pi-space-3); }
+  .navigation-toolbar button { width:var(--pi-control-height); height:var(--pi-control-height); display:grid; place-items:center; padding:0; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); cursor:pointer; }
   .navigation-toolbar button .ui-icon { width:15px; height:15px; }
-  .navigation-toolbar button:hover { background:var(--pi-surface-hover); color:var(--pi-text); }
+  @media (hover: hover) { .navigation-toolbar button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
   .navigation-toolbar button:focus-visible { outline:var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset:var(--pi-focus-ring-offset-inset); }
   .navigation-toolbar button[aria-expanded="true"] { background:var(--pi-accent-soft); color:var(--pi-on-accent-soft); }
   .running-sessions-panel { flex:none; }
@@ -277,7 +277,7 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .conversation-body prompt-editor { flex:none; }
   .conversation-status-and-disclosures { flex:none; display:flex; flex-direction:column; }
   .conversation-bottom { flex:none; display:grid; gap:var(--pi-space-2); width:100%; max-width:var(--pi-chat-measure); margin-inline:auto; padding:var(--pi-space-2) var(--pi-space-4); }
-  .conversation-bottom conversation-disclosure .toggle { min-height:38px; padding:0 var(--pi-space-4); }
+  .conversation-bottom conversation-disclosure .toggle { min-height:var(--pi-control-height-comfort); padding:0 var(--pi-space-4); }
   .edited-file-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
   .edited-file-list code { overflow-wrap:anywhere; color:var(--pi-text-secondary); font:var(--pi-text-2xs) var(--pi-font-mono); }
   .workspace-panel-content { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
