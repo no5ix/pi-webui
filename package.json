@@ -82,7 +82,9 @@
     "docker:verify:start": "./docker/pi-web-docker --dev start",
     "docker:verify:stop": "./docker/pi-web-docker --dev stop",
     "docker:verify:status": "./docker/pi-web-docker --dev status",
-    "prod": "pnpm run build && bash scripts/prod.sh"
+    "prod": "pnpm run build && bash scripts/prod.sh",
+    "dev:react": "vite --host 127.0.0.1 --mode react",
+    "build:react": "vite build --mode react"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -111,7 +113,9 @@
     "mermaid": "^12.2.0",
     "morphdom": "^2.7.8",
     "undici": "^8.12.3",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "optionalDependencies": {
     "node-pty": "^1.1.0"
@@ -133,7 +137,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",
     "vite": "^8.3.5",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0"
   },
   "publishConfig": {
     "access": "public"
