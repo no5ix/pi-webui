@@ -18,6 +18,8 @@
     "skipLibCheck": true,
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
     "lib": [
       "ES2022",
       "DOM",
@@ -33,6 +35,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "src/**/*.tsx",
     "vite.config.ts",
     "vitest.config.ts",
     "extensions/**/*.ts",

@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import type { Plugin } from "vite";
+import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import { effectivePiWebConfig, piWebTlsConfig } from "./src/config.ts";
@@ -113,7 +114,7 @@ const parsedPackage: unknown = JSON.parse(readFileSync(new URL("./package.json",
 const packageVersion = typeof parsedPackage === "object" && parsedPackage !== null && "version" in parsedPackage && typeof parsedPackage.version === "string" ? parsedPackage.version : "";
 
 export default defineConfig({
-  plugins: [devDocsPlugin()],
+  plugins: [react(), devDocsPlugin()],
   define: {
     __PI_WEB_CLIENT_VERSION__: JSON.stringify(packageVersion),
   },
@@ -131,6 +132,7 @@ export default defineConfig({
           if (id.includes("@codemirror/lang-") || id.includes("@lezer/")) return "vendor-editor-languages";
           if (id.includes("@codemirror") || id.includes("codemirror")) return "vendor-editor-core";
           if (id.includes("@xterm")) return "vendor-terminal";
+          if (id.includes("/react") || id.includes("/react-dom") || id.includes("/@react-dom/")) return "vendor-react";
           return undefined;
         },
       },

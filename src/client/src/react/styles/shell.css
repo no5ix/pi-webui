@@ -1,0 +1,175 @@
+/*
+ * The shell's layout: the window frame, the window bar, and the three columns.
+ *
+ * The columns are one grid whose side tracks are driven by the panel widths the
+ * reader drags (the same widths, constraints and keyboard steps PI WEB already
+ * stores in `pi-web:panel-sizes:v1`). A collapsed column leaves the grid, so the
+ * conversation takes its width; the conversation keeps its reading measure at
+ * every width, so a wide window widens the workbench, not the paragraph.
+ */
+
+.piw-canvas {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 100dvh;
+  padding: var(--piw-window-inset);
+  background: var(--piw-canvas);
+  color: var(--pi-text);
+  font-family: var(--pi-font-ui);
+  font-size: var(--pi-text-base);
+  line-height: var(--pi-leading-tight);
+}
+
+.piw-window {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--piw-window-border);
+  border-radius: var(--piw-window-radius);
+  background: var(--pi-bg);
+  box-shadow: var(--pi-elevation-3);
+}
+
+.piw-window-bar {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--pi-space-4);
+  height: var(--piw-window-bar-height);
+  padding: 0 var(--pi-space-7);
+  border-bottom: 1px solid var(--piw-divider);
+  background: var(--piw-surface-window-bar);
+}
+
+.piw-window-bar__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pi-space-4);
+  min-width: 0;
+  font-size: var(--pi-text-md);
+  font-weight: var(--pi-weight-semibold);
+  letter-spacing: var(--pi-tracking-tight);
+}
+
+.piw-window-bar__subtitle {
+  font-size: var(--pi-text-xs);
+  font-weight: var(--pi-weight-regular);
+  color: var(--pi-muted);
+}
+
+.piw-window-bar__spacer {
+  flex: 1;
+}
+
+.piw-window-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-3);
+}
+
+.piw-columns {
+  box-sizing: border-box;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: var(--piw-columns-template);
+}
+
+.piw-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.piw-panel--navigation {
+  border-right: 1px solid var(--piw-divider);
+  background: var(--piw-surface-navigation);
+}
+
+.piw-panel--workbench {
+  border-left: 1px solid var(--piw-divider);
+  background: var(--piw-surface-workbench);
+}
+
+.piw-panel--conversation {
+  background: var(--pi-bg);
+}
+
+.piw-panel__header {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--pi-space-4);
+  height: var(--piw-panel-header-height);
+  padding: 0 var(--pi-bar-inset);
+  border-bottom: 1px solid transparent;
+}
+
+.piw-panel__body {
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.piw-resize-handle {
+  position: relative;
+  z-index: var(--pi-layer-sticky);
+  width: 7px;
+  margin: 0 -4px;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.piw-resize-handle::after {
+  position: absolute;
+  inset: 0 3px;
+  content: "";
+  background: transparent;
+  transition: background var(--pi-motion-fast) var(--pi-ease);
+}
+
+.piw-resize-handle:hover::after,
+.piw-resize-handle:focus-visible::after,
+.piw-resize-handle[data-dragging="true"]::after {
+  background: var(--pi-accent);
+}
+
+.piw-resize-handle:focus-visible {
+  outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring);
+  outline-offset: var(--pi-focus-ring-offset-inset);
+}
+
+.piw-canvas[data-navigating="true"] .piw-resize-handle,
+.piw-canvas[data-dragging="true"] {
+  user-select: none;
+}
+
+.piw-canvas[data-dragging="true"] {
+  cursor: col-resize;
+}
+
+@media (max-width: 1023px) {
+  .piw-columns[data-navigation-collapsed="false"][data-layout="phone"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.piw-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pi-layer-overlay);
+  border: 0;
+  background: var(--pi-overlay);
+}

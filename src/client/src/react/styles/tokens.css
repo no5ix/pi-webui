@@ -1,0 +1,95 @@
+/*
+ * The React shell's design tokens.
+ *
+ * Colour, spacing, type, radius, motion and layering are PI WEB's own tokens
+ * (`--pi-*`, declared on `:root` in index.html and repainted by the theme
+ * engine). Nothing here invents a second palette: the shell adds the
+ * measurements the reference design fixes — the window, the three columns, the
+ * row rhythm, the card radius, the composer — and names them once so a
+ * component never spells a number the screenshot decided.
+ *
+ * The reference is `docs/ui-design/Dark Mode Developer Workspace UI.png`:
+ * a 1568x882 window whose columns are 302 / 858 / 388 wide, one 52px window bar,
+ * 44px panel headers, and a conversation that reads at about 820px.
+ */
+:root {
+  /* The window: the app sits inside a rounded frame on a near-black canvas. */
+  --piw-canvas: #0b0a0d;
+  --piw-window-inset: 8px;
+  --piw-window-radius: 14px;
+  --piw-window-border: color-mix(in srgb, var(--pi-border-muted) 70%, var(--pi-bg));
+
+  /* The three columns, as the reference measures them. */
+  --piw-window-bar-height: 52px;
+  --piw-navigation-width: 302px;
+  --piw-workbench-width: 388px;
+  --piw-panel-header-height: 44px;
+  --piw-section-header-height: 44px;
+  --piw-divider: var(--pi-border-muted);
+
+  /* Left rail: a section header, then dense rows. */
+  --piw-nav-inset: 14px;
+  --piw-nav-row-height: 36px;
+  --piw-nav-row-radius: 8px;
+  --piw-nav-row-gap: 2px;
+  --piw-nav-group-gap: 10px;
+
+  /* Surfaces, in the order the reference stacks them. */
+  --piw-surface-navigation: color-mix(in srgb, var(--pi-surface-panel) 62%, var(--pi-bg));
+  --piw-surface-workbench: color-mix(in srgb, var(--pi-surface-panel) 62%, var(--pi-bg));
+  --piw-surface-window-bar: var(--pi-surface-panel);
+  --piw-surface-card: var(--pi-surface-panel);
+  --piw-surface-card-hover: var(--pi-surface-hover);
+  --piw-surface-selected: var(--pi-surface-active);
+  --piw-border-card: var(--pi-border-muted);
+
+  /* Cards: the subagents, tool, background and edited-files rows are all one card. */
+  --piw-card-radius: 8px;
+  --piw-card-inset: 12px;
+  --piw-card-header-height: 44px;
+  --piw-card-gap: 10px;
+
+  /* The conversation. */
+  --piw-chat-measure: 820px;
+  --piw-chat-inset: 24px;
+  --piw-message-gap: 22px;
+  --piw-message-label-size: var(--pi-text-2xs);
+  --piw-message-label-tracking: var(--pi-tracking-label);
+  --piw-message-body-size: var(--pi-text-md);
+  --piw-message-line-height: 1.55;
+  --piw-user-message-radius: 10px;
+  --piw-user-message-bg: color-mix(in srgb, var(--pi-selection-bg) 60%, var(--pi-surface-panel));
+  --piw-user-message-border: color-mix(in srgb, var(--pi-accent-border) 55%, var(--pi-border-muted));
+  --piw-code-size: var(--pi-text-sm);
+
+  /* The composer. */
+  --piw-composer-radius: 12px;
+  --piw-composer-min-height: 56px;
+  --piw-composer-inset: 24px;
+  --piw-status-bar-height: 34px;
+
+  /* The workbench tabs. */
+  --piw-tab-bar-height: 44px;
+  --piw-tab-gap: 4px;
+  --piw-tab-radius: 8px;
+  --piw-tab-inset: 10px;
+  --piw-tree-row-height: 27px;
+
+  /* Icons are drawn, never typed: one size per role. */
+  --piw-icon-size: 18px;
+  --piw-icon-size-small: 14px;
+  --piw-icon-size-large: 20px;
+
+  --piw-badge-height: 18px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --piw-window-inset: 0px;
+    --piw-window-radius: 0px;
+    --piw-window-bar-height: 48px;
+    --piw-chat-inset: var(--pi-bar-inset);
+    --piw-composer-inset: var(--pi-bar-inset);
+    --piw-nav-inset: var(--pi-space-4);
+  }
+}
