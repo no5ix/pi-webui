@@ -267,7 +267,6 @@ export const appStyles = css`${unsafeCSS(uiIconStyle)}
   .conversation-header-actions .rail-toggle .ui-icon { width:15px; height:15px; }
   .conversation-header-actions .rail-toggle[aria-expanded="true"] { background:var(--pi-accent-soft); color:var(--pi-on-accent-soft); }
   .conversation-header-actions .rail-toggle[aria-expanded="false"] { color:var(--pi-muted); }
-  .conversation-header-actions { display:flex; align-items:center; gap:var(--pi-space-2); flex:none; }
   .conversation-header-actions button { width: var(--pi-panel-band-control-height); height: var(--pi-panel-band-control-height); padding:0; display:grid; place-items:center; border:0; border-radius:var(--pi-radius-md); background:transparent; color:var(--pi-text-secondary); }
 @media (hover: hover) { .conversation-header-actions button:hover { background:var(--pi-surface-hover); color:var(--pi-text); } }
   .conversation-header-actions button:focus-visible { outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring); outline-offset: var(--pi-focus-ring-offset-inset); }
