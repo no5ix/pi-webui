@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { workspacesApi, type FileTreeEntry, type Project, type SessionInfo, type SessionStatus, type Workspace } from "../api";
+import { workspacesApi, type FileContentResponse, type FileTreeEntry, type Project, type SessionInfo, type SessionStatus, type Workspace } from "../api";
 import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
@@ -30,6 +30,7 @@ export interface ReactWorkspaceData {
   readonly sessionStatus: SessionStatus | undefined;
   readonly fileEntries: readonly FileTreeEntry[];
   readonly filePath: string;
+  readonly selectedFile: FileContentResponse | undefined;
   readonly loading: boolean;
   readonly projectsError: string | undefined;
   readonly sessionError: string | undefined;
@@ -40,6 +41,8 @@ export interface ReactWorkspaceData {
   readonly selectSession: (session: SessionInfo) => Promise<void>;
   readonly refresh: () => void;
   readonly loadDirectory: (path?: string) => Promise<void>;
+  readonly loadFile: (path: string) => Promise<void>;
+  readonly saveFile: (path: string, content: string) => Promise<void>;
   readonly sendPrompt: (text: string) => Promise<boolean>;
   readonly stopSession: () => Promise<void>;
   readonly startSession: () => void;
@@ -70,6 +73,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const runtimeRef = useRef<Runtime | undefined>(undefined);
   const [fileEntries, setFileEntries] = useState<readonly FileTreeEntry[]>([]);
   const [filePath, setFilePath] = useState("");
+  const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
   const [filesError, setFilesError] = useState<string>();
   const [draft, setDraftState] = useState("");
 
@@ -217,6 +221,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const workspace = current.selectedWorkspace;
     if (project === undefined || workspace === undefined) return;
     setFilesError(undefined);
+    setSelectedFile(undefined);
     setFilePath(path);
     try {
       const result = await workspacesApi.workspaceTree(project.id, workspace.id, path);
@@ -232,6 +237,33 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     setFilePath("");
     if (selectedProject !== undefined && selectedWorkspace !== undefined) void loadDirectory("");
   }, [selectedProject?.id, selectedWorkspace?.id, loadDirectory]);
+
+  const loadFile = useCallback(async (path: string) => {
+    const current = stateRef.current;
+    if (current.selectedProject === undefined || current.selectedWorkspace === undefined) return;
+    setFilesError(undefined);
+    try {
+      const content = await workspacesApi.workspaceFile(current.selectedProject.id, current.selectedWorkspace.id, path);
+      setSelectedFile(content);
+    } catch (error) {
+      setSelectedFile(undefined);
+      setFilesError(errorText(error));
+    }
+  }, []);
+
+  const saveFile = useCallback(async (path: string, content: string) => {
+    const current = stateRef.current;
+    if (current.selectedProject === undefined || current.selectedWorkspace === undefined) return;
+    setFilesError(undefined);
+    try {
+      await workspacesApi.writeWorkspaceFile(current.selectedProject.id, current.selectedWorkspace.id, path, content);
+      const saved = await workspacesApi.workspaceFile(current.selectedProject.id, current.selectedWorkspace.id, path);
+      setSelectedFile(saved);
+    } catch (error) {
+      setFilesError(errorText(error));
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     if (selectedSession === undefined) {
@@ -317,6 +349,8 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     selectSession,
     refresh,
     loadDirectory,
+    loadFile,
+    saveFile,
     sendPrompt,
     stopSession,
     startSession,
