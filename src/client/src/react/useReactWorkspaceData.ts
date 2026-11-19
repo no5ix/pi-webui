@@ -118,6 +118,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [thinkingOptions, setThinkingOptions] = useState<Awaited<ReturnType<typeof sessionsApi.thinkingLevels>>>();
   const [settings, setSettings] = useState<ReactWorkspaceData["settings"]>({ loading: false });
   const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
+  const [selectedFileScope, setSelectedFileScope] = useState<WorkspaceFileScope>();
   const [filesError, setFilesError] = useState<string>();
   const [draft, setDraftState] = useState("");
   const fileReadRequestRef = useRef(0);
@@ -442,6 +443,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     setFilesError(undefined);
     fileReadRequestRef.current += 1;
     setSelectedFile(undefined);
+    setSelectedFileScope(undefined);
     setFilePath(path);
     const requestId = ++directoryReadRequestRef.current;
     try {
@@ -459,6 +461,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     setFileEntries([]);
     setFilePath("");
     setSelectedFile(undefined);
+    setSelectedFileScope(undefined);
     if (selectedProject !== undefined && selectedWorkspace !== undefined) void loadDirectory("");
   }, [selectedProject?.id, selectedWorkspace?.id, state.selectedMachine?.id, loadDirectory]);
 
@@ -471,9 +474,11 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       const content = await workspacesApi.workspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
       if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
       setSelectedFile(content);
+      setSelectedFileScope(scope);
     } catch (error) {
       if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
       setSelectedFile(undefined);
+      setSelectedFileScope(scope);
       setFilesError(errorText(error));
     }
   }, []);
@@ -489,6 +494,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       const saved = await workspacesApi.workspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
       if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
       setSelectedFile(saved);
+      setSelectedFileScope(scope);
     } catch (error) {
       if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
       setFilesError(errorText(error));
@@ -518,7 +524,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       await workspacesApi.deleteWorkspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
       if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
       fileReadRequestRef.current += 1;
-      if (selectedFile?.path === path) setSelectedFile(undefined);
+      if (selectedFile?.path === path) {
+        setSelectedFile(undefined);
+        setSelectedFileScope(undefined);
+      }
     } catch (error) {
       if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
       setFilesError(errorText(error));
@@ -637,7 +646,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     modelCatalog,
     thinkingOptions,
     settings,
-    selectedFile,
+    selectedFile: selectedFileScope !== undefined && isCurrentWorkspaceFileScope(state, selectedFileScope) ? selectedFile : undefined,
     loadSettings,
     saveSettings,
     setPluginEnabled,

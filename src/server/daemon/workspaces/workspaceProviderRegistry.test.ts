@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JsonValue, ProviderRemoveContext, ProviderRequestContext, ProviderWorkspace, WorkspaceProvider } from "../../../server-plugin-api.js";
 import type { Project } from "../../shared/types.js";
 import type { ServerPluginProviderContribution } from "../../shared/plugins/serverPluginRuntime.js";
+import { PLUGIN_BACKEND_REMOTE_OPERATION_TIMEOUT_MS } from "../../../shared/pluginBackendProtocol.js";
 import { ProjectScopedSpawnTargetResolver } from "../sessions/spawnTargetResolver.js";
 import {
   eligibleWorkspaceProviderContributions,
@@ -629,6 +630,33 @@ describe("WorkspaceProviderRegistry", () => {
     const pending = registry.request({ pluginId: "board", moduleRevision: "1", project, workspaceId, operation: "cards.summary", input: null });
     const expectation = expect(pending).rejects.toMatchObject({ code: "request-timeout", statusCode: 504 });
     await vi.advanceTimersByTimeAsync(25);
+    await expectation;
+
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it("uses the remote Git timeout only for fetch, pull, and push mutations", async () => {
+    vi.useFakeTimers();
+    let observedSignal: AbortSignal | undefined;
+    const registry = registryFor([contribution("git", provider({
+      probe: () => Promise.resolve("claim"),
+      list: () => Promise.resolve([workspace("main", hostPath("/repo"), true)]),
+      request: ({ signal }) => new Promise((_resolve, rejectPromise) => {
+        observedSignal = signal;
+        signal.addEventListener("abort", () => {
+          const reason: unknown = signal.reason;
+          rejectPromise(reason instanceof Error ? reason : new Error("Fixture request aborted", { cause: reason }));
+        }, { once: true });
+      }),
+    }))], { providerTimeoutMs: 25, requestTimeoutMs: 30 });
+    const workspaceId = (await registry.resolve(project)).workspaces[0]?.id;
+    if (workspaceId === undefined) throw new Error("Expected neutral workspace");
+
+    const pending = registry.request({ pluginId: "git", moduleRevision: "1", project, workspaceId, operation: "mutate", input: { action: "fetch" } });
+    const expectation = expect(pending).rejects.toMatchObject({ code: "request-timeout", statusCode: 504 });
+    await vi.advanceTimersByTimeAsync(25);
+    expect(observedSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(PLUGIN_BACKEND_REMOTE_OPERATION_TIMEOUT_MS);
     await expectation;
 
     expect(observedSignal?.aborted).toBe(true);

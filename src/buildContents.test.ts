@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -191,8 +191,8 @@ interface BundledServerPlugin {
 async function createCleanPluginBuildFixture(fixtureRoot: string): Promise<void> {
   await mkdir(join(fixtureRoot, "scripts"), { recursive: true });
   await Promise.all([
-    cp(join(repoRoot, "src"), join(fixtureRoot, "src"), { recursive: true }),
-    cp(join(repoRoot, "pi-web-plugins"), join(fixtureRoot, "pi-web-plugins"), { recursive: true }),
+    cp(join(repoRoot, "src"), join(fixtureRoot, "src"), { recursive: true, filter: (sourcePath) => basename(sourcePath) !== ".DS_Store" }),
+    cp(join(repoRoot, "pi-web-plugins"), join(fixtureRoot, "pi-web-plugins"), { recursive: true, filter: (sourcePath) => basename(sourcePath) !== ".DS_Store" }),
     copyFile(join(repoRoot, "package.json"), join(fixtureRoot, "package.json")),
     copyFile(join(repoRoot, "tsconfig.json"), join(fixtureRoot, "tsconfig.json")),
     copyFile(join(repoRoot, "tsconfig.plugins.json"), join(fixtureRoot, "tsconfig.plugins.json")),

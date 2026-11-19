@@ -14,6 +14,9 @@ import {
   GIT_HISTORY_OPERATION,
   GIT_STATUS_OPERATION,
   GIT_WORKTREE_ADD_OPERATION,
+  GIT_MUTATE_OPERATION,
+  GIT_BRANCHES_OPERATION,
+  type GitMutation,
   type GitCommitDiffRequest,
   type GitWorktreeAddRequest,
   type GitWorktreeAddResponse,
@@ -33,6 +36,8 @@ export {
   GIT_HISTORY_OPERATION,
   GIT_STATUS_OPERATION,
   GIT_WORKTREE_ADD_OPERATION,
+  GIT_MUTATE_OPERATION,
+  GIT_BRANCHES_OPERATION,
 } from "./browser/git-contract.js";
 export type {
   GitCommitDiffRequest,
@@ -47,6 +52,7 @@ export type {
 } from "./browser/git-contract.js";
 
 const GIT_COMMAND_TIMEOUT_MS = 10_000;
+const GIT_REMOTE_COMMAND_TIMEOUT_MS = 120_000;
 const HISTORY_PAGE_SIZE = 50;
 const MAX_HISTORY_OFFSET = 10_000;
 const COMMIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
@@ -99,7 +105,74 @@ export async function requestGitBackend(
     const added = await gitWorktreeAddWithRunner(runGit, request.workspace.path, parseWorktreeAddInput(request.input));
     return { path: added.path, branch: added.branch };
   }
+  if (request.operation === GIT_MUTATE_OPERATION) {
+    const mutation = parseGitMutation(request.input);
+    const remote = mutation.action === "fetch" || mutation.action === "pull" || mutation.action === "push";
+    return gitMutateWithRunner(remote ? createGitRunner(activationContext, request.signal, GIT_REMOTE_COMMAND_TIMEOUT_MS) : runGit, request.workspace.path, mutation);
+  }
+  if (request.operation === GIT_BRANCHES_OPERATION) {
+    const response = await runGit(request.workspace.path, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]);
+    if (response.code !== 0) throw gitError(response, "list branches");
+    const current = await runGit(request.workspace.path, ["branch", "--show-current"]);
+    return { branches: response.stdout.split("\n").filter(Boolean), ...(current.stdout.trim() === "" ? {} : { current: current.stdout.trim() }) };
+  }
   throw new Error(`Unsupported Git workspace backend operation: ${request.operation}`);
+}
+
+export async function gitMutateWithRunner(runGit: RunGit, cwd: string, mutation: GitMutation): Promise<{ ok: true; output: string }> {
+  const args = mutation.action === "stage" ? ["--literal-pathspecs", "add", "--", ...mutation.paths]
+    : mutation.action === "unstage" ? ["--literal-pathspecs", "reset", "-q", "--", ...mutation.paths]
+    : mutation.action === "stage-all" ? ["add", "-A"]
+    : mutation.action === "unstage-all" ? ["reset", "-q"]
+    : mutation.action === "discard" ? ["--literal-pathspecs", "restore", "--worktree", "--", ...mutation.paths]
+    : mutation.action === "commit" ? ["commit", "-m", mutation.message]
+    : mutation.action === "switch" ? ["switch", "--", mutation.branch]
+    : mutation.action === "fetch" ? ["fetch", "--all", "--prune"]
+    : mutation.action === "pull" ? ["pull", "--ff-only"]
+    : ["push"];
+  if (mutation.action === "discard") {
+    const status = await gitStatusWithRunner(runGit, cwd);
+    const blocked = mutation.paths.find(path => status.files.find(file => file.path === path)?.workingTree === "untracked");
+    if (blocked !== undefined) throw new Error(`Discarding untracked files is not supported: ${blocked}`);
+  }
+  const result = await runGit(cwd, args);
+  if (result.code !== 0) throw gitError(result, mutation.action);
+  return { ok: true, output: result.stdout.trim() || result.stderr.trim() };
+}
+
+export function parseGitMutation(input: JsonValue): GitMutation {
+  if (!isRecord(input) || typeof input["action"] !== "string") throw new Error("Git mutation input must contain an action");
+  const action = input["action"];
+  const keys = Object.keys(input);
+  if (action === "stage" || action === "unstage" || action === "discard") {
+    if (keys.some(key => key !== "action" && key !== "paths")) throw new Error("Git path mutation contains unsupported fields");
+    const paths = input["paths"];
+    if (!Array.isArray(paths) || paths.length === 0) throw new Error("Git paths must be non-empty workspace-relative paths");
+    const safePaths = paths.map(path => {
+      if (typeof path !== "string" || path === "" || path.startsWith("-") || isAbsolute(path) || path.split(/[\\/]/u).includes("..")) throw new Error("Git paths must be non-empty workspace-relative paths");
+      return path;
+    });
+    return { action, paths: [...new Set(safePaths)] };
+  }
+  if (action === "stage-all" || action === "unstage-all" || action === "fetch" || action === "pull" || action === "push") {
+    if (keys.length !== 1) throw new Error("Git mutation contains unsupported fields");
+    return { action };
+  }
+  if (action === "commit") {
+    const message = input["message"];
+    if (keys.length !== 2 || typeof message !== "string" || message.trim() === "" || message.length > 500 || message.includes("\0")) throw new Error("Commit message must contain 1 to 500 characters");
+    return { action, message };
+  }
+  if (action === "switch") {
+    const branch = input["branch"];
+    if (keys.length !== 2 || typeof branch !== "string" || branch.trim() === "" || branch.startsWith("-")) throw new Error("Branch name must be a non-empty local branch");
+    return { action, branch: branch.trim() };
+  }
+  throw new Error(`Unsupported Git mutation: ${action}`);
+}
+
+function gitError(result: GitCommandResult, action: string): Error {
+  return new Error(result.stderr.trim() || result.stdout.trim() || `Git ${action} failed with exit code ${String(result.code)}`);
 }
 
 /**
@@ -663,13 +736,13 @@ function diffProviderResponse(diff: GitDiffResponse): ProviderResponse {
   };
 }
 
-function createGitRunner(context: ServerPluginActivationContext, signal: AbortSignal): RunGit {
+function createGitRunner(context: ServerPluginActivationContext, signal: AbortSignal, timeoutMs = GIT_COMMAND_TIMEOUT_MS): RunGit {
   return async (cwd, args) => commandResult(await context.execFile({
     file: "git",
     args,
     cwd,
     unsetEnv: GIT_LOCAL_ENV_VARS,
-    timeoutMs: GIT_COMMAND_TIMEOUT_MS,
+    timeoutMs,
     signal,
   }), args);
 }

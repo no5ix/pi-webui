@@ -8,12 +8,16 @@ export const PLUGIN_BACKEND_RESPONSE_JSON_MAX_BYTES = 8 * 1024 * 1024;
 export const PLUGIN_BACKEND_REQUEST_BODY_MAX_BYTES = PLUGIN_BACKEND_JSON_MAX_BYTES + 4 * 1024;
 /** Allowance for an attributed error envelope around a bounded result. */
 export const PLUGIN_BACKEND_RESPONSE_BODY_MAX_BYTES = PLUGIN_BACKEND_RESPONSE_JSON_MAX_BYTES + 4 * 1024;
-/** Bounded provider callback deadline inside sessiond. */
+/** Default provider callback deadline inside sessiond. */
 export const PLUGIN_BACKEND_REQUEST_TIMEOUT_MS = 10_000;
+/** Provider callback bound for explicitly classified remote Git mutations. */
+export const PLUGIN_BACKEND_REMOTE_OPERATION_TIMEOUT_MS = 120_000;
+/** End-to-end sessiond bound around remote Git mutations, including owner checks. */
+export const PLUGIN_BACKEND_REMOTE_DISPATCH_TIMEOUT_MS = 125_000;
 /** End-to-end sessiond deadline, including owner re-resolution and validation. */
 export const PLUGIN_BACKEND_DISPATCH_TIMEOUT_MS = 25_000;
-/** Remote gateway deadline, including workspace owner re-resolution. */
-export const PLUGIN_BACKEND_FEDERATION_TIMEOUT_MS = 30_000;
+/** Remote gateway deadline leaves room for bounded remote Git operations and owner checks. */
+export const PLUGIN_BACKEND_FEDERATION_TIMEOUT_MS = 130_000;
 export const PLUGIN_BACKEND_OPERATION_MAX_LENGTH = 128;
 export const PLUGIN_BACKEND_REVISION_MAX_LENGTH = 512;
 

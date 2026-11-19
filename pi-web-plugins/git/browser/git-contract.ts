@@ -3,6 +3,22 @@ export const GIT_DIFF_OPERATION = "diff";
 export const GIT_HISTORY_OPERATION = "history";
 export const GIT_COMMIT_DIFF_OPERATION = "commit-diff";
 export const GIT_WORKTREE_ADD_OPERATION = "worktree-add";
+export const GIT_MUTATE_OPERATION = "mutate";
+export const GIT_BRANCHES_OPERATION = "branches";
+
+export type GitMutation =
+  | { action: "stage" | "unstage" | "discard"; paths: string[] }
+  | { action: "stage-all" | "unstage-all" | "fetch" | "pull" | "push" }
+  | { action: "commit"; message: string }
+  | { action: "switch"; branch: string };
+
+export interface GitBranchesResponse { branches: string[]; current?: string }
+
+export function parseGitBranchesResponse(value: unknown): GitBranchesResponse {
+  const record = requireRecord(value, "Git branches response");
+  const current = optionalString(record, "current");
+  return { branches: requireStringArray(record["branches"], "branches"), ...(current === undefined ? {} : { current }) };
+}
 
 /**
  * A new linked worktree. `createBranch` true runs `git worktree add -b`;

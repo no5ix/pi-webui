@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { memoryPluginStorage } from "../../src/server/shared/plugins/pluginStorageTestSupport.js";
 import type { JsonValue, ServerPluginActivationContext, ServerPluginExecFileResult } from "@gang-of-beads/pi-web/server-plugin-api";
@@ -11,10 +11,13 @@ import {
   gitCommitDiff as requestGitCommitDiff,
   gitDiff as requestGitDiff,
   gitHistory as requestGitHistory,
+  gitMutateWithRunner,
+  parseGitMutation,
   gitStatus as requestGitStatus,
   parseHistoryLog,
   requestGitBackend,
 } from "./git-backend.js";
+import type { GitMutation } from "./browser/git-contract.js";
 
 // Isolate from any global/system git config and force a deterministic identity;
 // `protocol.file.allow` is required for `submodule add` from a local path.
@@ -220,6 +223,103 @@ describe("Git history backend", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
 });
 
 describe("Git changes backend", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
+  const mutations: readonly { mutation: GitMutation; expected: string[] }[] = [
+    { mutation: { action: "stage", paths: ["a.txt"] }, expected: ["--literal-pathspecs", "add", "--", "a.txt"] },
+    { mutation: { action: "unstage", paths: ["a.txt"] }, expected: ["--literal-pathspecs", "reset", "-q", "--", "a.txt"] },
+    { mutation: { action: "stage-all" }, expected: ["add", "-A"] },
+    { mutation: { action: "unstage-all" }, expected: ["reset", "-q"] },
+    { mutation: { action: "commit", message: "work" }, expected: ["commit", "-m", "work"] },
+    { mutation: { action: "switch", branch: "feature" }, expected: ["switch", "--", "feature"] },
+    { mutation: { action: "fetch" }, expected: ["fetch", "--all", "--prune"] },
+    { mutation: { action: "pull" }, expected: ["pull", "--ff-only"] },
+    { mutation: { action: "push" }, expected: ["push"] },
+  ];
+  it.each(mutations)("runs the scoped Git command for $mutation.action", async ({ mutation, expected }) => {
+    const calls: string[][] = [];
+    await gitMutateWithRunner((_cwd, args) => {
+      calls.push([...args]);
+      return Promise.resolve({ code: 0, stdout: "", stderr: "", truncated: false });
+    }, "/repo", mutation);
+    expect(calls).toEqual([expected]);
+  });
+
+  it("only discards tracked changes and reports git's unsafe branch-switch errors", async () => {
+    const calls: string[][] = [];
+    const runGit = (_cwd: string, args: readonly string[]) => {
+      calls.push([...args]);
+      if (args[0] === "status") return Promise.resolve({ code: 0, stdout: "1 .M N... 100644 100644 100644 abc abc a.txt\0? new.txt\0", stderr: "", truncated: false });
+      return Promise.resolve({ code: 0, stdout: "", stderr: "", truncated: false });
+    };
+    await gitMutateWithRunner(runGit, "/repo", { action: "discard", paths: ["a.txt"] });
+    expect(calls.at(-1)).toEqual(["--literal-pathspecs", "restore", "--worktree", "--", "a.txt"]);
+    await expect(gitMutateWithRunner(runGit, "/repo", { action: "discard", paths: ["new.txt"] })).rejects.toThrow("untracked files is not supported");
+    await expect(gitMutateWithRunner(() => Promise.resolve({ code: 1, stdout: "", stderr: "local changes would be overwritten", truncated: false }), "/repo", { action: "switch", branch: "feature" })).rejects.toThrow("local changes would be overwritten");
+  });
+
+  it("validates commit messages, branch names, and workspace-relative paths", () => {
+    expect(parseGitMutation({ action: "commit", message: "Ship it" })).toEqual({ action: "commit", message: "Ship it" });
+    expect(() => parseGitMutation({ action: "commit", message: "   " })).toThrow("Commit message");
+    expect(() => parseGitMutation({ action: "commit", message: "x".repeat(501) })).toThrow("Commit message");
+    expect(() => parseGitMutation({ action: "switch", branch: "-c" })).toThrow("Branch name");
+    expect(() => parseGitMutation({ action: "stage", paths: ["../outside"] })).toThrow("workspace-relative");
+  });
+
+  it("stages, commits, discards, switches, and synchronizes a scoped worktree", async () => {
+    const { dir } = createFixture();
+    const base = dirname(dir);
+    const remote = join(base, "origin.git");
+    const peer = join(base, "peer");
+    git(dir, ["config", "user.name", "Test"]);
+    git(dir, ["config", "user.email", "test@example.test"]);
+    const run = (cwd: string, args: readonly string[]) => {
+      const result = spawnSync("git", [...args], { cwd, encoding: "utf8", env: GIT_ENV });
+      return Promise.resolve({ code: result.status ?? 1, stdout: result.stdout, stderr: result.stderr, truncated: false });
+    };
+
+    writeFileSync(join(dir, "created.txt"), "before\n");
+    await gitMutateWithRunner(run, dir, { action: "stage", paths: ["created.txt"] });
+    expect((await gitStatus(dir)).files[0]).toMatchObject({ path: "created.txt", index: "added" });
+    await gitMutateWithRunner(run, dir, { action: "unstage", paths: ["created.txt"] });
+    expect((await gitStatus(dir)).files[0]).toMatchObject({ path: "created.txt", index: "untracked" });
+    await gitMutateWithRunner(run, dir, { action: "stage-all" });
+    await gitMutateWithRunner(run, dir, { action: "commit", message: "Add scoped fixture file" });
+    writeFileSync(join(dir, "created.txt"), "discard me\n");
+    await gitMutateWithRunner(run, dir, { action: "discard", paths: ["created.txt"] });
+    expect(readFileSync(join(dir, "created.txt"), "utf8")).toBe("before\n");
+
+    writeFileSync(join(dir, ":(top)**"), "literal pathspec\n");
+    writeFileSync(join(dir, "must-stay-untracked.txt"), "untouched\n");
+    await gitMutateWithRunner(run, dir, { action: "stage", paths: [":(top)**"] });
+    const stagedStatus = await gitStatus(dir);
+    expect(stagedStatus.files.find(file => file.path === ":(top)**")?.index).toBe("added");
+    expect(stagedStatus.files.find(file => file.path === "must-stay-untracked.txt")?.index).toBe("untracked");
+    await gitMutateWithRunner(run, dir, { action: "unstage", paths: [":(top)**"] });
+    expect((await gitStatus(dir)).files.find(file => file.path === ":(top)**")?.index).toBe("untracked");
+
+    git(base, ["init", "--bare", remote]);
+    git(dir, ["remote", "add", "origin", remote]);
+    git(dir, ["push", "-u", "origin", "main"]);
+    git(base, ["clone", remote, peer]);
+    git(peer, ["config", "user.name", "Peer"]);
+    git(peer, ["config", "user.email", "peer@example.test"]);
+    writeFileSync(join(peer, "remote.txt"), "remote\n");
+    git(peer, ["add", "remote.txt"]);
+    git(peer, ["commit", "-m", "Add remote file"]);
+    git(peer, ["push"]);
+    await gitMutateWithRunner(run, dir, { action: "fetch" });
+    await gitMutateWithRunner(run, dir, { action: "pull" });
+    expect(readFileSync(join(dir, "remote.txt"), "utf8")).toBe("remote\n");
+    writeFileSync(join(dir, "local.txt"), "local\n");
+    await gitMutateWithRunner(run, dir, { action: "stage", paths: ["local.txt"] });
+    await gitMutateWithRunner(run, dir, { action: "commit", message: "Add local file" });
+    await gitMutateWithRunner(run, dir, { action: "push" });
+    git(peer, ["fetch", "origin"]);
+    expect(git(peer, ["rev-parse", "origin/main"]).trim()).toBe(git(dir, ["rev-parse", "HEAD"]).trim());
+    git(dir, ["branch", "feature"]);
+    await gitMutateWithRunner(run, dir, { action: "switch", branch: "feature" });
+    expect(git(dir, ["branch", "--show-current"]).trim()).toBe("feature");
+  });
+
   it("preserves staged, unstaged, and untracked file behavior", async () => {
     const { dir } = createFixture();
     writeFileSync(join(dir, "root.txt"), "root\nstaged\n");
