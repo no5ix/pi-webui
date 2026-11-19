@@ -17,6 +17,9 @@ import { isGroupOpen, toggleGroup, useConversation } from "../../state/conversat
  * it is anchored by height, not guessed.
  */
 export interface MessageListProps {
+  /** The session the transcript belongs to, and its machine: a plugin renderer is told both. */
+  machineId: string;
+  sessionId: string;
   messages: readonly ChatLine[];
   streaming: boolean;
   hasOlder: boolean;
@@ -98,6 +101,7 @@ export function MessageList(props: MessageListProps): ReactNode {
               return (
                 <ToolExecutionCard
                   key={key}
+                  machineId={props.machineId}
                   onToggle={() => { toggleGroup(key); }}
                   open={open}
                   rows={rows}
@@ -120,7 +124,9 @@ export function MessageList(props: MessageListProps): ReactNode {
                         key={`${key}-${String(inner)}`}
                         imagePathFor={props.imagePathFor}
                         line={message}
+                        machineId={props.machineId}
                         onInsertPrompt={props.onInsertPrompt}
+                        sessionId={props.sessionId}
                         streaming={props.streaming}
                       />
                     ))}
@@ -134,7 +140,9 @@ export function MessageList(props: MessageListProps): ReactNode {
               key={`row-${String(group.index)}-${keyOfGroup(group.message, group.index)}`}
               imagePathFor={props.imagePathFor}
               line={group.message}
+              machineId={props.machineId}
               onInsertPrompt={props.onInsertPrompt}
+              sessionId={props.sessionId}
               streaming={props.streaming}
             />
           );

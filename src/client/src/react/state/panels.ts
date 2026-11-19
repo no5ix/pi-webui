@@ -9,6 +9,7 @@ import {
   type ResizablePanelSide,
 } from "../../appShell/panelResizeController";
 import { isRecord } from "../../../../shared/unknownValues";
+import type { QualifiedContributionId } from "../../plugins/ids";
 import { createStore, useStoreSelect } from "./store";
 
 /**
@@ -25,6 +26,9 @@ export type { ResizablePanelSide };
 
 export type WorkbenchTab = "git" | "files" | "terminal" | "goals" | "plugin";
 
+/** The centre column's surface: the chat, or a plugin's global page by its qualified id. */
+export type MainView = "chat" | QualifiedContributionId;
+
 export const workbenchTabOrder: readonly WorkbenchTab[] = ["git", "files", "terminal", "goals"] as const;
 
 export const referencePanelWidths: Record<ResizablePanelSide, number> = {
@@ -40,7 +44,13 @@ export interface PanelState {
   readonly navigationCollapsed: boolean;
   readonly workbenchCollapsed: boolean;
   readonly workbenchTab: WorkbenchTab;
-  readonly activePluginTab: string | undefined;
+  readonly activePluginTab: QualifiedContributionId | undefined;
+  /**
+   * What the centre column shows: the chat, or a plugin's global page by its
+   * qualified id. The plugin API names this `AppState.mainView`, and a plugin
+   * action switches it, so the choice is shell state and not a component's.
+   */
+  readonly mainView: MainView;
 }
 
 function clamp(side: ResizablePanelSide, width: number): number {
@@ -57,6 +67,7 @@ function readStoredPanels(): PanelState {
     workbenchCollapsed: collapsed.workbench,
     workbenchTab: collapsed.tab,
     activePluginTab: undefined,
+    mainView: "chat",
   };
 }
 
@@ -150,7 +161,7 @@ export function togglePanel(side: ResizablePanelSide): void {
   });
 }
 
-export function setWorkbenchTab(tab: WorkbenchTab, pluginId?: string): void {
+export function setWorkbenchTab(tab: WorkbenchTab, pluginId?: QualifiedContributionId): void {
   panelStore.update((current) => {
     const next = { ...current, workbenchTab: tab, activePluginTab: pluginId, workbenchCollapsed: false };
     writeCollapsed(next);
@@ -187,6 +198,40 @@ export function selectWorkbenchTab(tab: number): void {
   if (target === undefined) return;
   setWorkbenchTab(target);
 }
+
+/** The centre column's surface: the chat, or a plugin's global page by its qualified id. */
+export function setMainView(view: MainView): void {
+  panelStore.update((current) => (current.mainView === view ? current : { ...current, mainView: view }));
+}
+
+/**
+ * A workspace tool named by its slot id. The core slots are the shell's own tabs;
+ * any other id is a plugin's workspace panel, which takes the plugin tab.
+ */
+/**
+ * Choosing a workspace tool by id. A core tool maps to a workbench tab; a plugin's
+ * own panel is answered by the caller that speaks to plugins, which says what the
+ * shell does not host rather than opening an empty tab.
+ */
+/**
+ * Choosing a workbench tab by the name the app uses for it - `git`, `files`,
+ * `terminal`, `goals`. The React shell names its own tabs; a request naming a
+ * plugin's page is answered by the layer that speaks to plugins, which says what
+ * the shell does not host rather than opening an empty tab.
+ */
+export function selectWorkbenchTabByName(name: string): boolean {
+  const tab = workbenchTabsByName[name];
+  if (tab === undefined) return false;
+  setWorkbenchTab(tab);
+  return true;
+}
+
+const workbenchTabsByName: Record<string, WorkbenchTab> = {
+  git: "git",
+  files: "files",
+  terminal: "terminal",
+  goals: "goals",
+};
 
 export function panelConstraints(side: ResizablePanelSide): { minWidth: number; maxWidth: number } {
   return { minWidth: PANEL_RESIZE_CONSTRAINTS[side].minWidth, maxWidth: PANEL_RESIZE_CONSTRAINTS[side].maxWidth };

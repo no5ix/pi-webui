@@ -991,3 +991,22 @@
   white-space: nowrap;
   border: 0;
 }
+
+.piw-plugin-card {
+  margin-block: var(--piw-space-2) 0;
+  min-width: 0;
+}
+
+.piw-message__drawn {
+  margin: 0;
+  padding: var(--piw-space-2) var(--piw-space-3);
+  border: 1px solid var(--piw-border);
+  border-radius: var(--piw-radius-sm);
+  background: var(--piw-surface-inset);
+  color: var(--piw-text-secondary);
+  font-size: var(--piw-text-sm);
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

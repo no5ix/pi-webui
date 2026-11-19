@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "../common/icons";
+import { LitTemplateBoundary } from "../../plugins/LitTemplateBoundary";
+import { useToolRenderer } from "../../plugins/transcriptRenderers";
+import type { QualifiedToolRendererContribution, ToolRendererViewModel } from "../../../plugins/types";
 import { runDuration } from "../../../runDuration";
 import type { ToolRow } from "./toolRows";
 
@@ -11,6 +14,8 @@ import type { ToolRow } from "./toolRows";
  */
 export interface ToolExecutionCardProps {
   rows: readonly ToolRow[];
+  /** The machine whose plugin registry may claim one of these tool names. */
+  machineId: string;
   summary: string;
   open: boolean;
   onToggle: () => void;
@@ -38,11 +43,33 @@ export function ToolExecutionCard(props: ToolExecutionCardProps): ReactNode {
       {open ? (
         <div className="piw-card__body piw-tool-card__body">
           {rows.map((row) => (
-            <ToolRowItem key={row.key} row={row} />
+            <ToolRowItem key={row.key} machineId={props.machineId} row={row} />
           ))}
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * One plugin's card for one tool call. The renderer may answer undefined - its
+ * own details have not arrived - and then the host's row stands, which is the
+ * contract's rule: a tool row is never an empty hole.
+ */
+function PluginToolRendererCard(props: { renderer: QualifiedToolRendererContribution; row: ToolRow }): ReactNode {
+  const view: ToolRendererViewModel = {
+    toolName: props.row.name,
+    status: props.row.status,
+    args: props.row.args,
+    details: props.row.details,
+    resultText: props.row.resultText,
+  };
+  const card = props.renderer.render(view);
+  if (card === undefined) return null;
+  return (
+    <div className="piw-plugin-card" data-plugin={props.renderer.pluginId} data-testid="plugin-tool-card">
+      <LitTemplateBoundary template={card} />
+    </div>
   );
 }
 
@@ -52,7 +79,8 @@ function statusIcon(running: boolean, failed: number, streaming: boolean): "chec
   return "check";
 }
 
-function ToolRowItem({ row }: { row: ToolRow }): ReactNode {
+function ToolRowItem({ row, machineId }: { row: ToolRow; machineId: string }): ReactNode {
+  const renderer = useToolRenderer(row.name, machineId);
   const [expanded, setExpanded] = useState(false);
   const detail = detailOf(row);
   return (
@@ -67,6 +95,7 @@ function ToolRowItem({ row }: { row: ToolRow }): ReactNode {
         {row.durationMs === undefined ? null : <span className="piw-tool-row__duration">{runDuration(row.durationMs)}</span>}
         {detail === null ? null : <Icon label="" name={expanded ? "chevronUp" : "chevronRight"} size="small" />}
       </button>
+      {renderer === undefined ? null : <PluginToolRendererCard renderer={renderer} row={row} />}
       {expanded && detail !== null ? (
         <div className="piw-tool-row__detail">
           {detail.map((block, index) => (

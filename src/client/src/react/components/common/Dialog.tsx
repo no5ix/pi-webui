@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
@@ -49,6 +49,70 @@ export function Dialog(props: DialogProps): ReactNode {
       </div>
     </div>,
     document.body,
+  );
+}
+
+export interface InputDialogProps {
+  open: boolean;
+  title: string;
+  label: string;
+  confirmLabel: string;
+  placeholder?: string | undefined;
+  initialValue?: string | undefined;
+  problem?: string | undefined;
+  onSubmit: (value: string) => void;
+  onClose: () => void;
+}
+
+/**
+ * A one-field ask: a session name, a project name, a machine name.
+ *
+ * The shell's rename commands need the same dialog the rail's menus use, so the
+ * command, the header control and the menu row all open this one surface, and the
+ * value travels to the same operation.
+ */
+export function InputDialog(props: InputDialogProps): ReactNode {
+  const [value, setValue] = useState(props.initialValue ?? "");
+  const trimmed = value.trim();
+  const submit = (): void => {
+    if (trimmed === "") return;
+    props.onSubmit(trimmed);
+    props.onClose();
+  };
+  const onSubmitForm = (event: SyntheticEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    submit();
+  };
+  return (
+    <Dialog
+      onClose={props.onClose}
+      open={props.open}
+      size="compact"
+      title={props.title}
+      footer={
+        <>
+          <button className="piw-button" onClick={props.onClose} type="button">
+            Cancel
+          </button>
+          <button className="piw-button piw-button--primary" disabled={trimmed === ""} onClick={submit} type="button">
+            {props.confirmLabel}
+          </button>
+        </>
+      }
+    >
+      <form className="piw-field" onSubmit={onSubmitForm}>
+        <label className="piw-field">
+          <span className="piw-label">{props.label}</span>
+          <input
+            className="piw-input"
+            onChange={(event) => { setValue(event.target.value); }}
+            placeholder={props.placeholder}
+            value={value}
+          />
+        </label>
+        {props.problem === undefined ? null : <p className="piw-problem">{props.problem}</p>}
+      </form>
+    </Dialog>
   );
 }
 

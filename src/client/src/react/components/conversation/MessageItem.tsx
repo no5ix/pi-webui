@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Icon, IconButton } from "../common/icons";
 import { Markdown } from "../../markdown/Markdown";
+import { PluginMessageCard, messageRendererView, useMessageRenderer } from "../../plugins/transcriptRenderers";
 import { formatMessageTimestamp } from "../../markdown/formatTimestamp";
 import { messageCopyText } from "../../../chatMessages";
 import { writeClipboardText } from "../../../clipboard";
@@ -21,6 +22,9 @@ import type { ChatPart } from "../../../components/shared";
 export interface MessageItemProps {
   line: ChatLine;
   streaming: boolean;
+  /** The subject a plugin renderer is told about: which machine, which session. */
+  machineId: string;
+  sessionId: string;
   imagePathFor?: ((ref: DeferredImageRef) => string | undefined) | undefined;
   onInsertPrompt?: ((text: string) => void) | undefined;
 }
@@ -55,15 +59,66 @@ export function MessageItem(props: MessageItemProps): ReactNode {
       </header>
       <div className="piw-message__body">
         {line.parts.map((part, index) => (
-          <Part key={`${line.role}-${String(index)}`} imagePathFor={props.imagePathFor} part={part} streaming={streaming} />
+          <Part
+            key={`${line.role}-${String(index)}`}
+            imagePathFor={props.imagePathFor}
+            part={part}
+            streaming={streaming}
+            subject={{ machineId: props.machineId, sessionId: props.sessionId, messageId: line.meta?.entryId ?? line.meta?.clientMessageId ?? "", createdAt: line.meta?.timestamp }}
+          />
         ))}
       </div>
     </article>
   );
 }
 
-function Part(props: { part: ChatPart; streaming: boolean; imagePathFor?: ((ref: DeferredImageRef) => string | undefined) | undefined }): ReactNode {
+interface PartSubject {
+  machineId: string;
+  sessionId: string;
+  messageId: string;
+  createdAt: string | undefined;
+}
+
+/**
+ * A custom message no plugin claims: what the extension drew, pi's own text, and
+ * if neither arrived, the plain statement that nothing claimed it. The transcript
+ * never shows an empty hole for a row that exists.
+ */
+function CustomFallback(props: { drawn: readonly string[] | undefined; text: string | undefined }): ReactNode {
+  if (props.drawn !== undefined && props.drawn.length > 0) {
+    return <pre className="piw-message__drawn piw-mono">{props.drawn.join("\n")}</pre>;
+  }
+  if (props.text !== undefined && props.text !== "") return <Markdown className="piw-message__text" text={props.text} />;
+  return <div className="piw-message__note">A custom message no renderer claims.</div>;
+}
+
+function Part(props: {
+  part: ChatPart;
+  streaming: boolean;
+  subject: PartSubject;
+  imagePathFor?: ((ref: DeferredImageRef) => string | undefined) | undefined;
+}): ReactNode {
   const { part } = props;
+  const streaming = props.streaming;
+  if (part.type === "custom") {
+    const renderer = useMessageRenderer(part.tag, props.subject.machineId);
+    if (renderer === undefined) return <CustomFallback drawn={part.drawn} text={part.text} />;
+    return (
+      <PluginMessageCard
+        renderer={renderer}
+        view={messageRendererView({
+          sessionId: props.subject.sessionId,
+          messageId: props.subject.messageId,
+          tag: part.tag,
+          payload: part.payload,
+          streaming,
+          createdAt: props.subject.createdAt,
+          kind: part.kind,
+          drawn: part.drawn,
+        })}
+      />
+    );
+  }
   if (part.type === "text") return <Markdown className="piw-message__text" text={part.display ?? part.text} />;
   if (part.type === "thinking") return <ThinkingBlock text={part.text} />;
   if (part.type === "image") {
@@ -82,7 +137,6 @@ function Part(props: { part: ChatPart; streaming: boolean; imagePathFor?: ((ref:
   if (part.type === "toolResult") {
     return <ToolInline name={part.toolName} status={part.isError ? "error" : "success"} summary={part.text} />;
   }
-  if (part.type === "custom") return <CustomBlock tag={part.tag} drawn={part.drawn} text={part.text} />;
   if (part.type === "extensionNotice") return <div className={`piw-message__notice piw-message__notice--${part.level}`}>{part.text}{part.count > 1 ? ` ×${String(part.count)}` : ""}</div>;
   return null;
 }
@@ -126,19 +180,6 @@ function ToolInline({ name, summary, status }: { name: string; summary: string; 
   );
 }
 
-function CustomBlock({ tag, drawn, text }: { tag: string; drawn: readonly string[] | undefined; text: string | undefined }): ReactNode {
-  const lines = drawn ?? (text === undefined ? [] : [text]);
-  return (
-    <div className="piw-message__custom" data-tag={tag}>
-      {lines.length === 0 ? <div className="piw-empty">{`The ${tag} extension drew nothing for this row.`}</div> : null}
-      {lines.map((line, index) => (
-        <pre className="piw-message__drawn piw-mono" key={index}>
-          {line}
-        </pre>
-      ))}
-    </div>
-  );
-}
 
 function CopyAction({ line }: { line: ChatLine }): ReactNode {
   const [copied, setCopied] = useState(false);

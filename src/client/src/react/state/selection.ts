@@ -59,6 +59,17 @@ export function useSelection(): Selection {
   return useStoreSelect(selection, (value) => value);
 }
 
+/**
+ * The scope a workspace-scoped surface reads: machine, project and workspace
+ * together. A surface that acts on a workspace carries all three, so a partial
+ * selection is reported as no scope rather than as a guessed one.
+ */
+export function selectedScope(): { machineId: string; projectId: string; workspaceId: string } | undefined {
+  const current = selection.get();
+  if (current.projectId === undefined || current.workspaceId === undefined) return undefined;
+  return { machineId: current.machineId, projectId: current.projectId, workspaceId: current.workspaceId };
+}
+
 export function selectionParams(next: Selection): URLSearchParams {
   const params = new URLSearchParams(window.location.search);
   if (next.machineId === localMachineId) params.delete("machine");

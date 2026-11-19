@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "./Dialog";
-import { Icon } from "./icons";
+import { Icon, type IconName } from "./icons";
 import { closeLayer, useLayerKey } from "../../state/panels";
-import { runShellCommand, shellCommandGroups, useShellCommands, type ShellCommand } from "../../state/shellCommands";
+import { matchedCommands, runShellCommand, shellCommandGroups, useShellCommands, type ShellCommand } from "../../state/shellCommands";
 
 /**
  * The command palette.
@@ -17,7 +17,7 @@ export function CommandPalette(): ReactNode {
   const commands = useShellCommands();
   const [filter, setFilter] = useState("");
 
-  const groups = useMemo(() => shellCommandGroups(commands).map((group) => ({ ...group, items: group.items.filter((command) => matches(command, filter)) })).filter((group) => group.items.length > 0), [commands, filter]);
+  const groups = useMemo(() => shellCommandGroups(matchedCommands(commands, filter)).filter((group) => group.items.length > 0), [commands, filter]);
 
   const [index, setIndex] = useState(0);
   const flat = groups.flatMap((group) => group.items);
@@ -102,12 +102,15 @@ export function CommandPalette(): ReactNode {
   return layer === "palette" ? open : null;
 }
 
-function matches(command: ShellCommand, filter: string): boolean {
-  if (filter === "") return true;
-  const needle = filter.toLowerCase();
-  return command.title.toLowerCase().includes(needle) || command.id.toLowerCase().includes(needle) || command.group.toLowerCase().includes(needle);
-}
+const groupIcons: Record<string, IconName> = {
+  Workbench: "gitBranch",
+  Window: "list",
+  Session: "bot",
+  Project: "folder",
+  View: "search",
+  Account: "info",
+};
 
-function iconOf(command: ShellCommand): "command" {
-  return command.chord === undefined ? "command" : "command";
+function iconOf(command: ShellCommand): IconName {
+  return groupIcons[command.group] ?? "bot";
 }

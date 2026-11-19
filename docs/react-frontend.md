@@ -65,22 +65,30 @@ the shell renders. `packages/pi-web-plugin-api` and the plugin API in
 `docs/plugin-api.md` are untouched: a plugin registered against the registry receives
 the same contributions and the same host objects.
 
-In the React shell a plugin's **composer contribution**, **theme**, and **`showDialog`**
-surface are hosted: the manifests are loaded per machine (`loadPlugins`), plugin themes
-are handed to the theme engine, composer contributions render under the prompt, and a
-plugin's dialog appears in the shell's modal layer. The other contribution kinds are
-not hosted — see the gaps.
+In the React shell these plugin surfaces are hosted: **composer contributions**,
+**themes and theme pairs**, **`showDialog`**, **actions** (every contributed action is
+also a command in the palette, with its own group, chord, `enabled` test and
+unavailability reason), **message renderers** for custom transcript rows, **tool
+renderers** for a claimed tool's rows, and **settings sections** — the last through
+the app's own settings element, which the shell hosts and feeds. The manifests are
+loaded per machine (`loadPlugins`), plugin themes go to the theme engine, composer
+contributions render under the prompt, and a plugin's dialog appears in the shell's
+modal layer. A plugin's `prompt` control sends through the hosted prompt editor,
+which exposes `submitPrompt()` for exactly this: a card that sends a prompt sends
+what the reader can see in the composer.
 
 ## Known gaps in the React shell
 
 These are real, said plainly:
 
-- **Plugin workspace panels, global panels, settings sections, nav sections,
-  custom message renderers, tool renderers and code-fence renderers are not hosted
-  in the React shell.** The React workbench implements Git, Files, Terminal and
+- **Plugin workspace panels, global panels, nav sections and code-fence renderers are
+  not hosted in the React shell.** Their contexts carry the terminal host, the
+  workspace file authority and the nav surface; the React shell draws those columns
+  itself and has not built the equivalents. Asking for one of those surfaces gets the
+  answer in words — the plugin's page is in `?ui=legacy` — rather than a tab with
+  nothing behind it. The React workbench implements Git, Files, Terminal and
   Goals directly, reading the same plugin backends (`git`, `goal`) and workspace
-  routes the panels read. A plugin that contributes one of those surfaces has no
-  route in the React shell; `?ui=legacy` hosts them. The bridge forwards a plugin's
+  routes the panels read. The bridge forwards a plugin's
   `openPage` as a `pi-web-plugin-open-page` event and gives the registry no fleet
   source, so a plugin that reads the fleet sees no machines in the React shell.
 - **Git write operations are absent because PI WEB has no endpoint for them.** The

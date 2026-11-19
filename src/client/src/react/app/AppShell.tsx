@@ -4,6 +4,7 @@ import type { Project, SessionInfo, SessionRef, Workspace } from "../../../../sh
 import { useBoard, useBoardMachine } from "../state/board";
 import { usePanels, usePanelPersistence, setPanelWidth, setPanelCollapsed, togglePanel, selectWorkbenchTab, openLayer, closeLayer, type ResizablePanelSide } from "../state/panels";
 import { useProjects, readProjects } from "../state/projectsStore";
+import { sessionLabel } from "../../sessionLabels";
 import { selectSession, useSelection } from "../state/selection";
 import { useSessionStreamSession } from "../state/sessionStream";
 import { useThemeSystemFollow } from "../state/theme";
@@ -13,8 +14,14 @@ import { CommandPalette } from "../components/common/CommandPalette";
 import { QuickSwitcher } from "../components/common/QuickSwitcher";
 import { SettingsOverlay } from "../components/common/SettingsOverlay";
 import { NewProjectDialog } from "../components/common/NewProjectDialog";
+import { ConfirmDialog, InputDialog } from "../components/common/Dialog";
 import { Toasts } from "../components/common/Toasts";
 import { PluginDialogLayer, loadPlugins } from "../plugins/pluginBridge";
+import { useLayerKey } from "../state/panels";
+import { useSessionCommands } from "../state/sessionCommands";
+import { usePluginCommands } from "../plugins/pluginCommands";
+import { deleteWorkspace, renameSession, selectedWorkspace } from "../state/sessionActions";
+import { pushToast } from "../components/common/Toasts";
 import { WindowBar } from "./WindowBar";
 import { NavigationPanel } from "../components/navigation/NavigationPanel";
 import { ConversationPanel } from "../components/conversation/ConversationPanel";
@@ -56,6 +63,8 @@ export function AppShell(): ReactNode {
   useSelectionUrl();
   useThemeSystemFollow();
   useBoardMachine(selected.machineId);
+  useSessionCommands();
+  usePluginCommands();
 
   useEffect(() => {
     void loadPlugins(selected.machineId);
@@ -147,9 +156,59 @@ export function AppShell(): ReactNode {
       <QuickSwitcher onNewSession={() => { setLayer("new-project"); }} />
       <SettingsOverlay machineId={selected.machineId} />
       <NewProjectDialog />
+      <RenameSessionDialog
+        label={subject.sessionInfo === undefined ? "" : sessionLabel(subject.sessionInfo)}
+        machineId={selected.machineId}
+        session={subject.session}
+      />
+      <RemoveWorkspaceDialog machineId={selected.machineId} />
       <Toasts />
       <PluginDialogLayer />
     </div>
+  );
+}
+
+function RenameSessionDialog(props: { session: SessionRef | undefined; label: string; machineId: string }): ReactNode {
+  const layer = useLayerKey();
+  const session = props.session;
+  if (layer !== "rename-session" || session === undefined) return null;
+  return (
+    <InputDialog
+      confirmLabel="Rename"
+      initialValue={props.label}
+      open={true}
+      label="Session name"
+      onClose={() => { closeLayer(); }}
+      onSubmit={(value) => {
+        void renameSession(session, value, props.machineId).catch((error: unknown) => {
+          pushToast({ body: error instanceof Error ? error.message : String(error), title: "Rename session", tone: "error" });
+        });
+      }}
+      placeholder="A name for this session"
+      title="Rename session"
+    />
+  );
+}
+
+function RemoveWorkspaceDialog(props: { machineId: string }): ReactNode {
+  const layer = useLayerKey();
+  if (layer !== "remove-workspace") return null;
+  const workspace = selectedWorkspace();
+  if (workspace === undefined) return null;
+  return (
+    <ConfirmDialog
+      body={<>Remove “{workspace.label}” from this project? The folder on disk is left alone; PI WEB stops listing the workspace.</>}
+      confirmLabel="Remove"
+      danger={true}
+      open={true}
+      onClose={() => { closeLayer(); }}
+      onConfirm={() => {
+        void deleteWorkspace(workspace.projectId, workspace.id, workspace.removal?.precondition ?? "", props.machineId).catch((error: unknown) => {
+          pushToast({ body: error instanceof Error ? error.message : String(error), title: "Remove workspace", tone: "error" });
+        });
+      }}
+      title="Remove workspace"
+    />
   );
 }
 

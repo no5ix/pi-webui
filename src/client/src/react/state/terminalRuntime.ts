@@ -21,12 +21,26 @@ export interface TerminalsState {
   readonly read: ReadState<readonly TerminalInfo[]>;
   readonly activeId: string | undefined;
   readonly starting: boolean;
+  /**
+   * A request to open a terminal, from a command, a plugin, or the panel's own
+   * button. The panel is the only thing that knows the terminal's size, so the
+   * request travels through the store and the panel answers it.
+   */
+  readonly openRequested: { terminalId: string | undefined } | undefined;
 }
 
-export const terminalsStore = createStore<TerminalsState>({ scope: undefined, read: idleRead, activeId: undefined, starting: false });
+export const terminalsStore = createStore<TerminalsState>({ scope: undefined, read: idleRead, activeId: undefined, starting: false, openRequested: undefined });
 
 export function useTerminals(): TerminalsState {
   return useStoreSelect(terminalsStore, (value) => value);
+}
+
+export function requestTerminalOpen(terminalId?: string): void {
+  terminalsStore.update((current) => ({ ...current, openRequested: { terminalId } }));
+}
+
+export function clearTerminalOpenRequest(): void {
+  terminalsStore.update((current) => (current.openRequested === undefined ? current : { ...current, openRequested: undefined }));
 }
 
 export function setActiveTerminal(terminalId: string | undefined): void {

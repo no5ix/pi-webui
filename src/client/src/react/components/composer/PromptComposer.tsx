@@ -5,7 +5,7 @@ import { isRecord } from "../../../../../shared/unknownValues";
 import { deferredImagePath } from "../../../api/urls";
 import { rowedClientMessageIds } from "../../../messageDelivery";
 import { useSessionStream, streamRuntime } from "../../state/sessionStream";
-import { useComposer, readModelSelection, sessionPromptsOf } from "../../state/composerStore";
+import { composerHandleFor, readModelSelection, sessionPromptsOf, setPromptEditorHandle, useComposer } from "../../state/composerStore";
 import { registerShellCommands } from "../../state/shellCommands";
 import { usePluginComposerContributions } from "../../plugins/pluginBridge";
 import { LitBoundary } from "../common/LitBoundary";
@@ -137,6 +137,7 @@ export function PromptComposer(props: PromptComposerProps): ReactNode {
       <LitBoundary
         onElement={(element) => {
           editor.current = isPromptEditorElement(element) ? element : null;
+          setPromptEditorHandle(composerHandleFor(element));
         }}
         properties={{
           sessionId: props.sessionId,

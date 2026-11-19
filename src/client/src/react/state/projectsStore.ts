@@ -1,5 +1,7 @@
-import { projectsApi, workspacesApi } from "../../api/clients";
+import { projectsApi, trustApi, workspacesApi } from "../../api/clients";
+import { addProjectFailureMessage } from "../../controllers/projectController";
 import type { Project, Workspace } from "../../../../shared/apiTypes";
+import type { PluginProjectTrustChoice } from "../../../../plugin-api";
 import { createStore, useStoreSelect, type ReadState } from "./store";
 
 /**
@@ -76,5 +78,37 @@ export async function closeProject(projectId: string, machineId: string): Promis
     return { ...current, workspacesByProject: workspaces };
   });
   await readProjects(machineId);
+}
+
+/**
+ * Add a project, then save the add-project dialog's trust choice for its main
+ * workspace through the id-based route, never a client-chosen path. The project
+ * is added either way, so a trust write that fails says the trust was not saved
+ * instead of reading as a failed add.
+ *
+ * Resolves to the reason the submit did not go through, in the machine's words,
+ * or undefined when it did. The dialog and a plugin's `createProject` share this.
+ */
+export async function addProject(input: { path: string; create?: boolean | undefined; trust?: PluginProjectTrustChoice | undefined }, machineId: string): Promise<string | undefined> {
+  const path = input.path.trim();
+  if (path === "") return undefined;
+  let project: Project;
+  try {
+    project = await projectsApi.addProject(path, undefined, input.create, machineId);
+  } catch (error) {
+    return addProjectFailureMessage(error);
+  }
+  await readProjects(machineId);
+  const trust = input.trust;
+  if (trust === undefined) return undefined;
+  if (!trust.changed) return undefined;
+  const mainWorkspace = (await readWorkspaces(project.id, machineId).catch((): readonly Workspace[] => [])).find((workspace) => workspace.isMain);
+  if (mainWorkspace === undefined) return `Added ${project.name}, but its trust was not saved: its main workspace is not listed.`;
+  try {
+    await trustApi.setWorkspaceTrust(project.id, mainWorkspace.id, trust.trusted, machineId);
+    return undefined;
+  } catch (error) {
+    return `Added ${project.name}, but its trust was not saved: ${addProjectFailureMessage(error)}`;
+  }
 }
 

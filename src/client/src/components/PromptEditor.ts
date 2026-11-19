@@ -1527,6 +1527,14 @@ export class PromptEditor extends LitElement {
     return trackComposerSend(this.outboxKey(), this.sendComposerDraft(streamingBehavior, via));
   }
 
+  /**
+   * Send what the composer holds, exactly as the Send control does. The React shell's
+   * composer card and the plugin cards it hosts have no other way to send as the reader.
+   */
+  submitPrompt(): Promise<DraftSendOutcome> {
+    return this.send(this.canSteer ? "steer" : "followUp");
+  }
+
   private async sendComposerDraft(streamingBehavior: "steer" | "followUp" | undefined, via: string | undefined): Promise<DraftSendOutcome> {
     if (this.preparingSend) {
       if (via === undefined) this.sendAfterWrite = { behavior: streamingBehavior };

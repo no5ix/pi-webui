@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { terminalSocket } from "../../../api/sockets";
 import { Icon, IconButton } from "../common/icons";
 import { registerShellCommands } from "../../state/shellCommands";
-import { closeAllTerminals, closeTerminal, readTerminals, renameTerminal, setActiveTerminal, startTerminal, useTerminals, type TerminalScope } from "../../state/terminalRuntime";
+import { clearTerminalOpenRequest, closeAllTerminals, closeTerminal, readTerminals, renameTerminal, setActiveTerminal, startTerminal, useTerminals, type TerminalScope } from "../../state/terminalRuntime";
 import "@xterm/xterm/css/xterm.css";
 
 /**
@@ -22,6 +22,18 @@ export interface TerminalPanelProps {
 export function TerminalPanel(props: TerminalPanelProps): ReactNode {
   const terminals = useTerminals();
   const scope = props.scope;
+
+  useEffect(() => {
+    const request = terminals.openRequested;
+    if (request === undefined) return;
+    // A request with no id asks for a shell; the panel fits it once the surface mounts.
+    if (request.terminalId === undefined) {
+      if (scope !== undefined) void startTerminal(scope, { cols: 80, rows: 24 });
+    } else {
+      setActiveTerminal(request.terminalId);
+    }
+    clearTerminalOpenRequest();
+  }, [terminals.openRequested, scope]);
   const host = useRef<HTMLDivElement | null>(null);
   const [connection, setConnection] = useState<"idle" | "opening" | "open" | "closed" | "failed">("idle");
   const [renaming, setRenaming] = useState(false);

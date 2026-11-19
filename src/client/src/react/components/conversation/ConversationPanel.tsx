@@ -110,6 +110,8 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
         {stream.error !== undefined && stream.messages.length === 0 ? <p className="piw-empty">The transcript did not load: {stream.error}</p> : null}
 
         <MessageList
+          machineId={props.machineId}
+          sessionId={session?.id ?? ""}
           hasNewer={stream.pageEnd < stream.total}
           hasOlder={stream.pageStart > 0}
           imagePathFor={session === undefined ? undefined : (ref: DeferredImageRef) => deferredImagePath({ id: session.id, cwd: session.cwd }, ref, props.machineId)}

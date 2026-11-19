@@ -20,6 +20,8 @@ export interface ToolRow {
   readonly status: ToolExecutionDisplayStatus;
   readonly drawnCall: readonly string[] | undefined;
   readonly drawnResult: readonly string[] | undefined;
+  /** The tool's own `details` payload, as the extension wrote it. */
+  readonly details: unknown;
 }
 
 export function toolRowsOf(lines: readonly ChatLine[], streaming: boolean): ToolRow[] {
@@ -43,6 +45,7 @@ export function toolRowsOf(lines: readonly ChatLine[], streaming: boolean): Tool
         status: mergeStatus(previous?.status, entry.status, streaming),
         drawnCall: entry.drawnCall ?? previous?.drawnCall,
         drawnResult: entry.drawnResult ?? previous?.drawnResult,
+        details: entry.details ?? previous?.details,
       };
       if (existing === undefined) rows.push(row);
       else rows[existing] = row;
@@ -72,11 +75,12 @@ interface ToolPartEntry {
   status: ToolExecutionStatus | undefined;
   drawnCall: readonly string[] | undefined;
   drawnResult: readonly string[] | undefined;
+  details: unknown;
 }
 
 function entryOf(part: ChatPart): ToolPartEntry | undefined {
   if (part.type === "toolCall") {
-    return { key: part.toolCallId, name: part.toolName, summary: part.summary, args: part.args, resultText: undefined, preview: undefined, durationMs: undefined, status: ToolExecutionStatus.Running, drawnCall: part.drawnCall, drawnResult: undefined };
+    return { key: part.toolCallId, name: part.toolName, summary: part.summary, args: part.args, resultText: undefined, preview: undefined, durationMs: undefined, status: ToolExecutionStatus.Running, drawnCall: part.drawnCall, drawnResult: undefined, details: undefined };
   }
   if (part.type === "toolExecution") {
     return {
@@ -90,6 +94,7 @@ function entryOf(part: ChatPart): ToolPartEntry | undefined {
       status: part.status,
       drawnCall: part.drawnCall,
       drawnResult: part.drawnResult,
+      details: part.details,
     };
   }
   if (part.type === "toolResult") {
@@ -104,6 +109,7 @@ function entryOf(part: ChatPart): ToolPartEntry | undefined {
       status: part.isError ? ToolExecutionStatus.Error : ToolExecutionStatus.Success,
       drawnCall: undefined,
       drawnResult: part.drawnResult,
+      details: part.details,
     };
   }
   return undefined;

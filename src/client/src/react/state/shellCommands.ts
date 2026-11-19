@@ -63,6 +63,20 @@ export const builtInShellCommands: readonly ShellCommand[] = [
 ];
 
 /**
+ * A command matches when every term the reader typed appears in its title, id,
+ * owner, chord, or the keywords its owner supplied. Typing "kill" finds Stop;
+ * "archive tree" finds the descendant archive.
+ */
+export function matchedCommands(commands: readonly ShellCommand[], filter: string): readonly ShellCommand[] {
+  const terms = filter.trim().toLowerCase().split(/\s+/u).filter((term) => term !== "");
+  if (terms.length === 0) return commands;
+  return commands.filter((command) => {
+    const haystack = [command.title, command.id, command.group, command.chord ?? "", ...(command.keywords ?? [])].join(" ").toLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  });
+}
+
+/**
  * Commands grouped by their owner, for the palette.
  *
  * A command says who it belongs to ("Navigation", "Files", "Session"); the
