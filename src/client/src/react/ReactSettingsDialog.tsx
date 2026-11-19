@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { configApi, notificationsApi, type Machine } from "../api";
-import { notificationAvailability, requestTaskNotificationPermission, setTaskNotificationsWanted, taskNotificationsWanted } from "../notifications/taskNotifications";
+import type { Machine } from "../api";
 import { NATIVE_THEME_CHOICES, applyNativeThemeById, readStoredThemePreference, serializedThemePreference, writeStoredThemePreference } from "../theme";
 import { CORE_BUILTIN_DARK_THEME_ID } from "../builtinDarkTheme";
 import type { QualifiedContributionId } from "../plugins/types";
 import type { PaintScope } from "../themePaint";
+import { McpSettingsPanel } from "./McpSettingsPanel";
+import { NotificationsSettingsPanel } from "./NotificationsSettingsPanel";
 import type { ReactWorkspaceData } from "./useReactWorkspaceData";
 
 const pages = ["General", "Appearance", "Notifications", "Pi Packages", "MCP Servers", "Pi Web Plugins", "Machines", "Skills"] as const;
 type Page = typeof pages[number];
 
 type SettingsData = Pick<ReactWorkspaceData,
-  "selectedProject" | "settings" | "loadSettings" | "saveSettings" | "setPluginEnabled" | "installPackage" | "updatePackage" | "removePackage" | "setSkillEnabled" | "setMcpEnabled" | "testMcp" | "removeMcp" | "selectMachine" | "addMachine" | "renameMachine" | "removeMachine"
+  "selectedProject" | "settings" | "loadSettings" | "saveSettings" | "setPluginEnabled" | "installPackage" | "updatePackage" | "removePackage" | "setSkillEnabled" | "setMcpEnabled" | "testMcp" | "removeMcp" | "saveMcp" | "selectMachine" | "addMachine" | "renameMachine" | "removeMachine"
 > & { readonly state: Pick<ReactWorkspaceData["state"], "selectedMachine" | "machines" | "error"> };
 
 export interface ReactSettingsDialogProps {
@@ -26,10 +27,7 @@ export function ReactSettingsDialog({ data, open, onClose }: ReactSettingsDialog
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [packageSource, setPackageSource] = useState("");
-  const [notificationState, setNotificationState] = useState(notificationAvailability);
-  const [notificationsWanted, setNotificationsWanted] = useState(taskNotificationsWanted);
   const [themePreference, setThemePreference] = useState(() => readStoredThemePreference() ?? { themeId: CORE_BUILTIN_DARK_THEME_ID, auto: false });
-  const [ntfyStatus, setNtfyStatus] = useState<string>();
   const [machineName, setMachineName] = useState("");
   const [machineUrl, setMachineUrl] = useState("");
   const [machineToken, setMachineToken] = useState("");
@@ -47,22 +45,16 @@ export function ReactSettingsDialog({ data, open, onClose }: ReactSettingsDialog
     void data.loadSettings();
   }, [open, data.loadSettings, data.state.selectedMachine?.id, data.selectedProject?.id]);
 
-  useEffect(() => {
-    if (!open || page !== "Notifications") return;
-    void notificationsApi.ntfyStatus().then(status => {
-      setNtfyStatus(status.ready ? "The configured server notification channel is ready." : status.reason ?? "No server notification channel is ready.");
-    }).catch(error => setNtfyStatus(error instanceof Error ? error.message : String(error)));
-  }, [open, page]);
-
   useEffect(() => setRenameDraft(data.state.selectedMachine?.name ?? ""), [data.state.selectedMachine?.id, data.state.selectedMachine?.name]);
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
     setBusy(true);
     setNotice(undefined);
     try {
-      await action();
+      return await action();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
+      return undefined;
     } finally {
       setBusy(false);
     }
@@ -113,23 +105,12 @@ export function ReactSettingsDialog({ data, open, onClose }: ReactSettingsDialog
             }}>{NATIVE_THEME_CHOICES.map(theme => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
             <p>Theme changes are saved in this browser and applied immediately.</p>
           </section>}
-          {page === "Notifications" && <section>
-            <h4>Browser notifications</h4>
-            <p>Permission: {notificationState}. Preference: {notificationsWanted ? "on" : "off"}.</p>
-            <button type="button" onClick={() => void run(async () => { const state = await requestTaskNotificationPermission(); setNotificationState(state); if (state === "granted") { setTaskNotificationsWanted(true); setNotificationsWanted(true); } })} disabled={busy}>Enable browser notifications</button>
-            <button type="button" onClick={() => { setTaskNotificationsWanted(!notificationsWanted); setNotificationsWanted(!notificationsWanted); }}>Turn {notificationsWanted ? "off" : "on"}</button>
-            <h4>Server notifications</h4><p>{ntfyStatus ?? "Loading channel status…"}</p>
-            <button type="button" onClick={() => void run(async () => { const result = await notificationsApi.sendNtfyTest(); setNotice(result.delivered ? "Test notification delivered." : result.reason ?? "The test notification was not delivered."); })} disabled={busy}>Send test notification</button>
-          </section>}
+          {page === "Notifications" && <NotificationsSettingsPanel busy={busy} run={run} />}
           {page === "Pi Packages" && <section>
             <form onSubmit={event => { event.preventDefault(); void run(async () => { await data.installPackage(packageSource); setPackageSource(""); }); }}><input aria-label="Package source" placeholder="Package source (URL or registry)" value={packageSource} onChange={event => setPackageSource(event.target.value)}/><button disabled={!packageSource.trim() || busy}>Install</button><button type="button" onClick={() => void run(() => data.updatePackage())} disabled={busy}>Update all</button></form>
             {data.settings.packages?.packages.map(pkg => <div className="rw-setting-row" key={pkg.source}><span><b>{pkg.source}</b><small>{pkg.scope} · {pkg.enabled ? "enabled" : "disabled"}</small></span><button type="button" onClick={() => void run(() => data.removePackage(pkg.source, pkg.scope))} disabled={busy}>Remove</button></div>)}
           </section>}
-          {page === "MCP Servers" && <section>
-            {data.settings.mcp?.errors.map((error, index) => <p className="rw-settings-notice" key={index}>{error}</p>)}
-            {data.settings.mcp?.servers.map(server => <div className="rw-setting-row" key={server.name}><span><b>{server.name}</b><small>{server.transport} · {server.scope} · {server.probe?.state ?? server.configured}{server.usesSecrets ? " · uses secrets (values hidden)" : ""}</small></span><button type="button" onClick={() => void run(() => data.testMcp(server))} disabled={busy}>Test</button><button type="button" onClick={() => void run(() => data.removeMcp(server))} disabled={busy || server.targets.length === 0}>Remove</button><label className="rw-setting-check"><input type="checkbox" checked={server.enabled} disabled={busy || server.targets.length === 0} onChange={event => void run(() => data.setMcpEnabled(server, event.target.checked))}/>Enabled</label></div>)}
-            {!data.settings.mcp?.servers.length && !data.settings.loading && <p>No MCP servers were returned for this scope.</p>}
-          </section>}
+          {page === "MCP Servers" && <McpSettingsPanel data={data} busy={busy} run={run} />}
           {page === "Pi Web Plugins" && <section>
             {data.settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}
             {!data.settings.plugins?.plugins.length && !data.settings.loading && <p>No plugins were returned for this machine.</p>}

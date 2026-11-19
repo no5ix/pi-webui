@@ -44,8 +44,9 @@ function fakeMcpService() {
   const setEnabled = vi.fn(() => Promise.resolve({ ...response(), action: "set-enabled", name: "files", enabled: false, requiresReload: true } satisfies PiMcpMutationResponse));
   const remove = vi.fn(() => Promise.resolve({ ...response(), action: "remove", name: "files", removed: true, requiresReload: true } satisfies PiMcpMutationResponse));
   const test = vi.fn(() => Promise.resolve({ ...response(), action: "test", name: "files", probe: { state: "reachable", serverName: "files-server" }, requiresReload: false } satisfies PiMcpMutationResponse));
-  const service: PiMcpService = { list, setEnabled, remove, test };
-  return { service, list, setEnabled, remove, test };
+  const save = vi.fn(() => Promise.resolve({ ...response(), action: "save", name: "files", added: true, requiresReload: true } satisfies PiMcpMutationResponse));
+  const service: PiMcpService = { list, setEnabled, remove, test, save };
+  return { service, list, setEnabled, remove, test, save };
 }
 
 let app: FastifyInstance;
@@ -91,6 +92,29 @@ describe("registerPiMcpRoutes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ action: "test", probe: { state: "reachable", serverName: "files-server" }, requiresReload: false });
+  });
+
+  it("saves a server the person typed, through the target the request names", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/pi-mcp/save", payload: { name: "search", target: "definition", config: { command: "npx", args: ["-y", "search-mcp"] } } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ action: "save", added: true, requiresReload: true });
+    expect(mocks.save).toHaveBeenCalledWith({ name: "search", target: "definition", config: { command: "npx", args: ["-y", "search-mcp"] } });
+  });
+
+  it("saves a project's override of a global server with the project it names", async () => {
+    const result = await app.inject({ method: "POST", url: "/api/pi-mcp/save", payload: { name: "files", target: "override", projectId: "p-1", config: { enabled: false } } });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toMatchObject({ action: "save", name: "files", requiresReload: true });
+    expect(mocks.save).toHaveBeenCalledWith({ name: "files", target: "override", projectId: "p-1", config: { enabled: false } });
+  });
+
+  it("refuses a save with no config, no target, a name pi would not take, or a config that is not an object", async () => {
+    expect((await app.inject({ method: "POST", url: "/api/pi-mcp/save", payload: { name: "files", target: "definition" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/pi-mcp/save", payload: { name: "files", config: { command: "npx" } } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/pi-mcp/save", payload: { name: "files server", target: "definition", config: { command: "npx" } } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/pi-mcp/save", payload: { name: "files", target: "definition", config: "npx" } })).statusCode).toBe(400);
   });
 
   it("refuses a name pi's own MCP config would not accept", async () => {

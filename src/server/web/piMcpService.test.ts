@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isRecord } from "../../shared/unknownValues.js";
 import type { PiMcpProbe } from "../../shared/apiTypes.js";
-import { globalMcpConfigPath, projectMcpConfigPath } from "../shared/resources/mcpConfig.js";
+import { globalMcpConfigPath, projectMcpConfigPath, type McpServerConfig, type McpServerConfigPatch } from "../shared/resources/mcpConfig.js";
 import {
   DefaultPiMcpService,
   fileMcpConfigPort,
@@ -429,5 +429,164 @@ describe("a project's override of a global server", () => {
     await expect(service().remove({ name: "own", target: "definition", projectId: "p-1" })).rejects.toThrow(/not trusted/);
     await expect(service().test({ name: "own", projectId: "p-1" })).rejects.toThrow(/not trusted/);
     expect(serversIn(projectFile())).toEqual({ own: { command: "mcp-own" } });
+  });
+});
+
+describe("saving MCP servers", () => {
+  const globalFile = () => globalMcpConfigPath(agentDir);
+  const projectFile = () => projectMcpConfigPath(projectPath);
+
+  it("writes a new server into the machine's global file, in the shape pi reads", async () => {
+    const response = await service().save({ name: "files", config: { command: "npx", args: ["-y", "files-mcp"], exposure: "deferred" }, target: "definition" });
+
+    expect(response).toMatchObject({ action: "save", name: "files", added: true, requiresReload: true });
+    expect(response.servers.find((server) => server.name === "files")).toMatchObject({ scope: "global", transport: "stdio", enabled: true });
+    expect(serversIn(globalFile())).toEqual({ files: { command: "npx", args: ["-y", "files-mcp"], exposure: "deferred" } });
+  });
+
+  it("names the project's own file when the request names a project, and leaves the global file alone", async () => {
+    const response = await service().save({ name: "search", config: { command: "npx" }, target: "definition", projectId: "p-1" });
+
+    expect(response.added).toBe(true);
+    expect(response.projectPath).toBe(projectPath);
+    expect(serversIn(projectFile())).toEqual({ search: { command: "npx" } });
+    expect(existsSync(globalFile())).toBe(false);
+  });
+
+  it("refuses a config pi itself would refuse, and writes nothing", async () => {
+    await expect(service().save({ name: "files", config: { url: "not-a-url" }, target: "definition" })).rejects.toThrow(/url must be an http or https URL/);
+    await expect(service().save({ name: "files server", config: { command: "npx" }, target: "definition" })).rejects.toThrow(/invalid server name/);
+    await expect(service().save({ name: "files", config: {}, target: "definition" })).rejects.toThrow(/needs either "command"/);
+    expect(existsSync(globalFile())).toBe(false);
+  });
+
+  it("keeps what the form could not see: a secret, a command line, and the keys a prefilled field left empty", async () => {
+    writeJson(globalFile(), {
+      mcpServers: { files: { type: "stdio", command: "node", args: ["server.js"], env: { TOKEN: SECRET }, exposure: "deferred", timeout: 30 } },
+    });
+
+    // A prefilled edit sends the plain fields it showed and nothing else: no `args`, no `env`.
+    const response = await service().save({ name: "files", config: { type: "stdio", command: "node server.mjs", enabled: true }, target: "definition" });
+
+    expect(response).toMatchObject({ action: "save", name: "files", added: false, requiresReload: true });
+    expect(serversIn(globalFile())).toEqual({
+      files: { type: "stdio", command: "node server.mjs", args: ["server.js"], env: { TOKEN: SECRET }, exposure: "deferred", timeout: 30, enabled: true },
+    });
+  });
+
+  it("an edit that says nothing about the enabled switch leaves a disabled server disabled", async () => {
+    writeJson(globalFile(), { mcpServers: { files: { command: "node", args: ["server.js"], enabled: false } } });
+
+    await service().save({ name: "files", config: { command: "node", cwd: "/srv/files" }, target: "definition" });
+
+    expect(serversIn(globalFile())).toEqual({ files: { command: "node", args: ["server.js"], enabled: false, cwd: "/srv/files" } });
+  });
+
+  it("switching a server from HTTP to a command leaves the URL and its headers behind, so pi is not left connecting to what the form replaced", async () => {
+    writeJson(globalFile(), { mcpServers: { search: { url: "https://mcp.example.com/mcp", headers: { Authorization: `Bearer ${SECRET}` } } } });
+
+    await service().save({ name: "search", config: { command: "node", args: ["search.js"] }, target: "definition" });
+
+    expect(serversIn(globalFile())).toEqual({ search: { command: "node", args: ["search.js"] } });
+  });
+
+  it("a scope that contradicts the file the write resolved to is refused, and writes nothing", async () => {
+    await expect(service().save({ name: "files", config: { command: "node" }, target: "definition", scope: "global", projectId: "p-1" })).rejects.toBeInstanceOf(PiMcpRequestError);
+
+    expect(existsSync(projectFile())).toBe(false);
+    expect(existsSync(globalFile())).toBe(false);
+  });
+
+  it("keeps a header value the panel never showed, across an edit of the URL beside it", async () => {
+    writeJson(globalFile(), { mcpServers: { search: { type: "http", url: "https://example.test/mcp", headers: { Authorization: `Bearer ${SECRET}` }, exposure: "deferred" } } });
+
+    await service().save({ name: "search", config: { type: "http", url: "https://example.test/mcp", enabled: true }, target: "definition" });
+
+    expect(serversIn(globalFile())).toEqual({
+      search: { type: "http", url: "https://example.test/mcp", headers: { Authorization: `Bearer ${SECRET}` }, exposure: "deferred", enabled: true },
+    });
+  });
+
+  it("replaces a secret map the person typed, key by key, over the one the file had", async () => {
+    writeJson(globalFile(), { mcpServers: { files: { command: "node", env: { OLD: SECRET } } } });
+
+    await service().save({ name: "files", config: { type: "stdio", command: "node", env: { NEW: "public-value" } }, target: "definition" });
+
+    expect(serversIn(globalFile())).toEqual({ files: { type: "stdio", command: "node", env: { NEW: "public-value" } } });
+  });
+
+  it("an override writes only what a project may say about a global server, and never the definition", async () => {
+    writeJson(globalFile(), { mcpServers: { files: { command: "node", args: ["server.js"], env: { TOKEN: SECRET } } } });
+
+    const response = await service().save({ name: "files", config: { enabled: false, exposure: "hidden" }, target: "override", projectId: "p-1" });
+
+    expect(response.added).toBe(true);
+    expect(serversIn(projectFile())).toEqual({ files: { enabled: false, exposure: "hidden" } });
+    expect(serversIn(globalFile())).toEqual({ files: { command: "node", args: ["server.js"], env: { TOKEN: SECRET } } });
+    expect(response.servers.find((server) => server.name === "files")).toMatchObject({ enabled: false, exposure: "hidden", overridePath: projectFile() });
+  });
+
+  it("refuses an override of a server this project defines, because there is nothing to override", async () => {
+    writeJson(projectFile(), { mcpServers: { own: { command: "mcp-own" } } });
+
+    await expect(service().save({ name: "own", config: { enabled: false }, target: "override", projectId: "p-1" })).rejects.toThrow(/no override to write/);
+    expect(serversIn(projectFile())).toEqual({ own: { command: "mcp-own" } });
+  });
+
+  it("a definition write on a global server lands in the global file, even from a project's panel", async () => {
+    writeJson(globalFile(), { mcpServers: { files: { command: "node", args: ["server.js"] } } });
+
+    const response = await service().save({ name: "files", config: { command: "node", args: ["global-server.js"] }, target: "definition", projectId: "p-1" });
+
+    expect(response.added).toBe(false);
+    expect(serversIn(globalFile())).toEqual({ files: { command: "node", args: ["global-server.js"] } });
+    expect(existsSync(projectFile())).toBe(false);
+    expect(response.servers.find((server) => server.name === "files")).toMatchObject({ scope: "global", configPath: globalFile() });
+  });
+
+  it("an untrusted project's save is refused and its file stays as it was", async () => {
+    writeJson(projectFile(), { mcpServers: { own: { command: "mcp-own" } } });
+    projects = { ...projects, isProjectTrusted: () => false };
+
+    await expect(service().save({ name: "own", config: { command: "node" }, target: "definition", projectId: "p-1" })).rejects.toThrow(/not trusted/);
+    expect(serversIn(projectFile())).toEqual({ own: { command: "mcp-own" } });
+  });
+
+  it("a name that exists only in another project's file becomes this project's own entry, and the other file stays as it was", async () => {
+    const projectB = join(root, "project-b");
+    mkdirSync(join(projectB, ".pi"), { recursive: true });
+    writeJson(projectMcpConfigPath(projectB), { mcpServers: { own: { command: "mcp-own" } } });
+
+    const response = await service().save({ name: "own", config: { command: "node" }, target: "definition", projectId: "p-1" });
+
+    expect(response.added).toBe(true);
+    expect(serversIn(projectFile())).toEqual({ own: { command: "node" } });
+    expect(serversIn(projectMcpConfigPath(projectB))).toEqual({ own: { command: "mcp-own" } });
+    expect(existsSync(globalFile())).toBe(false);
+  });
+
+  it("a mutation queue keeps two saves from writing the same file at once", async () => {
+    const order: string[] = [];
+    const files = fileMcpConfigPort(agentDir);
+    const slowPort = {
+      read: (projectPath: string | undefined, projectTrusted: boolean) => files.read(projectPath, projectTrusted),
+      remove: (configPath: string, name: string) => files.remove(configPath, name),
+      patch: (configPath: string, name: string, value: McpServerConfigPatch, options: { override: boolean }) => files.patch(configPath, name, value, options),
+      add: (configPath: string, name: string, config: McpServerConfig) => new Promise<boolean>((resolve) => {
+        order.push(name);
+        setTimeout(() => {
+          void files.add(configPath, name, config);
+          resolve(true);
+        }, 5);
+      }),
+    };
+    const slow = new DefaultPiMcpService(slowPort, probe, projects);
+
+    const first = slow.save({ name: "one", config: { command: "node" }, target: "definition" });
+    const second = slow.save({ name: "two", config: { command: "node" }, target: "definition" });
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(["one", "two"]);
+    expect(serversIn(globalFile())).toEqual({ one: { command: "node" }, two: { command: "node" } });
   });
 });

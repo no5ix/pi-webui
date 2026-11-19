@@ -338,11 +338,13 @@ interface CapturedPiSkillsRequest {
 }
 
 interface CapturedPiMcpRequest {
-  action: "list" | "set-enabled" | "remove" | "test";
+  action: "list" | "set-enabled" | "remove" | "test" | "save";
   name?: string;
   target?: PiMcpWriteKind;
   scope?: PiMcpScope;
   enabled?: boolean;
+  added?: boolean;
+  config?: Record<string, unknown>;
   projectId?: string;
 }
 
@@ -441,6 +443,18 @@ function fakePiMcpService(): PiMcpService {
     test: (request) => {
       piMcpRequests.push({ action: "test", name: request.name, ...(request.projectId === undefined ? {} : { projectId: request.projectId }) });
       return Promise.resolve(mutation("test", request.name, { probe: { state: "reachable" } }));
+    },
+    save: (request) => {
+      const known = servers.some((server) => server.name === request.name);
+      if (!known) servers.push(appTestMcpServer(request.name));
+      piMcpRequests.push({
+        action: "save",
+        name: request.name,
+        target: request.target,
+        config: request.config,
+        ...(request.projectId === undefined ? {} : { projectId: request.projectId }),
+      });
+      return Promise.resolve(mutation("save", request.name, { added: !known, requiresReload: true }));
     },
   };
 }

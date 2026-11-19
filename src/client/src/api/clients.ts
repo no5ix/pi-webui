@@ -1,5 +1,5 @@
 import { isRecord } from "../../../shared/unknownValues";
-import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageSetEnabledRequest, PiPackageUpdateRequest, PiMcpRemoveRequest, PiMcpSetEnabledRequest, PiMcpTestRequest, PiSkillSetEnabledRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
+import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageSetEnabledRequest, PiPackageUpdateRequest, PiMcpRemoveRequest, PiMcpSaveRequest, PiMcpSetEnabledRequest, PiMcpTestRequest, PiSkillSetEnabledRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
 import { parseProjectFolderListing } from "./projectFolderParser";
 import { resolveAppUrl } from "../appUrl";
 import { describeError } from "../notice";
@@ -289,6 +289,11 @@ export const piMcpApi = {
   setEnabled: (setEnabled: PiMcpSetEnabledRequest, machineId?: string) => request(piMcpPath("set-enabled", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(setEnabled) }),
   remove: (remove: PiMcpRemoveRequest, machineId?: string) => request(piMcpPath("remove", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(remove) }),
   test: (test: PiMcpTestRequest, machineId?: string) => request(piMcpPath("test", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(test) }),
+  /**
+   * Writes one server's config. The draft is what the form owns; a key it leaves out keeps the value
+   * the file had, which is why a header or environment value a panel cannot show survives an edit.
+   */
+  save: (save: PiMcpSaveRequest, machineId?: string) => request(piMcpPath("save", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(save) }),
 };
 
 /**

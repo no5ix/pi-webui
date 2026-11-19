@@ -22,6 +22,7 @@ const data: ReactSettingsDialogProps["data"] = {
   setMcpEnabled: vi.fn(() => Promise.resolve()),
   testMcp: vi.fn(() => Promise.resolve()),
   removeMcp: vi.fn(() => Promise.resolve()),
+  saveMcp: vi.fn(() => Promise.resolve()),
   selectMachine: vi.fn(() => Promise.resolve()),
   addMachine: vi.fn(() => Promise.resolve()),
   renameMachine: vi.fn(() => Promise.resolve()),

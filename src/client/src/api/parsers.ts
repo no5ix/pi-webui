@@ -2184,7 +2184,7 @@ const PI_MCP_TRANSPORTS = ["stdio", "http"] as const;
 const PI_MCP_CONFIGURED_STATES = ["enabled", "disabled", "invalid"] as const;
 const PI_MCP_EXPOSURES = ["codemode", "deferred", "direct", "hidden"] as const;
 const PI_MCP_PROBE_STATES = ["unprobed", "reachable", "unreachable", "needs-auth"] as const;
-const PI_MCP_MUTATION_ACTIONS = ["set-enabled", "remove", "test"] as const;
+const PI_MCP_MUTATION_ACTIONS = ["set-enabled", "remove", "test", "save"] as const;
 
 /**
  * Skills as this machine discovered them, with PI WEB's saved preferences applied.
@@ -2302,6 +2302,7 @@ export function parsePiMcpMutationResponse(value: unknown): PiMcpMutationRespons
     name: requireString(record, "name"),
     ...optionalField("enabled", parseOptionalBoolean(record["enabled"], "enabled")),
     ...optionalField("removed", parseOptionalBoolean(record["removed"], "removed")),
+    ...optionalField("added", parseOptionalBoolean(record["added"], "added")),
     ...optionalField("probe", probe),
     requiresReload: requireBoolean(record, "requiresReload"),
   };

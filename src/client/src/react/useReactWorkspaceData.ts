@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, workspacesApi, type FileContentResponse, type FileTreeEntry, type Machine, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiSkillInfo, type SessionModelCatalogResponse } from "../api";
+import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, workspacesApi, type FileContentResponse, type FileTreeEntry, type Machine, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiMcpSaveRequest, type PiSkillInfo, type SessionModelCatalogResponse } from "../api";
 import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
@@ -57,6 +57,7 @@ export interface ReactWorkspaceData {
   readonly setMcpEnabled: (server: PiMcpServerInfo, enabled: boolean) => Promise<void>;
   readonly testMcp: (server: PiMcpServerInfo) => Promise<void>;
   readonly removeMcp: (server: PiMcpServerInfo) => Promise<void>;
+  readonly saveMcp: (save: PiMcpSaveRequest) => Promise<void>;
   readonly selectMachine: (machine: Machine) => Promise<void>;
   readonly addMachine: (input: { name: string; baseUrl: string; token?: string }) => Promise<void>;
   readonly renameMachine: (machine: Machine, name: string) => Promise<void>;
@@ -508,6 +509,26 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     }, current.selectedMachine?.id ?? "local");
     writeSettingsForScope(scopeKey, value => ({ ...value, mcp: response, notice: response.requiresReload ? "MCP entry removed. Reload running sessions to apply it." : "MCP entry removed." }));
   }, []);
+  /**
+   * Writes one server's config, and says what the answer did.
+   *
+   * The form owns the draft and the target, so the hook only carries it to the machine the panel is
+   * answering for and puts the answer under the scope it was read for. The notice follows the answer:
+   * an added server has to be connected by a reload, and a saved one reaches a running session after
+   * one, because pi opens its MCP connections when a session starts.
+   */
+  const saveMcp = useCallback(async (save: PiMcpSaveRequest) => {
+    const current = stateRef.current;
+    const scopeKey = JSON.stringify([current.selectedMachine?.id ?? "local", current.selectedProject?.id]);
+    const response = await piMcpApi.save(save, current.selectedMachine?.id ?? "local");
+    writeSettingsForScope(scopeKey, value => ({
+      ...value,
+      mcp: response,
+      notice: response.added === true
+        ? `MCP server "${response.name}" added. Start a session, or reload a running one, to connect it.`
+        : `MCP server "${response.name}" saved. Reload a running session to apply it.`,
+    }));
+  }, []);
 
   const selectMachine = useCallback((machine: Machine) => runtime.machines.selectMachine(machine), [runtime]);
   const addMachine = useCallback(async (input: { name: string; baseUrl: string; token?: string }) => {
@@ -823,6 +844,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     setMcpEnabled,
     testMcp,
     removeMcp,
+    saveMcp,
     selectMachine,
     addMachine,
     renameMachine,

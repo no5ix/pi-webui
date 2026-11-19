@@ -695,11 +695,55 @@ export interface PiMcpTestRequest {
   projectId?: string;
 }
 
+/**
+ * One MCP server as the panel writes it.
+ *
+ * A draft carries the values the person typing owns — a command, its arguments, a URL. It never needs
+ * a value PI WEB hides: a save over an existing entry keeps every key the draft leaves out, merged by
+ * the machine that owns the file, so a header or environment value travels browser → file and never
+ * file → browser.
+ */
+export interface PiMcpServerDraft {
+  type?: "stdio" | "http" | "streamable-http";
+  /** stdio only. */
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  /** Sent as a whole: a key the draft omits is a key the entry no longer sets. */
+  env?: Record<string, string>;
+  /** http only. */
+  url?: string;
+  /** Sent as a whole, like `env`. */
+  headers?: Record<string, string>;
+  enabled?: boolean;
+  exposure?: PiMcpExposure;
+  /** Seconds. */
+  timeout?: number;
+  description?: string;
+  /**
+   * pi's own keys PI WEB has no field for (`oauth`, `auth`, a transport's extras) pass through to pi's
+   * validator, which is the rule for them. The index signature is what makes a request's record and
+   * this type the same shape, so the route hands the config on without a cast.
+   */
+  [key: string]: unknown;
+}
+
+export interface PiMcpSaveRequest {
+  name: string;
+  config: PiMcpServerDraft;
+  /** The entry to write: its definition, or this project's override of a global server. */
+  target: PiMcpWriteKind;
+  projectId?: string;
+  scope?: PiMcpScope;
+}
+
 export interface PiMcpMutationResponse extends PiMcpListResponse {
-  action: "set-enabled" | "remove" | "test";
+  action: "set-enabled" | "remove" | "test" | "save";
   name: string;
   enabled?: boolean;
   removed?: boolean;
+  /** A save that wrote a server the scope did not have before. */
+  added?: boolean;
   probe?: PiMcpProbe;
   /** A running session keeps the connections it opened: the change reaches it after a reload. */
   requiresReload: boolean;
