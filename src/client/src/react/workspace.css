@@ -75,3 +75,20 @@ button { cursor: pointer; }
 .rw-file-editor textarea{flex:1;min-height:180px;width:100%;resize:vertical;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-window);color:var(--rw-text);padding:9px;font:11px/1.55 var(--rw-font-mono,ui-monospace,monospace);tab-size:2;outline:0}
 
 .rw-attachment-list{display:flex;flex-wrap:wrap;gap:6px;padding:2px 4px}.rw-attachment-list>span{display:inline-flex;align-items:center;gap:6px;max-width:220px;padding:5px 8px;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-card);color:var(--rw-text-secondary);font-size:11px}.rw-attachment-list>span svg{width:13px;height:13px;flex:none}.rw-attachment-list>span button{border:0;background:transparent;color:var(--rw-muted);font-size:15px;cursor:pointer}
+
+.rw-settings-panel{flex:1;min-height:0;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+.rw-settings-panel>header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--rw-line);padding-bottom:10px}
+.rw-settings-panel>header div{display:flex;flex-direction:column;gap:3px}.rw-settings-panel small{display:block;color:var(--rw-muted);font-size:10px;font-weight:400;margin-top:3px}
+.rw-settings-panel section{display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid var(--rw-line);border-radius:9px;background:var(--rw-card)}
+.rw-settings-panel h3{font-size:12px;margin:0 0 3px}
+.rw-settings-panel section>label:not(.rw-setting-check){display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--rw-muted)}
+.rw-settings-panel input:not([type=checkbox]){height:29px;padding:0 8px;background:var(--rw-input);color:var(--rw-text);border:1px solid var(--rw-line);border-radius:6px;min-width:0}
+.rw-setting-check{display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--rw-text-secondary)}
+.rw-setting-check input{margin-top:2px;accent-color:var(--rw-accent)}
+.rw-setting-row{display:flex;align-items:center;gap:6px;font-size:11px;min-width:0}
+.rw-setting-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.rw-settings-panel button{height:28px;padding:0 9px;border:1px solid var(--rw-line);border-radius:6px;background:var(--rw-input);color:var(--rw-text-secondary);font-size:10px}
+.rw-settings-panel form{display:flex;gap:6px}.rw-settings-panel form input{flex:1}
+.rw-settings-notice{margin:0;color:var(--rw-muted);font-size:11px;white-space:pre-wrap}
+.rw-model-picker,.rw-thinking-picker{display:inline-flex;align-items:center;gap:4px}
+.rw-model-picker select,.rw-thinking-picker select{max-width:140px;height:25px;background:var(--rw-input);color:var(--rw-text-secondary);border:1px solid var(--rw-line);border-radius:5px;font-size:10px}

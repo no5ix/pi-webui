@@ -6,8 +6,8 @@ import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
 
-type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
-const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals"];
+type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals" | "Settings";
+const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals", "Settings"];
 function displayMessage(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value !== "object" || value === null) return JSON.stringify(value);
@@ -70,7 +70,7 @@ export function ReactWorkspaceApp() {
   const [attaching, setAttaching] = useState(false);
   const [fileDraft, setFileDraft] = useState("");
   const [fileDirty, setFileDirty] = useState(false);
-  const [fileSaving, setFileSaving] = useState(false);
+  const [fileSaving, setFileSaving] = useState(false);\n  const [packageSource, setPackageSource] = useState("");\n  const [settingsNotice, setSettingsNotice] = useState<string>();\n  const [settingsBusy, setSettingsBusy] = useState(false);
   const projectRows = data.projects.map(row => ({
     id: row.project.id,
     name: row.project.name,
@@ -102,7 +102,7 @@ export function ReactWorkspaceApp() {
   const activeActivities = Object.values(data.state.sessionActivities).filter(activity => activity.phase === "active" && activity.startup !== true);
   const backgroundCount = data.sessionStatus?.backgroundRunCount ?? 0;
   const queuedCount = data.sessionStatus?.queuedMessages.length ?? 0;
-  const model = data.sessionStatus?.model;
+  const [modelProvider, setModelProvider] = useState("");\n  const [modelId, setModelId] = useState("");\n  const model = data.sessionStatus?.model;
   const modelLabel = model === undefined ? "Model unavailable" : [model.provider, model.name ?? model.id].filter(Boolean).join(" / ");
   const contextUsage = data.sessionStatus?.contextUsage;
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
@@ -147,7 +147,7 @@ export function ReactWorkspaceApp() {
   return <div className="rw-app" style={{ "--left-width": leftOpen ? leftWidth + "px" : "0px", "--right-width": rightOpen ? rightWidth + "px" : "0px" } as React.CSSProperties}>
     <header className="rw-windowbar">
       <div className="rw-traffic"><i/><i/><i/></div><strong>pi-webui</strong>
-      <div className="rw-window-actions"><button title="Quick actions"><Icon name="zap"/></button><button title="Settings"><Icon name="settings"/></button></div>
+      <div className="rw-window-actions"><button title="Quick actions" onClick={() => setActiveTab("Goals")}><Icon name="zap"/></button><button title="Settings" onClick={() => setActiveTab("Settings")}><Icon name="settings"/></button></div>
     </header>
     <div className="rw-workspace">
       <aside className="rw-sidebar" aria-label="Projects and sessions">
@@ -197,7 +197,7 @@ export function ReactWorkspaceApp() {
           {attachments.length > 0 && <div className="rw-attachment-list">{attachments.map((item,index) => <span key={index} title={item.name}>{item.kind === "image" ? <Icon name="image"/> : <Icon name="file-text"/>}{item.name}<button aria-label={"Remove " + item.name} onClick={() => setAttachments(current => current.filter((_,i) => i !== index))}>×</button></span>)}</div>}\n          {(sendError || attachmentError) && <div className="rw-composer-error">{sendError ?? attachmentError}</div>}
           <div className="rw-model-row">
             <span><Icon name="folder"/> {data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "No workspace"}</span>
-            <span><Icon name="cpu"/> {modelLabel}</span>
+            <span className="rw-model-picker"><Icon name="cpu"/><select aria-label="Model provider" value={model?.provider ?? ""} disabled={!data.selectedSession || !data.modelOptions?.models.length} onChange={async event => { const candidate = data.modelOptions?.models.find(item => item.provider === event.target.value); if (!candidate || !data.selectedSession) return; try { await sessionsApi.setModel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},candidate.provider,candidate.id,data.state.selectedMachine?.id ?? "local"); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{[...new Set(data.modelOptions?.models.map(item => item.provider) ?? [])].map(provider => <option key={provider} value={provider}>{provider}</option>)}</select><select aria-label="Model" value={model?.id ?? ""} disabled={!data.selectedSession || !data.modelOptions?.models.length} onChange={async event => { if (!data.selectedSession || !model?.provider) return; try { await sessionsApi.setModel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},model.provider,event.target.value,data.state.selectedMachine?.id ?? "local"); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{(data.modelOptions?.models ?? []).filter(item => !model?.provider || item.provider === model.provider).map(item => <option key={item.id} value={item.id}>{item.name ?? item.id}</option>)}</select></span>
             {data.sessionStatus?.thinkingLevel && <span>{data.sessionStatus.thinkingLevel}</span>}
           </div>
         </div>
@@ -212,6 +212,21 @@ export function ReactWorkspaceApp() {
       <aside className="rw-workbench">
         <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
         <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><input ref={uploadInputRef} type="file" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void data.uploadFile(file).catch(() => undefined); event.target.value = ""; }}/><button title="Upload file to the current folder" onClick={() => uploadInputRef.current?.click()} disabled={!data.selectedWorkspace}><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh session branch information" onClick={data.refresh}><Icon name="refresh-cw"/></button>}</>}</div>
+        {activeTab === "Settings" ? <div className="rw-settings-panel">
+          <header><div><strong>Settings & integrations</strong><small>Machine: {data.state.selectedMachine?.name ?? "Local"} · Project: {data.selectedProject?.name ?? "Global scope"}</small></div><button onClick={() => void data.loadSettings()} disabled={data.settings.loading}>Reload</button></header>
+          {data.settings.loading && <p>Loading settings…</p>}
+          {(data.settings.error || settingsNotice || data.settings.notice) && <p className="rw-settings-notice">{settingsNotice ?? data.settings.notice ?? data.settings.error}</p>}
+          <section><h3>General configuration</h3>
+            <label>Host<input defaultValue={data.settings.config?.config.host ?? ""} key={data.settings.config?.path+"-host"} onBlur={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,host:event.target.value}).catch(error => setSettingsNotice(String(error))); }}/></label>
+            <label>Port<input type="number" defaultValue={data.settings.config?.config.port ?? 8505} key={data.settings.config?.path+"-port"} onBlur={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,port:Number(event.target.value)}).catch(error => setSettingsNotice(String(error))); }}/></label>
+            <label className="rw-setting-check"><input type="checkbox" defaultChecked={data.settings.config?.config.environmentFacts !== false} key={String(data.settings.config?.config.environmentFacts)} onChange={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,environmentFacts:event.target.checked}).catch(error => setSettingsNotice(String(error))); }}/> Include environment facts in session prompts</label>
+            <label className="rw-setting-check"><input type="checkbox" defaultChecked={data.settings.config?.config.piBuiltInExtensions !== false} key={String(data.settings.config?.config.piBuiltInExtensions)} onChange={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,piBuiltInExtensions:event.target.checked}).catch(error => setSettingsNotice(String(error))); }}/> Load Pi built-in extensions</label>
+          </section>
+          <section><h3>PI WEB Plugins</h3>{data.settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || settingsBusy} onChange={async event => { setSettingsBusy(true); setSettingsNotice(undefined); try { await data.setPluginEnabled(plugin.id,event.target.checked); } catch(error) { setSettingsNotice(String(error)); } finally { setSettingsBusy(false); } }}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}</section>
+          <section><h3>Pi packages</h3><form onSubmit={event => {event.preventDefault();setSettingsBusy(true);void data.installPackage(packageSource).then(()=>setPackageSource("")).catch(error=>setSettingsNotice(String(error))).finally(()=>setSettingsBusy(false));}}><input placeholder="Package source (URL or registry)" value={packageSource} onChange={event=>setPackageSource(event.target.value)}/><button disabled={!packageSource.trim()||settingsBusy}>Install</button><button type="button" onClick={()=>void data.updatePackage().catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy}>Update all</button></form>{data.settings.packages?.packages.map(pkg=><div className="rw-setting-row" key={pkg.source}><span><b>{pkg.source}</b><small>{pkg.scope} · {pkg.enabled?"enabled":"disabled"}</small></span><button onClick={()=>void data.removePackage(pkg.source,pkg.scope).catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy}>Remove</button></div>)}</section>
+          <section><h3>Skills</h3>{data.settings.skills?.skills.map(skill=><label className="rw-setting-check" key={skill.id}><input type="checkbox" checked={skill.enabled} disabled={settingsBusy||skill.ownerPackageDisabled===true} onChange={event=>{setSettingsBusy(true);void data.setSkillEnabled(skill,event.target.checked).catch(error=>setSettingsNotice(String(error))).finally(()=>setSettingsBusy(false));}}/><span><b>{skill.name}</b><small>{skill.scope} · {skill.origin} · {skill.validation}{skill.validationMessage ? " · "+skill.validationMessage : ""}</small></span></label>)}</section>
+          <section><h3>MCP servers</h3>{data.settings.mcp?.errors.map((error,index)=><p key={index} className="rw-settings-notice">{error}</p>)}{data.settings.mcp?.servers.map(server=><div className="rw-setting-row" key={server.name}><span><b>{server.name}</b><small>{server.transport} · {server.scope} · {server.probe?.state ?? server.configured}{server.usesSecrets ? " · uses secrets (values hidden)" : ""}</small></span><button onClick={()=>void data.testMcp(server).catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy}>Test</button><button onClick={()=>void data.removeMcp(server).catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy||server.targets.length===0}>Remove</button><label className="rw-setting-check"><input type="checkbox" checked={server.enabled} disabled={settingsBusy||server.targets.length===0} onChange={event=>{setSettingsBusy(true);void data.setMcpEnabled(server,event.target.checked).catch(error=>setSettingsNotice(String(error))).finally(()=>setSettingsBusy(false));}}/>Enabled</label></div>)}</section>
+        </div> : null}
         {activeTab === "Files" ? <div className="rw-file-tree">
           {data.filesError && <div className="rw-data-error">{data.filesError}</div>}
           {data.selectedWorkspace && <div className="rw-file-tree-path">
