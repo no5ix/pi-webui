@@ -91,7 +91,7 @@ export function ReactWorkspaceApp() {
     setSending(true);
     setSendError(undefined);
     try {
-      const sent = await data.sendPrompt(text);
+      const sent = await data.sendPrompt(text, attachments);
       if (!sent) setSendError("The message could not be saved. Your draft has been kept.");
     } catch (error) {
       setSendError(error instanceof Error ? error.message : String(error));

@@ -17,6 +17,8 @@ import { saveDraft, loadDraft } from "../promptDraftStorage";
 import { operationKindOf, pageMaySend, writeOutgoingOperation } from "../composerWrites";
 import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
 import type { PromptAttachment } from "../api";
+import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
+import type { PromptAttachment } from "../api";
 
 export interface ReactWorkspaceProject {
   readonly project: Project;
