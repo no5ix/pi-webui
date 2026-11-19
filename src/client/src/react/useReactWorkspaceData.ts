@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, workspacesApi, type FileContentResponse, type FileTreeEntry, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiSkillInfo } from "../api";
+import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, workspacesApi, type FileContentResponse, type FileTreeEntry, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiSkillInfo, type SessionModelCatalogResponse } from "../api";
 import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
@@ -37,6 +37,7 @@ export interface ReactWorkspaceData {
   readonly fileEntries: readonly FileTreeEntry[];
   readonly filePath: string;
   readonly modelOptions: Awaited<ReturnType<typeof sessionsApi.models>> | undefined;
+  readonly modelCatalog: SessionModelCatalogResponse | undefined;
   readonly thinkingOptions: Awaited<ReturnType<typeof sessionsApi.thinkingLevels>> | undefined;
   readonly settings: { config?: PiWebConfigResponse; plugins?: PiWebPluginsResponse; packages?: PiPackagesResponse; skills?: PiSkillsResponse; mcp?: PiMcpListResponse; loading: boolean; error?: string; notice?: string };
   readonly loadSettings: () => Promise<void>;
@@ -95,6 +96,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [fileEntries, setFileEntries] = useState<readonly FileTreeEntry[]>([]);
   const [filePath, setFilePath] = useState("");
   const [modelOptions, setModelOptions] = useState<Awaited<ReturnType<typeof sessionsApi.models>>>();
+  const [modelCatalog, setModelCatalog] = useState<SessionModelCatalogResponse>();
   const [thinkingOptions, setThinkingOptions] = useState<Awaited<ReturnType<typeof sessionsApi.thinkingLevels>>>();
   const [settings, setSettings] = useState<{ config?: PiWebConfigResponse; plugins?: PiWebPluginsResponse; packages?: PiPackagesResponse; skills?: PiSkillsResponse; mcp?: PiMcpListResponse; loading: boolean; error?: string; notice?: string }>({ loading: false });
   const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
@@ -392,6 +394,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const session = selectedSession;
     if (session === undefined) {
       setModelOptions(undefined);
+      setModelCatalog(undefined);
       setThinkingOptions(undefined);
       return;
     }
@@ -399,10 +402,12 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const machineId = state.selectedMachine?.id ?? "local";
     void Promise.allSettled([
       sessionsApi.models({ id: session.id, cwd: session.cwd }, machineId),
+      sessionsApi.modelCatalog({ id: session.id, cwd: session.cwd }, machineId),
       sessionsApi.thinkingLevels({ id: session.id, cwd: session.cwd }, machineId),
-    ]).then(([models, thinking]) => {
+    ]).then(([models, catalog, thinking]) => {
       if (!active) return;
       setModelOptions(models.status === "fulfilled" ? models.value : undefined);
+      setModelCatalog(catalog.status === "fulfilled" ? catalog.value : undefined);
       setThinkingOptions(thinking.status === "fulfilled" ? thinking.value : undefined);
     });
     return () => { active = false; };
@@ -563,6 +568,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     fileEntries,
     filePath,
     modelOptions,
+    modelCatalog,
     thinkingOptions,
     settings,
     loadSettings,
