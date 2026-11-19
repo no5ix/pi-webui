@@ -70,6 +70,7 @@
     "verify": "pnpm run verify:static && pnpm test",
     "start": "tsx src/server/index.ts",
     "start:sessiond": "pnpm run build:plugins && tsx src/server/sessiond.ts",
+    "start:sessiond:prebuilt": "tsx src/server/sessiond.ts",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "pnpm run build",
     "pack:dry": "pnpm pack --dry-run --config.ignore-scripts=true",
@@ -83,7 +84,8 @@
     "docker:verify:stop": "./docker/pi-web-docker --dev stop",
     "docker:verify:status": "./docker/pi-web-docker --dev status",
     "prod": "pnpm run build && bash scripts/prod.sh",
-    "dev:react": "PI_WEB_REACT_UI=1 vite --host 127.0.0.1 --port 8506 --strictPort",
+    "dev:react": "PI_WEB_REACT_UI=1 bash scripts/dev.sh",
+    "dev:react:client": "PI_WEB_REACT_UI=1 vite --host 127.0.0.1 --port ${PI_WEB_DEV_REACT_PORT:-8506} --strictPort",
     "build:react": "PI_WEB_REACT_UI=1 vite build"
   },
   "dependencies": {

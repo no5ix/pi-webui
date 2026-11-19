@@ -14,7 +14,9 @@
 # Runs under the system bash (3.2 on macOS): no associative arrays, no `wait -n`.
 set -uo pipefail
 
-DEV_PORT="${PI_WEB_DEV_TAILSCALE_PORT:-8505}"
+DEFAULT_DEV_PORT=8505
+if [ "${PI_WEB_REACT_UI:-}" = "1" ]; then DEFAULT_DEV_PORT="${PI_WEB_DEV_REACT_PORT:-8506}"; fi
+DEV_PORT="${PI_WEB_DEV_TAILSCALE_PORT:-$DEFAULT_DEV_PORT}"
 TAILSCALE_READY_TIMEOUT_SECONDS="${PI_WEB_DEV_TAILSCALE_WAIT_SECONDS:-120}"
 STOP_GRACE_SECONDS="${PI_WEB_DEV_STOP_GRACE_SECONDS:-5}"
 TAILSCALE_HOST_SUFFIX="${PI_WEB_DEV_TAILSCALE_HOST_SUFFIX:-.ts.net}"
@@ -273,11 +275,20 @@ socket.once("timeout", () => { socket.destroy(); process.exit(1); });
 }
 
 wait_for_web_api() {
-  local timeout="${PI_WEB_DEV_BACKEND_WAIT_SECONDS:-90}" waited=0 port scheme
+  local timeout="${PI_WEB_DEV_BACKEND_WAIT_SECONDS:-90}" waited=0 port scheme host origin
   port="${PI_WEB_PORT:-${PORT:-8504}}"
   scheme="${PI_WEB_DEV_API_SCHEME:-http}"
+  host="$(node --import tsx --input-type=module -e 'import { effectivePiWebConfig } from "./src/config.ts"; process.stdout.write(effectivePiWebConfig().config.host ?? "127.0.0.1")')" || return 1
+  case "$host" in
+    0.0.0.0) host=127.0.0.1 ;;
+    ::) host=::1 ;;
+  esac
+  case "$host" in
+    *:*) origin="${scheme}://[${host}]:${port}" ;;
+    *) origin="${scheme}://${host}:${port}" ;;
+  esac
   while [ "$waited" -lt "$timeout" ]; do
-    if curl -ksS --max-time 1 "${scheme}://127.0.0.1:${port}/api/config" >/dev/null 2>&1; then return 0; fi
+    if curl -ksS --max-time 1 "${origin}/api/config" >/dev/null 2>&1; then return 0; fi
     if ! children_alive; then trouble "the web/API process exited before becoming ready"; return 1; fi
     sleep 1; waited=$((waited + 1))
   done
@@ -288,7 +299,11 @@ wait_for_web_api() {
 start_children() {
   # Start dependencies before Vite. Otherwise the browser requests arrive as soon as Vite
   # listens and generate a screenful of ECONNREFUSED proxy errors while the API and daemon boot.
-  pnpm run dev:sessiond &
+  if [ "${PI_WEB_REACT_UI:-}" = "1" ]; then
+    pnpm run start:sessiond:prebuilt &
+  else
+    pnpm run dev:sessiond &
+  fi
   children+=("$!")
   wait_for_sessiond || return 1
 
@@ -296,7 +311,11 @@ start_children() {
   children+=("$!")
   wait_for_web_api || return 1
 
-  pnpm run dev:client &
+  if [ "${PI_WEB_REACT_UI:-}" = "1" ]; then
+    pnpm run dev:react:client &
+  else
+    pnpm run dev:client &
+  fi
   children+=("$!")
 }
 

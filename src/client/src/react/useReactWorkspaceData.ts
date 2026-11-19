@@ -6,6 +6,7 @@ import { WorkspaceController } from "../controllers/workspaceController";
 import { MachineController } from "../controllers/machineController";
 import { SessionBoardController } from "../controllers/sessionBoardController";
 import { boardEventOf, boardSessionsOf, type SessionBoard } from "../sync/sessionBoard";
+import type { Unanswered } from "../sync/scopedResource";
 import { RealtimeSocket } from "../sessionSocket";
 import { SessionController } from "../controllers/sessionController";
 import { SessionStorageSessionSelectionMemory } from "../controllers/sessionSelection";
@@ -53,6 +54,7 @@ export interface ReactWorkspaceData {
   readonly selectedFile: FileContentResponse | undefined;
   readonly loading: boolean;
   readonly projectsError: string | undefined;
+  readonly machineReadIssue: string | undefined;
   readonly sessionError: string | undefined;
   readonly filesError: string | undefined;
   readonly draft: string;
@@ -86,6 +88,15 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function machineIssueText(unanswered: Unanswered | undefined): string | undefined {
+  if (unanswered === undefined) return undefined;
+  const miss = unanswered.miss;
+  if (miss.kind === "server-error") return miss.reason || "The PI WEB server reported an error.";
+  if (miss.kind === "machine-unanswering") return `Machine ${miss.machineId} is not responding.`;
+  if (miss.kind === "attachments-unreadable") return "The machine cannot read queued attachments.";
+  return "Cannot reach the PI WEB API. Check that the web server is running, then retry.";
+}
+
 interface WorkspaceFileScope {
   projectId: string;
   workspaceId: string;
@@ -110,6 +121,7 @@ function isCurrentWorkspaceFileScope(state: AppState, scope: WorkspaceFileScope)
 export function useReactWorkspaceData(): ReactWorkspaceData {
   const stateRef = useRef<AppState>(initialAppState());
   const [state, setReactState] = useState<AppState>(stateRef.current);
+  const [machineReadIssue, setMachineReadIssue] = useState<string>();
   const runtimeRef = useRef<Runtime | undefined>(undefined);
   const [fileEntries, setFileEntries] = useState<readonly FileTreeEntry[]>([]);
   const [filePath, setFilePath] = useState("");
@@ -173,7 +185,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     workspaceControllerRef.current = workspaceController;
     const projectController = new ProjectController(getState, setStatePatch, workspaceController);
     projectControllerRef.current = projectController;
-    const machineController = new MachineController(getState, setStatePatch, updateUrl, projectController);
+    const machineController = new MachineController(getState, setStatePatch, updateUrl, projectController, (unanswered) => {
+      setMachineReadIssue(machineIssueText(unanswered));
+    });
     const boardController = new SessionBoardController({
       knownProjects: (machineId) => machineId === (getState().selectedMachine?.id ?? "local") && getState().projectsLoad === "loaded" ? getState().projects : undefined,
     });
@@ -659,6 +673,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     removeMcp,
     loading: state.machinesLoad !== "loaded" || state.projectsLoad === "unloaded" || state.projectsLoad === "loading",
     projectsError,
+    machineReadIssue,
     sessionError,
     filesError,
     draft,

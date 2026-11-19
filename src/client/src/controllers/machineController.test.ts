@@ -304,13 +304,15 @@ describe("MachineController load discipline", () => {
     vi.spyOn(api, "health").mockResolvedValue({ machineId: "local", ok: true, checkedAt: "2026-05-26T00:00:01.000Z", status: "online" });
     vi.spyOn(api, "runtime").mockResolvedValue({ machineId: "local", ok: true, checkedAt: "2026-05-26T00:00:02.000Z" });
 
-    const controller = new MachineController(() => state, setState, vi.fn(), { loadProjects: vi.fn() });
+    const rosterStatus = vi.fn();
+    const controller = new MachineController(() => state, setState, vi.fn(), { loadProjects: vi.fn() }, rosterStatus);
     await controller.loadMachines("local");
 
     expect(state.machinesLoad).toBe("loading");
     expect(state.machines).toEqual([localMachine]);
     expect(state.error).toBe("");
     expect(controller.unanswered()?.miss).toEqual({ kind: "link-down" });
+    expect(rosterStatus).toHaveBeenLastCalledWith(expect.objectContaining({ miss: { kind: "link-down" } }));
 
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -320,6 +322,7 @@ describe("MachineController load discipline", () => {
     expect(state.selectedMachine).toEqual(localMachine);
     expect(state.error).toBe("");
     expect(controller.unanswered()).toBeUndefined();
+    expect(rosterStatus).toHaveBeenLastCalledWith(undefined);
     controller.dispose();
   });
 

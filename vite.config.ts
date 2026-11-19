@@ -9,13 +9,15 @@ import { effectivePiWebConfig, piWebTlsConfig } from "./src/config.ts";
 
 const { config } = effectivePiWebConfig();
 const apiPort = config.port ?? 8504;
-const apiOrigin = `${piWebTlsConfig() === undefined ? "http" : "https"}://localhost:${String(apiPort)}`;
+const configuredApiHost = config.host ?? "127.0.0.1";
+const apiHost = configuredApiHost.includes(":") && !configuredApiHost.startsWith("[") ? `[${configuredApiHost}]` : configuredApiHost;
+const apiOrigin = `${piWebTlsConfig() === undefined ? "http" : "https"}://${apiHost}:${String(apiPort)}`;
 // Tailscale Serve takes the served port on the tailnet interface, so the development server keeps to
 // loopback: binding every interface on 8505 is refused with EADDRINUSE once `tailscale serve` is
 // running, and the serve proxy forwards to http://127.0.0.1:8505, which is exactly where this listener
 // belongs. The rule is documented for production installs too (docs/faq.md, "With Tailscale Serve").
 const devHost = "127.0.0.1";
-const devPort = 8505;
+const devPort = process.env["PI_WEB_REACT_UI"] === "1" ? Number(process.env["PI_WEB_DEV_REACT_PORT"] ?? 8506) : 8505;
 /**
  * Host names the development server answers, beyond what the config lists.
  *

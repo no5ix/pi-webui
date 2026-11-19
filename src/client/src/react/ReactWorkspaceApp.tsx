@@ -28,6 +28,27 @@ const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals", "Settings"];
 const GIT_REMOTE_REQUEST_TIMEOUT_MS = 130_000;
 export function ReactWorkspaceApp() {
   const data = useReactWorkspaceData();
+  const selectedMachineId = data.state.selectedMachine?.id ?? "local";
+  const selectedMachineHealth = data.state.machineStatuses[selectedMachineId];
+  const machineConnectionMessage = data.machineReadIssue ?? (data.state.machinesLoad !== "loaded" ? data.state.error : "");
+  const machineConnectionLabel = data.state.error.includes("sign in")
+    ? "Authentication required"
+    : data.state.error.includes("refused to list")
+      ? "Access denied"
+      : data.machineReadIssue
+        ? "Reconnecting"
+        : data.state.machinesLoad !== "loaded"
+          ? "Connecting…"
+          : selectedMachineHealth === undefined
+            ? "Checking health…"
+            : selectedMachineHealth.status === undefined || selectedMachineHealth.status === "unknown"
+              ? "Health unknown"
+          : selectedMachineHealth?.status === "offline"
+            ? "Machine unavailable"
+            : selectedMachineHealth.status === "error" || !selectedMachineHealth.ok
+              ? "Server error"
+              : "Connected";
+  const runningSessionsKnown = data.state.projectsLoad === "loaded" && data.board !== undefined && data.board.unknownSources.length === 0;
   const selectedScope = { projectId: data.selectedProject?.id, workspaceId: data.selectedWorkspace?.id, machineId: data.state.selectedMachine?.id ?? "local" };
   const selectedScopeRef = useRef(selectedScope);
   selectedScopeRef.current = selectedScope;
@@ -728,22 +749,23 @@ export function ReactWorkspaceApp() {
     <div className="rw-workspace">
       <aside className="rw-sidebar" aria-label="Projects and sessions">
         <section className="rw-running">
-          <div className="rw-section-heading"><strong>Running Sessions <span>({activeActivities.length})</span></strong><button title="Refresh sessions" onClick={data.refresh}><Icon name="refresh-cw"/></button></div>
-          {activeActivities.length === 0 ? <div className="rw-data-state">No active sessions reported.</div> : activeActivities.map(activity => { const session = data.projects.flatMap(row => row.sessions).find(item => item.id === activity.sessionId); return <button className="rw-running-item" key={activity.sessionId} onClick={() => session && void data.selectSession(session)}><i className="rw-dot green"/><span>{session?.name || activity.label}</span><time>{activity.detail || activity.phase}</time></button>; })}
+          <div className="rw-section-heading"><strong>Running Sessions <span>({runningSessionsKnown ? activeActivities.length : "—"})</span></strong><button title="Refresh sessions" onClick={data.refresh}><Icon name="refresh-cw"/></button></div>
+          {activeActivities.length > 0 ? activeActivities.map(activity => { const session = data.projects.flatMap(row => row.sessions).find(item => item.id === activity.sessionId); return <button className="rw-running-item" key={activity.sessionId} onClick={() => session && void data.selectSession(session)}><i className="rw-dot green"/><span>{session?.name || activity.label}</span><time>{activity.detail || activity.phase}</time></button>; }) : runningSessionsKnown ? <div className="rw-data-state">No active sessions reported.</div> : <div className="rw-data-state">{data.board?.unknownSources.length ? "Some session lists are still loading…" : "Loading sessions…"}</div>}
         </section>
-        <div className="rw-projects-heading"><strong>Projects <span>({data.projects.length})</span></strong><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button></div>
+        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button></div>
         <div className="rw-search"><Icon name="search"/><input aria-label="Search sessions" placeholder="Search sessions" value={projectQuery} onChange={e => setProjectQuery(e.target.value)}/>{projectQuery && <button onClick={() => setProjectQuery("")}><Icon name="x"/></button>}</div>
         <button className="rw-all-projects" onClick={data.refresh}>Refresh project list</button>
-        {data.loading && <div className="rw-data-state">Loading projects and sessions…</div>}
+        {machineConnectionMessage && <div className="rw-data-error" role="alert">{machineConnectionMessage}<button onClick={data.state.error && data.state.machinesLoad !== "loaded" ? () => window.location.reload() : data.refresh}>{data.state.error && data.state.machinesLoad !== "loaded" ? "Reload after access changes" : "Retry"}</button></div>}
+        {data.loading && !machineConnectionMessage && <div className="rw-data-state">Loading projects and sessions…</div>}
         {data.projectsError && <div className="rw-data-error">{data.projectsError}<button onClick={data.refresh}>Retry</button></div>}
         {!data.loading && !data.projectsError && <ProjectTree projects={projectRows} query={projectQuery} expanded={expanded} onExpanded={setExpanded} selectedProject={data.selectedProject?.id ?? ""} selectedSession={data.selectedSession?.id ?? ""} onSelectProject={selectProject} onSelectSession={selectSession} showMoreByProject={showMoreByProject} onShowMore={id => setShowMoreByProject(current => ({ ...current, [id]: !current[id] }))}/>}
-        <div className="rw-sidebar-footer"><span>Local machine</span><span className="rw-connection"><i className={data.state.machinesLoad === "loaded" ? "" : "offline"}/> {data.state.selectedMachine?.name ?? (data.state.machinesLoad === "loaded" ? "Local machine" : "Connecting…")}</span></div>
+        <div className="rw-sidebar-footer"><span>{data.state.selectedMachine?.name ?? "Local machine"}</span><span className="rw-connection" title={data.machineReadIssue ?? selectedMachineHealth?.error ?? data.state.error}><i className={machineConnectionLabel === "Connected" ? "" : "offline"}/> {machineConnectionLabel}</span></div>
       </aside>
       {leftOpen && <button className="rw-resize rw-resize-left" aria-label="Resize sidebar" onPointerDown={e => startResize("left", e)}/>}
       <main className="rw-conversation">
         <header className="rw-conversation-header">
           <button className="rw-icon-button" aria-label={leftOpen ? "Collapse sidebar" : "Expand sidebar"} onClick={() => setLeftOpen(v => !v)}><Icon name="panel-left"/></button>
-          <div className="rw-session-heading"><strong>{data.selectedSession?.name?.trim() || data.selectedSession?.firstMessage || "No session selected"}</strong><span>{data.selectedProject?.name ?? "Select a project"}</span></div>
+          <div className="rw-session-heading"><strong>{data.selectedSession === undefined ? "No session selected" : data.selectedSession.name?.trim() || data.selectedSession.firstMessage || "Untitled session"}</strong><span>{data.selectedProject?.name ?? "Select a project"}</span></div>
           <div className="rw-header-actions"><button title="Session actions"><Icon name="zap"/></button><button title="Session settings"><Icon name="settings"/></button><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button><button title="More actions"><Icon name="more-horizontal"/></button></div>
         </header>
         {data.state.activity && <div className="rw-subagents"><div className="rw-activity-line"><i className={data.state.activity.phase === "active" ? "rw-dot green" : "rw-dot"}/><strong>{data.state.activity.label}</strong><span>{data.state.activity.detail}</span></div></div>}
