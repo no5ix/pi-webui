@@ -1,7 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import { toSafeMarkdownHtml } from "../formatting/markdown";
 import { deferredImagePath } from "../api/urls";
-import { toolExecutionDisplayStatus, type ChatLine, type ChatPart, type ToolExecutionPart } from "../components/shared";
+import { toolExecutionDisplayStatus, type ChatLine, type ChatPart, type ToolExecutionPart } from "../chatTypes";
 import { resolveAppUrl } from "../appUrl";
+import { messageCopyText } from "../chatMessages";
+import { writeClipboardText } from "../clipboard";
 import { Icon } from "./icons";
 
 interface ConversationMessageProps {
@@ -32,12 +35,13 @@ function ToolExecution({ part, streaming }: { part: ToolExecutionPart; streaming
   </details>;
 }
 
-function MessagePart({ part, message, streaming, session, machineId }: {
+function MessagePart({ part, message, streaming, session, machineId, onImageOpen }: {
   part: ChatPart;
   message: ChatLine;
   streaming: boolean;
   session: { id: string; cwd: string } | undefined;
   machineId: string;
+  onImageOpen: (src: string, alt: string) => void;
 }) {
   if (part.type === "text") return message.role === "bash" ? <pre className="rw-shell-output">{part.text}</pre> : markdown(part.display ?? part.text);
   if (part.type === "thinking") return <details className="rw-thinking"><summary>Thinking</summary>{markdown(part.display ?? part.text)}</details>;
@@ -45,9 +49,14 @@ function MessagePart({ part, message, streaming, session, machineId }: {
   if (part.type === "toolExecution") return <ToolExecution part={part} streaming={streaming}/>;
   if (part.type === "toolResult") return <details className={`rw-tool-result${part.isError ? " error" : ""}`} open={part.isError}><summary><Icon name={part.isError ? "x" : "check-circle"}/>{part.toolName} result</summary><pre>{part.text}</pre></details>;
   if (part.type === "image") {
-    if ("data" in part) return <img className="rw-message-image" src={`data:${part.mimeType};base64,${part.data}`} alt="attached image" loading="lazy"/>;
+    if ("data" in part) {
+      const src = `data:${part.mimeType};base64,${part.data}`;
+      return <button className="rw-image-button" type="button" aria-label="View attached image" onClick={() => onImageOpen(src, "attached image")}><img className="rw-message-image" src={src} alt="attached image" loading="lazy"/></button>;
+    }
     if (session === undefined) return <span className="rw-missing-image">Image attachment (session scope missing)</span>;
-    return <img className="rw-message-image" src={resolveAppUrl(deferredImagePath(session, part.ref, machineId))} alt={"toolCallId" in part.ref ? "tool result image" : "attached image"} loading="lazy"/>;
+    const src = resolveAppUrl(deferredImagePath(session, part.ref, machineId));
+    const alt = "toolCallId" in part.ref ? "tool result image" : "attached image";
+    return <button className="rw-image-button" type="button" aria-label="View attached image" onClick={() => onImageOpen(src, alt)}><img className="rw-message-image" src={src} alt={alt} loading="lazy"/></button>;
   }
   if (part.type === "skillInvocation") return <details className="rw-skill-part"><summary>Skill · {part.name}</summary><small>{part.location}</small>{markdown(part.content)}</details>;
   if (part.type === "skillRead") return <div className="rw-skill-part"><strong>Loaded {part.name}</strong><small>{part.path}</small></div>;
@@ -63,10 +72,27 @@ function timestamp(value: string | undefined): string {
 }
 
 export function ConversationMessage({ message, streaming, session, machineId }: ConversationMessageProps) {
-  return <article className={`rw-message ${message.role}`}>
-    <div className="rw-message-meta"><span>{message.role}</span><time>{timestamp(message.meta?.timestamp)}</time></div>
-    <div className="rw-message-body">{message.parts.map((part, index) => <MessagePart key={`${part.type}-${index}`} part={part} message={message} streaming={streaming} session={session} machineId={machineId}/>)}</div>
-  </article>;
+  const viewerRef = useRef<HTMLDialogElement>(null);
+  const [viewer, setViewer] = useState<{ src: string; alt: string }>();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    const dialog = viewerRef.current;
+    if (dialog === null) return;
+    if (viewer !== undefined && !dialog.open) dialog.showModal();
+    if (viewer === undefined && dialog.open) dialog.close();
+  }, [viewer]);
+  const copyText = messageCopyText(message);
+  return <>
+    <article className={`rw-message ${message.role}`}>
+      <div className="rw-message-meta"><span>{message.role}</span><time>{timestamp(message.meta?.timestamp)}</time>{copyText !== "" && (message.role === "user" || message.role === "assistant") && <button type="button" aria-label={copied ? "Copied message" : `Copy ${message.role} message`} onClick={async event => { event.stopPropagation(); setCopied(await writeClipboardText(copyText)); }}>{copied ? "Copied" : "Copy"}</button>}</div>
+      <div className="rw-message-body">{message.parts.map((part, index) => <MessagePart key={`${part.type}-${index}`} part={part} message={message} streaming={streaming} session={session} machineId={machineId} onImageOpen={(src, alt) => setViewer({ src, alt })}/>)}</div>
+      {message.meta?.failureDetail !== undefined && <details className="rw-failure-detail"><summary>Error details</summary><pre>{message.meta.failureDetail}</pre></details>}
+    </article>
+    <dialog ref={viewerRef} className="rw-image-viewer" aria-label="Image preview" onClose={() => setViewer(undefined)}>
+      <button type="button" aria-label="Close image preview" onClick={() => viewerRef.current?.close()}>Close</button>
+      {viewer && <img src={viewer.src} alt={viewer.alt}/>}
+    </dialog>
+  </>;
 }
 
 export function editedFilesFromMessages(messages: readonly ChatLine[]): { path: string; status: string }[] {

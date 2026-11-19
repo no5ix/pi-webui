@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { capturePromptAttachments, type CapturedAttachment } from "../promptAttachmentCapture";
 import { readBlobAsBase64 } from "../sentImages";
 import { filesApi, requestPluginBackend, sessionsApi, workspacesApi, type FileTreeEntry } from "../api";
@@ -16,15 +16,16 @@ import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
 import { WorkspaceFileTree } from "./WorkspaceFileTree";
 import { WorkspaceCodeEditor } from "./WorkspaceCodeEditor";
+import { ReactSettingsDialog } from "./ReactSettingsDialog";
 
-type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals" | "Settings";
+type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
 interface ReactWorkspaceScope {
   readonly projectId: string | undefined;
   readonly workspaceId: string | undefined;
   readonly machineId: string;
 }
 
-const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals", "Settings"];
+const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals"];
 const GIT_REMOTE_REQUEST_TIMEOUT_MS = 130_000;
 export function ReactWorkspaceApp() {
   const data = useReactWorkspaceData();
@@ -60,6 +61,7 @@ export function ReactWorkspaceApp() {
   const scopeHasWorkspace = (scope: ReactWorkspaceScope): scope is ReactWorkspaceScope & { projectId: string; workspaceId: string } => scope.projectId !== undefined && scope.workspaceId !== undefined;
   const narrowScreen = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches;
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("Files");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectQuery, setProjectQuery] = useState("");
   const [leftWidth, setLeftWidth] = useState(327);
   const [rightWidth, setRightWidth] = useState(402);
@@ -72,6 +74,11 @@ export function ReactWorkspaceApp() {
   const [completionItems, setCompletionItems] = useState<CompletionItem[]>([]);
   const [completionIndex, setCompletionIndex] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const followTranscriptRef = useRef(true);
+  const previousPageStartRef = useRef(data.state.messagePageStart);
+  const olderPageAnchorRef = useRef<{ scopeKey: string; scrollTop: number; scrollHeight: number } | undefined>(undefined);
+  const [showTranscriptJump, setShowTranscriptJump] = useState(false);
   const promptHistoryRef = useRef<{ key: string | undefined; index: number | undefined; draft: string }>({ key: undefined, index: undefined, draft: "" });
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
@@ -109,9 +116,6 @@ export function ReactWorkspaceApp() {
   const hasUnsavedFiles = fileDirty || [...fileDrafts.current.values()].some(draft => draft.dirty);
   const [fileSaving, setFileSaving] = useState(false);
   const [fileDeleting, setFileDeleting] = useState(false);
-  const [packageSource, setPackageSource] = useState("");
-  const [settingsNotice, setSettingsNotice] = useState<string>();
-  const [settingsBusy, setSettingsBusy] = useState(false);
   const [gitRefresh, setGitRefresh] = useState(0);
   const [gitStatus, setGitStatus] = useState<GitStatusResponse>();
   const [gitStatusScopeKey, setGitStatusScopeKey] = useState("");
@@ -274,6 +278,29 @@ export function ReactWorkspaceApp() {
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
   const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
   const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
+  const transcriptScopeKey = JSON.stringify([data.state.selectedMachine?.id ?? "local", data.selectedSession?.id]);
+  useLayoutEffect(() => {
+    followTranscriptRef.current = true;
+    setShowTranscriptJump(false);
+    olderPageAnchorRef.current = undefined;
+    const transcript = transcriptRef.current;
+    if (transcript !== null) transcript.scrollTop = transcript.scrollHeight;
+  }, [transcriptScopeKey]);
+  useLayoutEffect(() => {
+    const transcript = transcriptRef.current;
+    if (transcript === null) return;
+    const previousStart = previousPageStartRef.current;
+    const pageStart = data.state.messagePageStart;
+    if (pageStart < previousStart && olderPageAnchorRef.current?.scopeKey === transcriptScopeKey) {
+      const anchor = olderPageAnchorRef.current;
+      transcript.scrollTop = anchor.scrollTop + transcript.scrollHeight - anchor.scrollHeight;
+      olderPageAnchorRef.current = undefined;
+    } else {
+      olderPageAnchorRef.current = undefined;
+      if (followTranscriptRef.current) transcript.scrollTop = transcript.scrollHeight;
+    }
+    previousPageStartRef.current = pageStart;
+  }, [data.messages, data.state.messagePageStart, transcriptScopeKey]);
   const subagentExecutions = useMemo(() => data.messages.flatMap(message => message.parts).filter((part): part is Extract<typeof part, { type: "toolExecution" | "toolCall" }> => (part.type === "toolExecution" || part.type === "toolCall") && part.toolName.toLowerCase().includes("subagent")), [data.messages]);
   useEffect(() => {
     if (data.selectedFile !== undefined) {
@@ -752,7 +779,7 @@ export function ReactWorkspaceApp() {
           <div className="rw-section-heading"><strong>Running Sessions <span>({runningSessionsKnown ? activeActivities.length : "—"})</span></strong><button title="Refresh sessions" onClick={data.refresh}><Icon name="refresh-cw"/></button></div>
           {activeActivities.length > 0 ? activeActivities.map(activity => { const session = data.projects.flatMap(row => row.sessions).find(item => item.id === activity.sessionId); return <button className="rw-running-item" key={activity.sessionId} onClick={() => session && void data.selectSession(session)}><i className="rw-dot green"/><span>{session?.name || activity.label}</span><time>{activity.detail || activity.phase}</time></button>; }) : runningSessionsKnown ? <div className="rw-data-state">No active sessions reported.</div> : <div className="rw-data-state">{data.board?.unknownSources.length ? "Some session lists are still loading…" : "Loading sessions…"}</div>}
         </section>
-        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button></div>
+        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><div><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button><button title="Settings" aria-label="Open settings" onClick={() => setSettingsOpen(true)}><Icon name="settings"/></button></div></div>
         <div className="rw-search"><Icon name="search"/><input aria-label="Search sessions" placeholder="Search sessions" value={projectQuery} onChange={e => setProjectQuery(e.target.value)}/>{projectQuery && <button onClick={() => setProjectQuery("")}><Icon name="x"/></button>}</div>
         <button className="rw-all-projects" onClick={data.refresh}>Refresh project list</button>
         {machineConnectionMessage && <div className="rw-data-error" role="alert">{machineConnectionMessage}<button onClick={data.state.error && data.state.machinesLoad !== "loaded" ? () => window.location.reload() : data.refresh}>{data.state.error && data.state.machinesLoad !== "loaded" ? "Reload after access changes" : "Retry"}</button></div>}
@@ -769,11 +796,22 @@ export function ReactWorkspaceApp() {
           <div className="rw-header-actions"><button title="Session actions"><Icon name="zap"/></button><button title="Session settings"><Icon name="settings"/></button><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button><button title="More actions"><Icon name="more-horizontal"/></button></div>
         </header>
         {data.state.activity && <div className="rw-subagents"><div className="rw-activity-line"><i className={data.state.activity.phase === "active" ? "rw-dot green" : "rw-dot"}/><strong>{data.state.activity.label}</strong><span>{data.state.activity.detail}</span></div></div>}
-        <div className="rw-transcript">
+        <div className="rw-transcript" ref={transcriptRef} onScroll={event => {
+          const transcript = event.currentTarget;
+          const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
+          followTranscriptRef.current = following;
+          setShowTranscriptJump(!following);
+        }}>
           {data.sessionError && <div className="rw-data-error">{data.sessionError}</div>}
           {!data.selectedSession && <div className="rw-empty-state">Select a session to view its conversation.</div>}
           {data.selectedSession && !data.sessionError && data.messages.length === 0 && <div className="rw-empty-state">No messages in this session yet.</div>}
+          {data.selectedSession && data.state.messagePageStart > 0 && <button className="rw-load-older" type="button" disabled={data.state.pageReadEnd !== undefined} onClick={() => {
+            const transcript = transcriptRef.current;
+            if (transcript !== null) olderPageAnchorRef.current = { scopeKey: transcriptScopeKey, scrollTop: transcript.scrollTop, scrollHeight: transcript.scrollHeight };
+            void data.loadEarlierMessages();
+          }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
           {data.messages.map((message, index) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
+          {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
           {(queuedCount > 0 || backgroundCount > 0) && <div className="rw-live-summary">
@@ -812,21 +850,6 @@ export function ReactWorkspaceApp() {
       <aside className="rw-workbench">
         <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
         <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><input ref={uploadInputRef} type="file" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadWorkspaceFile(file); }}/><button title="New file" onClick={() => void createWorkspaceFile()} disabled={!data.selectedWorkspace || fileSaving || fileDeleting}>New</button><button title="Upload file to the current folder" onClick={() => uploadInputRef.current?.click()} disabled={!data.selectedWorkspace || fileSaving || fileDeleting}><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh Git status" onClick={() => setGitRefresh(value => value + 1)}><Icon name="refresh-cw"/></button>}</>}</div>
-        {activeTab === "Settings" ? <div className="rw-settings-panel">
-          <header><div><strong>Settings & integrations</strong><small>Machine: {data.state.selectedMachine?.name ?? "Local"} · Project: {data.selectedProject?.name ?? "Global scope"}</small></div><button onClick={() => void data.loadSettings()} disabled={data.settings.loading}>Reload</button></header>
-          {data.settings.loading && <p>Loading settings…</p>}
-          {(data.settings.error || settingsNotice || data.settings.notice) && <p className="rw-settings-notice">{settingsNotice ?? data.settings.notice ?? data.settings.error}</p>}
-          <section><h3>General configuration</h3>
-            <label>Host<input defaultValue={data.settings.config?.config.host ?? ""} key={data.settings.config?.path+"-host"} onBlur={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,host:event.target.value}).catch(error => setSettingsNotice(String(error))); }}/></label>
-            <label>Port<input type="number" defaultValue={data.settings.config?.config.port ?? 8505} key={data.settings.config?.path+"-port"} onBlur={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,port:Number(event.target.value)}).catch(error => setSettingsNotice(String(error))); }}/></label>
-            <label className="rw-setting-check"><input type="checkbox" defaultChecked={data.settings.config?.config.environmentFacts !== false} key={String(data.settings.config?.config.environmentFacts)} onChange={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,environmentFacts:event.target.checked}).catch(error => setSettingsNotice(String(error))); }}/> Include environment facts in session prompts</label>
-            <label className="rw-setting-check"><input type="checkbox" defaultChecked={data.settings.config?.config.piBuiltInExtensions !== false} key={String(data.settings.config?.config.piBuiltInExtensions)} onChange={event => { if (data.settings.config) void data.saveSettings({...data.settings.config.config,piBuiltInExtensions:event.target.checked}).catch(error => setSettingsNotice(String(error))); }}/> Load Pi built-in extensions</label>
-          </section>
-          <section><h3>PI WEB Plugins</h3>{data.settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || settingsBusy} onChange={async event => { setSettingsBusy(true); setSettingsNotice(undefined); try { await data.setPluginEnabled(plugin.id,event.target.checked); } catch(error) { setSettingsNotice(String(error)); } finally { setSettingsBusy(false); } }}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}</section>
-          <section><h3>Pi packages</h3><form onSubmit={event => {event.preventDefault();setSettingsBusy(true);void data.installPackage(packageSource).then(()=>setPackageSource("")).catch(error=>setSettingsNotice(String(error))).finally(()=>setSettingsBusy(false));}}><input placeholder="Package source (URL or registry)" value={packageSource} onChange={event=>setPackageSource(event.target.value)}/><button disabled={!packageSource.trim()||settingsBusy}>Install</button><button type="button" onClick={()=>void data.updatePackage().catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy}>Update all</button></form>{data.settings.packages?.packages.map(pkg=><div className="rw-setting-row" key={pkg.source}><span><b>{pkg.source}</b><small>{pkg.scope} · {pkg.enabled?"enabled":"disabled"}</small></span><button onClick={()=>void data.removePackage(pkg.source,pkg.scope).catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy}>Remove</button></div>)}</section>
-          <section><h3>Skills</h3>{data.settings.skills?.skills.map(skill=><label className="rw-setting-check" key={skill.id}><input type="checkbox" checked={skill.enabled} disabled={settingsBusy||skill.ownerPackageDisabled===true} onChange={event=>{setSettingsBusy(true);void data.setSkillEnabled(skill,event.target.checked).catch(error=>setSettingsNotice(String(error))).finally(()=>setSettingsBusy(false));}}/><span><b>{skill.name}</b><small>{skill.scope} · {skill.origin} · {skill.validation}{skill.validationMessage ? " · "+skill.validationMessage : ""}</small></span></label>)}</section>
-          <section><h3>MCP servers</h3>{data.settings.mcp?.errors.map((error,index)=><p key={index} className="rw-settings-notice">{error}</p>)}{data.settings.mcp?.servers.map(server=><div className="rw-setting-row" key={server.name}><span><b>{server.name}</b><small>{server.transport} · {server.scope} · {server.probe?.state ?? server.configured}{server.usesSecrets ? " · uses secrets (values hidden)" : ""}</small></span><button onClick={()=>void data.testMcp(server).catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy}>Test</button><button onClick={()=>void data.removeMcp(server).catch(error=>setSettingsNotice(String(error)))} disabled={settingsBusy||server.targets.length===0}>Remove</button><label className="rw-setting-check"><input type="checkbox" checked={server.enabled} disabled={settingsBusy||server.targets.length===0} onChange={event=>{setSettingsBusy(true);void data.setMcpEnabled(server,event.target.checked).catch(error=>setSettingsNotice(String(error))).finally(()=>setSettingsBusy(false));}}/>Enabled</label></div>)}</section>
-        </div> : null}
         {activeTab === "Files" ? <div className="rw-file-tree">
           {data.filesError && <div className="rw-data-error">{data.filesError}</div>}
           {visibleFileTreeError && <div className="rw-data-error">{visibleFileTreeError}</div>}
@@ -888,5 +911,6 @@ export function ReactWorkspaceApp() {
         )}
       </aside>
     </div>
+    <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
   </div>;
 }
