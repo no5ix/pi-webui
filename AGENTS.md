@@ -81,6 +81,24 @@ Never report failed, incomplete, or skipped verification as passing. Identify an
 - Run `pnpm run verify` before a change reaches main.
 - Pull requests get a real review before merge; never claim a pull request merged without checking that `gh pr view` says so.
 
+## Modern Web Development
+
+For frontend implementation tasks, use the Google Chrome
+Modern Web Guidance skill when relevant.
+
+Before implementing browser APIs, CSS layouts, animations,
+accessibility improvements, or performance optimizations:
+
+1. Search for relevant guidance using:
+   `npx modern-web-guidance@latest search "<topic>"`
+2. Retrieve the relevant guide:
+   `npx modern-web-guidance@latest retrieve "<guide-id>"`
+3. Follow its implementation recommendations.
+4. Use progressive enhancement and verify browser compatibility.
+
+Do not blindly introduce experimental or single-browser APIs.
+Prefer standards-based solutions with appropriate fallbacks.
+
 ## Verification workflow
 
 Before a non-trivial change is called done:
