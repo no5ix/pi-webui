@@ -162,6 +162,15 @@ button { cursor: pointer; }
 .rw-edited-file span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rw-edited-file small{margin-left:auto;color:var(--rw-muted)}
 .rw-git-panel{min-height:0;flex:1}
+.rw-file-tree button{width:100%;flex:none;color:var(--rw-text-secondary)}
+.rw-file-tree button.selected{background:var(--rw-selected);color:var(--rw-text)}
+.rw-file-tree button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-file-tree button small{margin-left:auto;color:var(--rw-muted);font-size:10px}
+.rw-file-search-results{display:flex;flex-direction:column;gap:2px}
+.rw-file-search-results button{height:32px;display:flex;align-items:center;gap:8px;padding:0 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--rw-text-secondary);text-align:left;font-size:11px}
+.rw-file-search-results button:hover,.rw-file-search-results button.selected{background:var(--rw-selected);border-color:var(--rw-accent-line)}
+.rw-file-search-results button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-file-search-results button small{margin-left:auto;color:var(--rw-muted);font-size:9px}
 .rw-git-toolbar{display:flex;align-items:center;justify-content:space-between;color:var(--rw-text-secondary);font-size:12px}
 .rw-git-card small{color:var(--rw-muted);font-size:11px}
 .rw-git-changes{display:flex;flex-direction:column;gap:3px}
