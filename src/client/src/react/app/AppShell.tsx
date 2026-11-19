@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY, PHONE_LAYOUT_MEDIA_QUERY } from "../../breakpoints";
 import type { Project, SessionInfo, SessionRef, Workspace } from "../../../../shared/apiTypes";
 import { useBoard, useBoardMachine } from "../state/board";
@@ -11,9 +11,15 @@ import { useThemeSystemFollow } from "../state/theme";
 import { useSelectionUrl } from "../state/selection";
 import { dragPanelWidth, keyboardPanelWidth, panelConstraints } from "../state/panels";
 import { CommandPalette } from "../components/common/CommandPalette";
-import { QuickSwitcher } from "../components/common/QuickSwitcher";
-import { SettingsOverlay } from "../components/common/SettingsOverlay";
-import { NewProjectDialog } from "../components/common/NewProjectDialog";
+/**
+ * The overlays whose code is heavy: the quick switcher, the settings surface (the
+ * app's own settings element and every section it holds) and the new-project
+ * dialog. They arrive when the reader opens them, so the first paint of a session
+ * does not pay for them.
+ */
+const QuickSwitcher = lazy(() => import("../components/common/QuickSwitcher").then((module) => ({ default: module.QuickSwitcher })));
+const SettingsOverlay = lazy(() => import("../components/common/SettingsOverlay").then((module) => ({ default: module.SettingsOverlay })));
+const NewProjectDialog = lazy(() => import("../components/common/NewProjectDialog").then((module) => ({ default: module.NewProjectDialog })));
 import { ConfirmDialog, InputDialog } from "../components/common/Dialog";
 import { Toasts } from "../components/common/Toasts";
 import { PluginDialogLayer, loadPlugins } from "../plugins/pluginBridge";
@@ -22,7 +28,6 @@ import { useSessionCommands } from "../state/sessionCommands";
 import { usePluginCommands } from "../plugins/pluginCommands";
 import { deleteWorkspace, renameSession, selectedWorkspace } from "../state/sessionActions";
 import { pushToast } from "../components/common/Toasts";
-import { WindowBar } from "./WindowBar";
 import { NavigationPanel } from "../components/navigation/NavigationPanel";
 import { ConversationPanel } from "../components/conversation/ConversationPanel";
 import { WorkbenchPanel } from "../components/workbench/WorkbenchPanel";
@@ -126,7 +131,15 @@ export function AppShell(): ReactNode {
         </>
       ) : null}
       <section aria-label="Conversation" className="piw-panel piw-panel--conversation">
-        <ConversationPanel machineId={selected.machineId} subject={subject} layout={layout} onOpenSettings={() => { setLayer("settings"); }} />
+        <ConversationPanel
+          machineId={selected.machineId}
+          subject={subject}
+          layout={layout}
+          onCommandPalette={() => { setLayer("palette"); }}
+          onOpenNavigation={() => { setPanelCollapsed("navigation", false); }}
+          onOpenWorkbench={() => { setPanelCollapsed("workspace", false); }}
+          onOpenSettings={() => { setLayer("settings"); }}
+        />
       </section>
       {showsWorkbench(layout, panels) ? (
         <>
@@ -140,22 +153,18 @@ export function AppShell(): ReactNode {
   );
 
   return (
-    <div className="piw-canvas" data-dragging={dragging.current === undefined ? "false" : "true"}>
-      <div className="piw-window">
-        <WindowBar
-          machineId={selected.machineId}
-          subject={subject}
-          layout={layout}
-          onCommandPalette={() => { setLayer("palette"); }}
-          onQuickSwitcher={() => { setLayer("switcher"); }}
-          onSettings={() => { setLayer("settings"); }}
-        />
-        {columns}
-      </div>
+    <div className="piw-canvas" data-dragging={dragging.current === undefined ? "false" : "true"} data-layout={layout}>
+      {columns}
       <CommandPalette />
-      <QuickSwitcher onNewSession={() => { setLayer("new-project"); }} />
-      <SettingsOverlay machineId={selected.machineId} />
-      <NewProjectDialog />
+      <Suspense fallback={<SuspenseNotice>Opening the switcher…</SuspenseNotice>}>
+        <QuickSwitcher onNewSession={() => { setLayer("new-project"); }} />
+      </Suspense>
+      <Suspense fallback={<SuspenseNotice>Opening settings…</SuspenseNotice>}>
+        <SettingsOverlay machineId={selected.machineId} />
+      </Suspense>
+      <Suspense fallback={<SuspenseNotice>Opening the project form…</SuspenseNotice>}>
+        <NewProjectDialog />
+      </Suspense>
       <RenameSessionDialog
         label={subject.sessionInfo === undefined ? "" : sessionLabel(subject.sessionInfo)}
         machineId={selected.machineId}
@@ -165,6 +174,14 @@ export function AppShell(): ReactNode {
       <Toasts />
       <PluginDialogLayer />
     </div>
+  );
+}
+
+function SuspenseNotice(props: { children: ReactNode }): ReactNode {
+  return (
+    <p className="piw-suspense" role="status">
+      {props.children}
+    </p>
   );
 }
 

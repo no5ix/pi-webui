@@ -1,75 +1,30 @@
 /*
- * The shell's layout: the window frame, the window bar, and the three columns.
+ * The shell's layout: the three columns, edge to edge.
  *
- * The columns are one grid whose side tracks are driven by the panel widths the
- * reader drags (the same widths, constraints and keyboard steps PI WEB already
- * stores in `pi-web:panel-sizes:v1`). A collapsed column leaves the grid, so the
- * conversation takes its width; the conversation keeps its reading measure at
- * every width, so a wide window widens the workbench, not the paragraph.
+ * The reference has no window frame and no application bar: the rail, the
+ * conversation and the workbench fill the viewport from the first pixel, and each
+ * column draws its own header. The side tracks follow the widths the reader drags
+ * (the same widths, constraints and keyboard steps PI WEB stores in
+ * `pi-web:panel-sizes:v1`); a collapsed column leaves the grid and the conversation
+ * takes its width. The conversation keeps its reading measure, so a wide window
+ * widens the margins, not the paragraph.
+ *
+ * `data-layout` is the shell's own layout state, computed from
+ * `src/client/src/breakpoints.ts`; this file never restates a viewport number.
  */
-
 .piw-canvas {
   box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   height: 100dvh;
   min-height: 100dvh;
-  padding: var(--piw-window-inset);
-  background: var(--piw-canvas);
-  color: var(--pi-text);
-  font-family: var(--pi-font-ui);
-  font-size: var(--pi-text-base);
-  line-height: var(--pi-leading-tight);
-}
-
-.piw-window {
-  box-sizing: border-box;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--piw-window-border);
-  border-radius: var(--piw-window-radius);
-  background: var(--pi-bg);
-  box-shadow: var(--pi-elevation-3);
-}
-
-.piw-window-bar {
-  box-sizing: border-box;
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--pi-space-4);
-  height: var(--piw-window-bar-height);
-  padding: 0 var(--pi-space-7);
-  border-bottom: 1px solid var(--piw-divider);
-  background: var(--piw-surface-window-bar);
-}
-
-.piw-window-bar__title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--pi-space-4);
-  min-width: 0;
-  font-size: var(--pi-text-md);
-  font-weight: var(--pi-weight-semibold);
-  letter-spacing: var(--pi-tracking-tight);
-}
-
-.piw-window-bar__subtitle {
-  font-size: var(--pi-text-xs);
-  font-weight: var(--pi-weight-regular);
-  color: var(--pi-muted);
-}
-
-.piw-window-bar__spacer {
-  flex: 1;
-}
-
-.piw-window-bar__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--pi-space-3);
+  background: var(--piw-canvas);
+  color: var(--piw-ink);
+  font-family: var(--pi-font-ui);
+  font-size: var(--piw-size-row);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 
 .piw-columns {
@@ -91,17 +46,17 @@
 }
 
 .piw-panel--navigation {
-  border-right: 1px solid var(--piw-divider);
+  border-right: 1px solid var(--piw-border-card);
   background: var(--piw-surface-navigation);
 }
 
 .piw-panel--workbench {
-  border-left: 1px solid var(--piw-divider);
+  border-left: 1px solid var(--piw-border-card);
   background: var(--piw-surface-workbench);
 }
 
 .piw-panel--conversation {
-  background: var(--pi-bg);
+  background: var(--piw-surface-conversation);
 }
 
 .piw-panel__header {
@@ -109,10 +64,9 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--pi-space-4);
-  height: var(--piw-panel-header-height);
-  padding: 0 var(--pi-bar-inset);
-  border-bottom: 1px solid transparent;
+  gap: var(--pi-space-3);
+  height: var(--piw-section-header-height);
+  padding: 0 var(--piw-inset-column);
 }
 
 .piw-panel__body {
@@ -125,9 +79,9 @@
 
 .piw-resize-handle {
   position: relative;
-  z-index: var(--pi-layer-sticky);
-  width: 7px;
-  margin: 0 -4px;
+  z-index: var(--piw-z-sticky);
+  width: var(--piw-resize-handle);
+  margin: 0 -3px;
   border: 0;
   background: transparent;
   cursor: col-resize;
@@ -136,16 +90,16 @@
 
 .piw-resize-handle::after {
   position: absolute;
-  inset: 0 3px;
+  inset: 0 1px;
   content: "";
   background: transparent;
-  transition: background var(--pi-motion-fast) var(--pi-ease);
+  transition: background var(--piw-motion-fast) var(--piw-ease);
 }
 
 .piw-resize-handle:hover::after,
 .piw-resize-handle:focus-visible::after,
 .piw-resize-handle[data-dragging="true"]::after {
-  background: var(--pi-accent);
+  background: var(--piw-accent);
 }
 
 .piw-resize-handle:focus-visible {
@@ -167,24 +121,22 @@
 }
 
 /*
- * On the phone the navigation is a drawer, not a column: the conversation owns
- * the viewport, and the rail lies over it while it is open. `data-layout` is the
- * shell's own layout state, computed from the breakpoints module, so no
- * viewport number is repeated here.
+ * On the phone the navigation is a drawer over the conversation, not a column:
+ * the conversation owns the viewport and the rail lies over it while open.
  */
 .piw-columns[data-layout="phone"] .piw-panel--navigation {
   position: fixed;
-  inset-block: calc(var(--piw-window-inset) + var(--piw-window-bar-height)) var(--piw-window-inset);
-  inset-inline-start: var(--piw-window-inset);
+  inset-block: 0;
+  inset-inline-start: 0;
   width: min(86vw, 340px);
-  z-index: var(--pi-layer-overlay);
+  z-index: var(--piw-z-drawer);
   box-shadow: var(--pi-elevation-3);
 }
 
 .piw-scrim {
   position: fixed;
   inset: 0;
-  z-index: var(--pi-layer-overlay);
+  z-index: var(--piw-z-drawer);
   border: 0;
   background: var(--pi-overlay);
 }

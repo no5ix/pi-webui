@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { workspacesApi } from "../../../api";
+import "./files.css";
 import { Icon, IconButton } from "../common/icons";
 import { ContextMenu, type ContextMenuItem } from "../common/ContextMenu";
 import { ConfirmDialog } from "../common/Dialog";
@@ -7,27 +7,35 @@ import { registerShellCommands } from "../../state/shellCommands";
 import { writeClipboardText } from "../../../clipboard";
 import {
   closeFile,
+  createFile,
   deleteFile,
   editFile,
   moveFile,
   openFile,
   readTree,
+  revertOpenFile,
   sameScope,
   saveOpenFile,
   setFileFilter,
   toggleDirectory,
+  uploadFile as writeWorkspaceBytes,
   useFiles,
   type FileNode,
   type FileScope,
 } from "../../state/filesStore";
+import { FilesCodeView } from "./filesCodeView";
+import { formatFileSize, formatFileTimestamp } from "./filesFormat";
+import { Markdown } from "../../markdown/Markdown";
 
 /**
  * The Files tab.
  *
- * A directory at a time, a file opened on demand, and a plain editor that says
- * what it is: the text is saved through the workspace file route, the dirty mark
- * and the save time are the shell's, and a file whose content the machine does
- * not send as text is said to be unread here rather than shown as empty.
+ * A directory at a time, a file opened on demand, and an editor that is the
+ * CodeMirror PI WEB already ships: the machine's own language label picks the
+ * grammar, a markdown file can be read as rendered text, and the size, the
+ * modification time and the language are stated beside the path. The text is
+ * saved through the workspace file route; a read the machine sent only in part
+ * refuses to save, because writing the fragment back would delete the rest.
  */
 export interface FilesPanelProps {
   scope: FileScope | undefined;
@@ -80,9 +88,16 @@ export function FilesPanel(props: FilesPanelProps): ReactNode {
         id: "files.newFile",
         title: "Create a new file at the workspace root",
         group: "Files",
-        run: () => {
-          void workspacesApi.writeWorkspaceFile(scope.projectId, scope.workspaceId, "new-file.txt", "", undefined, scope.machineId).then(() => readTree(scope, ""));
-        },
+        keywords: ["new", "create", "file"],
+        run: () => { void createFile(scope, "new-file.txt"); },
+      },
+      {
+        id: "files.revert",
+        title: "Discard the changes to the open file",
+        group: "Files",
+        keywords: ["revert", "undo"],
+        disabled: files.open === undefined || files.open.content === files.open.baseline ? "Nothing to discard" : undefined,
+        run: () => { revertOpenFile(); },
       },
       {
         id: "files.copyPath",
@@ -124,7 +139,7 @@ export function FilesPanel(props: FilesPanelProps): ReactNode {
                 onChange={(event) => {
                   const node = event.target.files?.[0];
                   if (node === undefined || props.scope === undefined) return;
-                  void uploadFile(props.scope, node, setUpload);
+                  void uploadPickedFile(props.scope, node, setUpload);
                   event.target.value = "";
                 }}
                 style={{ display: "none" }}
@@ -151,7 +166,7 @@ export function FilesPanel(props: FilesPanelProps): ReactNode {
             ) : null}
             {root?.phase === "ready" && (root.value?.length ?? 0) === 0 ? <p className="piw-empty">The workspace root is empty.</p> : null}
           </div>
-          <FileSurface scope={props.scope} />
+          <FileSurface key={files.open?.path ?? "none"} scope={props.scope} />
         </>
       )}
 
@@ -241,34 +256,70 @@ function FileLevel(props: { nodes: readonly FileNode[]; depth: number; scope: Fi
 
 function FileSurface({ scope }: { scope: FileScope }): ReactNode {
   const files = useFiles();
+  const [mode, setMode] = useState<"source" | "preview">("source");
   const open = files.open;
   if (open === undefined) return <p className="piw-empty">Choose a file to read it.</p>;
   if (!sameScope(open.scope, scope)) return <p className="piw-empty">That file belongs to another workspace.</p>;
   const dirty = open.content !== open.baseline;
+  const truncated = open.meta.truncated;
+  const rendered = open.meta.language === "markdown";
+  const ready = open.read.phase === "ready";
   return (
     <div className="piw-files__surface">
       <div className="piw-files__surface-header">
         <span className="piw-mono" dir="auto">{open.path}</span>
         {dirty ? <span className="piw-badge">unsaved</span> : null}
-        {open.savedAt === undefined ? null : <span className="piw-row__meta">saved</span>}
+        {truncated ? <span className="piw-badge">partial read</span> : null}
         <span className="piw-workbench__toolbar-spacer" />
         <IconButton icon="close" label="Close the file" onClick={() => { closeFile(); }} />
-        <IconButton disabled={!dirty || open.saving} icon="upload" label="Save the file" onClick={() => { void saveOpenFile(); }} />
+        <IconButton disabled={!dirty} icon="refresh" label="Discard the changes to this file" onClick={() => { revertOpenFile(); }} />
+        <IconButton disabled={!dirty || truncated || open.saving || !ready} icon="upload" label="Save the file" onClick={() => { void saveOpenFile(); }} />
       </div>
+      <div className="piw-files__meta">
+        <span>{formatFileSize(open.meta.size)}</span>
+        <span>{formatFileTimestamp(open.meta.modifiedAt)}</span>
+        {open.meta.language === undefined ? null : <span>{open.meta.language}</span>}
+        {open.savedAt === undefined ? null : <span>{`saved ${formatFileTimestamp(new Date(open.savedAt).toISOString())}`}</span>}
+      </div>
+      {truncated ? (
+        <p className="piw-workbench__message">
+          The machine sent only the beginning of this file, so it cannot be saved from here: writing this fragment back would drop the rest of it.
+        </p>
+      ) : null}
+      {ready && rendered ? (
+        <div aria-label="File view" className="piw-files__modes" role="group">
+          <button
+            aria-pressed={mode === "source"}
+            className={mode === "source" ? "piw-button piw-button--primary" : "piw-button"}
+            onClick={() => { setMode("source"); }}
+            type="button"
+          >
+            Source
+          </button>
+          <button
+            aria-pressed={mode === "preview"}
+            className={mode === "preview" ? "piw-button piw-button--primary" : "piw-button"}
+            onClick={() => { setMode("preview"); }}
+            type="button"
+          >
+            Preview
+          </button>
+        </div>
+      ) : null}
       {open.read.phase === "loading" ? <p className="piw-empty">Reading the file…</p> : null}
       {open.read.phase === "failed" || open.read.phase === "refused" ? <p className="piw-empty">{open.read.error ?? "The file did not answer."}</p> : null}
-      {open.read.phase === "ready" ? (
-        <textarea
-          aria-label={`Edit ${open.path}`}
-          className="piw-files__editor piw-mono"
-          onChange={(event) => { editFile(event.target.value); }}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === "s") {
-              event.preventDefault();
-              void saveOpenFile();
-            }
-          }}
-          spellCheck={false}
+      {ready && rendered && mode === "preview" ? (
+        <div className="piw-files__preview">
+          <Markdown text={open.content} />
+        </div>
+      ) : null}
+      {ready && (mode === "source" || !rendered) ? (
+        <FilesCodeView
+          editable={!truncated}
+          label={`Edit ${open.path}`}
+          language={open.meta.language}
+          onInput={editFile}
+          onSave={() => { void saveOpenFile(); }}
           value={open.content}
         />
       ) : null}
@@ -316,16 +367,11 @@ function nodeMenu(node: FileNode, scope: FileScope, setConfirming: (node: FileNo
   ];
 }
 
-async function uploadFile(scope: FileScope, file: File, report: (value: { name: string; problem: string | undefined } | undefined) => void): Promise<void> {
+async function uploadPickedFile(scope: FileScope, file: File, report: (value: { name: string; problem: string | undefined } | undefined) => void): Promise<void> {
   report({ name: file.name, problem: undefined });
   const buffer = await file.arrayBuffer();
-  try {
-    await workspacesApi.writeWorkspaceFile(scope.projectId, scope.workspaceId, file.name, new Uint8Array(buffer), undefined, scope.machineId);
-    await readTree(scope, "");
-    report(undefined);
-  } catch (error) {
-    report({ name: file.name, problem: error instanceof Error ? error.message : String(error) });
-  }
+  const problem = await writeWorkspaceBytes(scope, file.name, new Uint8Array(buffer));
+  report(problem === undefined ? undefined : { name: file.name, problem });
 }
 
 function parentOf(path: string): string {

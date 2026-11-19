@@ -1,12 +1,18 @@
-import { useEffect, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Project, SessionInfo, SessionRef, Workspace } from "../../../../../shared/apiTypes";
 import { setWorkbenchTab, usePanels, type WorkbenchTab } from "../../state/panels";
 import { useGit, readGitStatus, type GitScope } from "../../state/gitStore";
 import { Icon, type IconName } from "../common/icons";
 import { GitPanel } from "./GitPanel";
-import { FilesPanel } from "./FilesPanel";
-import { TerminalPanel } from "./TerminalPanel";
 import { GoalsPanel } from "./GoalsPanel";
+
+/**
+ * The two tabs whose code is heavy: Files carries the CodeMirror grammars and
+ * Terminal carries xterm. They are loaded when the reader opens the tab, so a
+ * session view does not pay for an editor and a terminal it is not looking at.
+ */
+const FilesPanel = lazy(() => import("./FilesPanel").then((module) => ({ default: module.FilesPanel })));
+const TerminalPanel = lazy(() => import("./TerminalPanel").then((module) => ({ default: module.TerminalPanel })));
 import "./workbench.css";
 
 /**
@@ -96,9 +102,13 @@ export function WorkbenchPanel(props: WorkbenchPanelProps): ReactNode {
         ) : panels.workbenchTab === "git" ? (
           <GitPanel scope={scope} />
         ) : panels.workbenchTab === "files" ? (
-          <FilesPanel scope={scope} />
+          <Suspense fallback={<p className="piw-empty">Loading the Files tab…</p>}>
+            <FilesPanel scope={scope} />
+          </Suspense>
         ) : panels.workbenchTab === "terminal" ? (
-          <TerminalPanel scope={scope} />
+          <Suspense fallback={<p className="piw-empty">Loading the Terminal tab…</p>}>
+            <TerminalPanel scope={scope} />
+          </Suspense>
         ) : panels.workbenchTab === "goals" && workspace !== undefined ? (
           <GoalsPanel scope={{ ...scope, workspacePath: workspace.path }} />
         ) : (

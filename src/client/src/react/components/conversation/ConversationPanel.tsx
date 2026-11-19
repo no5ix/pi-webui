@@ -1,5 +1,7 @@
+import "./conversation.css";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { sessionsApi } from "../../../api";
+import type { ChatLine } from "../../../components/shared";
 import type { ExtensionDialogAnswer, Project, SessionInfo, SessionRef, Workspace, DeferredImageRef } from "../../../../../shared/apiTypes";
 import { useSessionStream, useSessionStreamSession, streamRuntime } from "../../state/sessionStream";
 import { registerShellCommands } from "../../state/shellCommands";
@@ -30,6 +32,9 @@ export interface ConversationPanelProps {
   };
   layout: "three" | "two" | "phone";
   onOpenSettings: () => void;
+  onCommandPalette: () => void;
+  onOpenNavigation: () => void;
+  onOpenWorkbench: () => void;
 }
 
 export function ConversationPanel(props: ConversationPanelProps): ReactNode {
@@ -52,13 +57,18 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
     <div className={`piw-conversation piw-conversation--${props.layout}`}>
       <ConversationHeader
         activity={stream.activity}
+        layout={props.layout}
         machineId={props.machineId}
+        onCommandPalette={() => { props.onCommandPalette(); }}
+        onOpenNavigation={() => { props.onOpenNavigation(); }}
+        onOpenWorkbench={() => { props.onOpenWorkbench(); }}
         onOpenSettings={() => { props.onOpenSettings(); }}
         onToggleWidth={() => { setTranscriptWidth(conversation.width === "wide" ? "measure" : "wide"); }}
         projectName={project?.name}
         session={session}
         sessionInfo={sessionInfo}
         status={stream.status}
+        transcriptTitle={transcriptTitle(stream.messages)}
         width={conversation.width}
       />
 
@@ -106,12 +116,22 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
           />
         ))}
 
+        <TranscriptCards
+          surface="subagents"
+          messages={stream.messages}
+          open={{ background: isCardOpen(conversation, "background"), editedFiles: isCardOpen(conversation, "editedFiles"), subagents: isCardOpen(conversation, "subagents") }}
+          onToggle={(card) => { toggleCard(card); }}
+          sessionInfo={sessionInfo}
+          status={stream.status}
+        />
+
         {stream.loading ? <div className="piw-skeleton piw-skeleton--block">Reading the transcript…</div> : null}
         {stream.error !== undefined && stream.messages.length === 0 ? <p className="piw-empty">The transcript did not load: {stream.error}</p> : null}
 
         <MessageList
           machineId={props.machineId}
           sessionId={session?.id ?? ""}
+          connection={stream.connection}
           hasNewer={stream.pageEnd < stream.total}
           hasOlder={stream.pageStart > 0}
           imagePathFor={session === undefined ? undefined : (ref: DeferredImageRef) => deferredImagePath({ id: session.id, cwd: session.cwd }, ref, props.machineId)}
@@ -126,6 +146,7 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
         />
 
         <TranscriptCards
+          surface="footer"
           messages={stream.messages}
           open={{ background: isCardOpen(conversation, "background"), editedFiles: isCardOpen(conversation, "editedFiles"), subagents: isCardOpen(conversation, "subagents") }}
           onToggle={(card) => { toggleCard(card); }}
@@ -150,8 +171,27 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
   );
 }
 
-function QueuedPrompts({ machineId, queued, session }: { machineId: string; queued: readonly { kind: string; text: string }[]; session: SessionRef | undefined }): ReactNode {
-  if (queued.length === 0) return null;
+/**
+ * What the reader first said in the transcript on screen.
+ *
+ * A session opened by link has no board entry, so the transcript is its only
+ * name; the first prompt is what a person recognises, and a transcript with no
+ * prompt yet has no name to offer.
+ */
+function transcriptTitle(messages: readonly ChatLine[]): string | undefined {
+  for (const line of messages) {
+    if (line.role !== "user") continue;
+    for (const part of line.parts) {
+      if (part.type !== "text") continue;
+      const words = part.text.trim();
+      if (words === "") continue;
+      return words.length > 120 ? `${words.slice(0, 120)}…` : words;
+    }
+  }
+  return undefined;
+}
+
+function QueuedPrompts({ machineId, queued, session }: { machineId: string; queued: readonly { kind: string; text: string }[]; session: SessionRef | undefined }): ReactNode {  if (queued.length === 0) return null;
   return (
     <div className="piw-queued" data-testid="queued-prompts">
       <span className="piw-label">{`Queued ${String(queued.length)}`}</span>

@@ -1,95 +1,136 @@
 /*
- * The React shell's design tokens.
+ * The React workspace's design tokens.
  *
- * Colour, spacing, type, radius, motion and layering are PI WEB's own tokens
- * (`--pi-*`, declared on `:root` in index.html and repainted by the theme
- * engine). Nothing here invents a second palette: the shell adds the
- * measurements the reference design fixes — the window, the three columns, the
- * row rhythm, the card radius, the composer — and names them once so a
- * component never spells a number the screenshot decided.
+ * Two things live here, and only these two:
  *
- * The reference is `docs/ui-design/Dark Mode Developer Workspace UI.png`:
- * a 1568x882 window whose columns are 302 / 858 / 388 wide, one 52px window bar,
- * 44px panel headers, and a conversation that reads at about 820px.
+ * 1. The palette, derived from the theme the app's theme engine paints
+ *    (`--pi-*`, repainted by `theme.ts`, plugin themes included). Nothing in a
+ *    component spells a colour: a component asks for a role - canvas, surface,
+ *    card, selected, ink, muted, accent - and the theme answers. The reference
+ *    lifts are the measured steps of the reference screenshot (canvas lighter
+ *    than pure black, cards a step above the column, selection a step above the
+ *    card), expressed as mixes of the theme's own stops so a light theme, a
+ *    plugin theme, and the reference dark all keep the same hierarchy.
+ *
+ * 2. The measurements the reference fixes, in CSS pixels as the screenshot
+ *    measures them at a 1568-wide window: columns 302 / 878 / 388, a 72px
+ *    conversation header, 40px workbench tab row, 32px filter field, 34px tree
+ *    and session rows, a 64px composer, a 34px footer.
+ *
+ * Reference: `docs/ui-design/Dark Mode Developer Workspace UI.png`.
  */
 :root {
-  /* The window: the app sits inside a rounded frame on a near-black canvas. */
-  --piw-canvas: #0b0a0d;
-  --piw-window-inset: 8px;
-  --piw-window-radius: 14px;
-  --piw-window-border: color-mix(in srgb, var(--pi-border-muted) 70%, var(--pi-bg));
-
-  /* The three columns, as the reference measures them. */
-  --piw-window-bar-height: 52px;
+  /* Columns, as measured: no window frame, no window bar, edge to edge. */
   --piw-navigation-width: 302px;
   --piw-workbench-width: 388px;
-  --piw-panel-header-height: 44px;
-  --piw-section-header-height: 44px;
-  --piw-divider: var(--pi-border-muted);
+  --piw-columns-gap: 0px;
+  --piw-resize-handle: 5px;
 
-  /* Left rail: a section header, then dense rows. */
-  --piw-nav-inset: 14px;
-  --piw-nav-row-height: 36px;
-  --piw-nav-row-radius: 8px;
-  --piw-nav-row-gap: 2px;
-  --piw-nav-group-gap: 10px;
+  /* Palette. Canvas is the app background; the side columns sit one step above
+     it; cards sit one step above the column they sit on. */
+  --piw-canvas: color-mix(in srgb, var(--pi-bg) 92%, var(--pi-text) 8%);
+  --piw-surface-navigation: color-mix(in srgb, var(--pi-surface) 82%, var(--pi-bg) 18%);
+  --piw-surface-workbench: color-mix(in srgb, var(--pi-surface) 82%, var(--pi-bg) 18%);
+  --piw-surface-conversation: var(--pi-bg);
+  --piw-surface-card: color-mix(in srgb, var(--pi-surface-hover) 78%, var(--pi-surface) 22%);
+  --piw-surface-card-hover: color-mix(in srgb, var(--pi-surface-hover) 92%, var(--pi-text) 8%);
+  --piw-surface-inset: color-mix(in srgb, var(--pi-bg) 72%, var(--pi-surface) 28%);
+  --piw-surface-selected: var(--pi-selection-bg);
+  --piw-surface-selected-hover: color-mix(in srgb, var(--pi-selection-bg) 82%, var(--pi-text) 18%);
+  --piw-surface-field: color-mix(in srgb, var(--pi-bg) 78%, var(--pi-surface) 22%);
 
-  /* Surfaces, in the order the reference stacks them. */
-  --piw-surface-navigation: color-mix(in srgb, var(--pi-surface-panel) 62%, var(--pi-bg));
-  --piw-surface-workbench: color-mix(in srgb, var(--pi-surface-panel) 62%, var(--pi-bg));
-  --piw-surface-window-bar: var(--pi-surface-panel);
-  --piw-surface-card: var(--pi-surface-panel);
-  --piw-surface-card-hover: var(--pi-surface-hover);
-  --piw-surface-selected: var(--pi-surface-active);
-  --piw-border-card: var(--pi-border-muted);
+  --piw-border: var(--pi-border-muted);
+  --piw-border-strong: var(--pi-border);
+  --piw-border-card: color-mix(in srgb, var(--pi-border-muted) 70%, var(--pi-bg) 30%);
 
-  /* Cards: the subagents, tool, background and edited-files rows are all one card. */
-  --piw-card-radius: 8px;
-  --piw-card-inset: 12px;
-  --piw-card-header-height: 44px;
-  --piw-card-gap: 10px;
+  --piw-ink: var(--pi-text-bright);
+  --piw-ink-secondary: var(--pi-text-secondary);
+  --piw-ink-muted: var(--pi-muted);
+  --piw-ink-faint: color-mix(in srgb, var(--pi-dim) 80%, var(--pi-bg) 20%);
+  --piw-ink-on-accent: var(--pi-on-accent);
+
+  /* Accent: the reference's selected tab and focused control fill is a muted
+     violet built from the theme's accent, never a bright brand blue. */
+  --piw-accent: var(--pi-accent);
+  --piw-accent-fill: color-mix(in srgb, var(--pi-accent-border) 78%, var(--pi-surface) 22%);
+  --piw-accent-fill-hover: color-mix(in srgb, var(--pi-accent-border) 92%, var(--pi-text) 8%);
+  --piw-accent-ink: var(--pi-text-bright);
+  --piw-accent-soft: color-mix(in srgb, var(--pi-accent-border) 34%, var(--pi-bg) 66%);
+
+  --piw-running: var(--pi-success);
+  --piw-running-ring: var(--pi-success-ring);
+  --piw-danger: var(--pi-danger);
+  --piw-warning: var(--pi-warning);
+  --piw-badge-count: color-mix(in srgb, var(--pi-danger) 62%, var(--pi-bg) 38%);
+
+  /* Typography: the reference reads 15px in the conversation, 14px in the
+     columns, 11px in the uppercase role labels. */
+  --piw-size-title: 17px;
+  --piw-size-section: 15px;
+  --piw-size-row: 14px;
+  --piw-size-body: 15px;
+  --piw-size-meta: 13px;
+  --piw-size-label: 11px;
+  --piw-size-mono: 13px;
+  --piw-leading-body: 1.55;
+  --piw-tracking-label: 0.08em;
+
+  /* Rows: one rhythm for every list in the shell. */
+  --piw-section-header-height: 46px;
+  --piw-row-height: 34px;
+  --piw-row-radius: 8px;
+  --piw-row-gap: 2px;
+  --piw-inset-column: 14px;
+  --piw-indent-child: 22px;
+  --piw-tree-indent: 18px;
 
   /* The conversation. */
-  --piw-chat-measure: 820px;
+  --piw-header-height: 72px;
+  --piw-header-inset: 24px;
   --piw-chat-inset: 24px;
-  --piw-message-gap: 22px;
-  --piw-message-label-size: var(--pi-text-2xs);
-  --piw-message-label-tracking: var(--pi-tracking-label);
-  --piw-message-body-size: var(--pi-text-md);
-  --piw-message-line-height: 1.55;
-  --piw-user-message-radius: 10px;
-  --piw-user-message-bg: color-mix(in srgb, var(--pi-selection-bg) 60%, var(--pi-surface-panel));
-  --piw-user-message-border: color-mix(in srgb, var(--pi-accent-border) 55%, var(--pi-border-muted));
-  --piw-code-size: var(--pi-text-sm);
+  --piw-chat-measure: 980px;
+  --piw-card-radius: 10px;
+  --piw-card-inset: 14px;
+  --piw-card-header-height: 52px;
+  --piw-card-gap: 12px;
+  --piw-message-gap: 24px;
+  --piw-user-radius: 12px;
+  --piw-user-inset: 14px;
+  --piw-code-size: 13px;
 
-  /* The composer. */
+  /* The composer and the footer strip beneath it. */
   --piw-composer-radius: 12px;
-  --piw-composer-min-height: 56px;
+  --piw-composer-min-height: 64px;
   --piw-composer-inset: 24px;
-  --piw-status-bar-height: 34px;
+  --piw-footer-height: 36px;
 
-  /* The workbench tabs. */
-  --piw-tab-bar-height: 44px;
-  --piw-tab-gap: 4px;
-  --piw-tab-radius: 8px;
-  --piw-tab-inset: 10px;
-  --piw-tree-row-height: 27px;
-
-  /* Icons are drawn, never typed: one size per role. */
-  --piw-icon-size: 18px;
-  --piw-icon-size-small: 14px;
-  --piw-icon-size-large: 20px;
-
+  /* The workbench: tab row, filter field, tree. */
+  --piw-tab-row-height: 48px;
+  --piw-tab-height: 32px;
+  --piw-tab-radius: 9px;
+  --piw-tab-gap: 6px;
+  --piw-panel-inset: 14px;
+  --piw-field-height: 34px;
+  --piw-field-radius: 9px;
+  --piw-icon-button: 30px;
   --piw-badge-height: 18px;
+
+  /* Motion and layering. */
+  --piw-motion-fast: 120ms;
+  --piw-motion-slow: 220ms;
+  --piw-ease: cubic-bezier(0.2, 0, 0, 1);
+  --piw-z-panel: 1;
+  --piw-z-sticky: 5;
+  --piw-z-drawer: 40;
+  --piw-z-layer: 60;
+
+  /* Breakpoints are the app's (`src/client/src/breakpoints.ts`) - the shell
+     computes `data-layout` from them. CSS never restates a pixel breakpoint. */
 }
 
-@media (max-width: 640px) {
+@media (prefers-reduced-motion: reduce) {
   :root {
-    --piw-window-inset: 0px;
-    --piw-window-radius: 0px;
-    --piw-window-bar-height: 48px;
-    --piw-chat-inset: var(--pi-bar-inset);
-    --piw-composer-inset: var(--pi-bar-inset);
-    --piw-nav-inset: var(--pi-space-4);
+    --piw-motion-fast: 0ms;
+    --piw-motion-slow: 0ms;
   }
 }

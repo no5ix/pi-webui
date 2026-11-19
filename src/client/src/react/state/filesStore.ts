@@ -22,6 +22,24 @@ export interface FileNode {
   readonly directory: boolean;
 }
 
+/**
+ * What the machine says about a file next to its content.
+ *
+ * The read answers a size, a modification time, the language it picked from the
+ * name, and whether the bytes are text. A fact it did not answer is kept as
+ * undefined and the panel says so, rather than drawing a zero.
+ */
+interface FileMeta {
+  readonly size: number | undefined;
+  readonly modifiedAt: string | undefined;
+  readonly language: string | undefined;
+  readonly mimeType: string | undefined;
+  readonly binary: boolean;
+  readonly truncated: boolean;
+}
+
+const noFileMeta: FileMeta = { size: undefined, modifiedAt: undefined, language: undefined, mimeType: undefined, binary: false, truncated: false };
+
 export interface OpenFile {
   readonly path: string;
   readonly scope: FileScope;
@@ -30,6 +48,7 @@ export interface OpenFile {
   readonly baseline: string;
   readonly saving: boolean;
   readonly savedAt: number | undefined;
+  readonly meta: FileMeta;
 }
 
 export interface FilesState {
@@ -76,26 +95,27 @@ export async function openFile(scope: FileScope, path: string): Promise<void> {
   filesStore.update((current) => ({
     ...current,
     scope,
-    open: { path, scope, read: { value: undefined, phase: "loading", error: undefined }, content: "", baseline: "", saving: false, savedAt: undefined },
+    open: { path, scope, read: { value: undefined, phase: "loading", error: undefined }, content: "", baseline: "", saving: false, savedAt: undefined, meta: noFileMeta },
   }));
   try {
     const answer = await workspacesApi.workspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
+    const meta = metaOf(answer);
     const content = contentOf(answer);
     if (content === undefined) {
       filesStore.update((current) => ({
         ...current,
-        open: { path, scope, read: { value: undefined, phase: "refused", error: "This file is not text; PI WEB shows it read-only in the workspace panel." }, content: "", baseline: "", saving: false, savedAt: undefined },
+        open: { path, scope, read: { value: undefined, phase: "refused", error: "This file is not text, so there is nothing to edit here." }, content: "", baseline: "", saving: false, savedAt: undefined, meta },
       }));
       return;
     }
     filesStore.update((current) => ({
       ...current,
-      open: { path, scope, read: { value: content, phase: "ready", error: undefined }, content, baseline: content, saving: false, savedAt: undefined },
+      open: { path, scope, read: { value: content, phase: "ready", error: undefined }, content, baseline: content, saving: false, savedAt: undefined, meta },
     }));
   } catch (error) {
     filesStore.update((current) => ({
       ...current,
-      open: { path, scope, read: readFailed(error), content: "", baseline: "", saving: false, savedAt: undefined },
+      open: { path, scope, read: readFailed(error), content: "", baseline: "", saving: false, savedAt: undefined, meta: noFileMeta },
     }));
   }
 }
@@ -132,6 +152,38 @@ export async function moveFile(scope: FileScope, fromPath: string, toPath: strin
   filesStore.update((current) => (current.open?.path === fromPath ? { ...current, open: undefined } : current));
 }
 
+/** Puts the file's own bytes back, dropping what was typed since the last save. */
+export function revertOpenFile(): void {
+  filesStore.update((current) => (current.open === undefined ? current : { ...current, open: { ...current.open, content: current.open.baseline } }));
+}
+
+/**
+ * Writes a new, empty file.
+ *
+ * There is no folder endpoint on the workspace API; a directory arrives with the
+ * first file written inside it, because the write makes the path.
+ */
+export async function createFile(scope: FileScope, path: string): Promise<string | undefined> {
+  try {
+    await workspacesApi.writeWorkspaceFile(scope.projectId, scope.workspaceId, path, "", undefined, scope.machineId);
+    await readTree(scope, parentPath(path));
+    return undefined;
+  } catch (error) {
+    return readFailed(error).error ?? "The workspace did not answer.";
+  }
+}
+
+/** Uploads bytes to a path, the same write the file editor uses. */
+export async function uploadFile(scope: FileScope, path: string, bytes: Uint8Array): Promise<string | undefined> {
+  try {
+    await workspacesApi.writeWorkspaceFile(scope.projectId, scope.workspaceId, path, bytes, undefined, scope.machineId);
+    await readTree(scope, parentPath(path));
+    return undefined;
+  } catch (error) {
+    return readFailed(error).error ?? "The workspace did not answer.";
+  }
+}
+
 export function closeFile(): void {
   filesStore.update((current) => ({ ...current, open: undefined }));
 }
@@ -164,6 +216,15 @@ function nodesOf(answer: unknown): readonly FileNode[] {
     nodes.push({ name, path, directory });
   }
   return nodes.sort((a, b) => (a.directory === b.directory ? a.name.localeCompare(b.name) : a.directory ? -1 : 1));
+}
+
+function metaOf(answer: unknown): FileMeta {
+  if (!isRecord(answer)) return noFileMeta;
+  const size = typeof answer["size"] === "number" ? answer["size"] : undefined;
+  const modifiedAt = typeof answer["modifiedAt"] === "string" ? answer["modifiedAt"] : undefined;
+  const language = typeof answer["language"] === "string" ? answer["language"] : undefined;
+  const mimeType = typeof answer["mimeType"] === "string" ? answer["mimeType"] : undefined;
+  return { size, modifiedAt, language, mimeType, binary: answer["binary"] === true, truncated: answer["truncated"] === true };
 }
 
 function contentOf(answer: unknown): string | undefined {

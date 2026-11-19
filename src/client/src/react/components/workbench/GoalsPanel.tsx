@@ -1,3 +1,4 @@
+import "./goals.css";
 import { useEffect, useState, type ReactNode } from "react";
 import { isRecord } from "../../../../../shared/unknownValues";
 import { callPluginBackend, type PluginBackendScope } from "../../state/pluginBackend";

@@ -1,0 +1,369 @@
+/*
+ * The conversation column, as the reference draws it.
+ *
+ * The header states the session's title with the project beneath it in muted
+ * type; the transcript is a stack of one-width blocks (cards, messages, tool
+ * groups) inset from both edges; a user message is a card with its text in an
+ * inset panel, an assistant message is plain text under its role label; a tool
+ * group is a compact card of command rows with the duration on the right; the
+ * composer is a rounded field with the send control inside it, and a muted
+ * status strip sits under the composer.
+ *
+ * No number here is invented: each is a `--piw-*` token the reference measures.
+ */
+.piw-conversation__header {
+  gap: var(--pi-space-3);
+  height: var(--piw-header-height);
+  padding: 0 var(--piw-header-inset);
+  border-bottom: 1px solid var(--piw-border-card);
+}
+
+.piw-conversation__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.piw-conversation__title {
+  overflow: hidden;
+  font-size: var(--piw-size-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.piw-conversation__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+}
+
+.piw-conversation__project {
+  color: var(--piw-ink-secondary);
+}
+
+.piw-conversation__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+}
+
+.piw-conversation {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * The conversation body is the column between header and footer. Everything in
+ * it keeps its own height — notices, dialogs, collapsed cards — and the
+ * transcript takes the rest, so the composer stays at the bottom of the viewport
+ * instead of floating under a short transcript. Scrolling belongs to the
+ * transcript alone; a second scroller here would steal wheel events.
+ */
+.piw-conversation__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.piw-conversation__body > :not(.piw-transcript-wrap) {
+  flex: none;
+}
+
+.piw-transcript-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.piw-transcript {
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--piw-card-gap) var(--piw-chat-inset) var(--pi-space-6);
+  scrollbar-gutter: stable;
+}
+
+.piw-transcript__inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--piw-card-gap);
+  max-width: var(--piw-chat-measure);
+  margin-inline: auto;
+}
+
+.piw-transcript--wide .piw-transcript__inner {
+  max-width: none;
+}
+
+/* The collapsed transcript cards: subagents, background, edited files. */
+.piw-card {
+  overflow: hidden;
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-card-radius);
+  background: var(--piw-surface-card);
+}
+
+.piw-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-3);
+  width: 100%;
+  min-height: var(--piw-card-header-height);
+  padding: 0 var(--piw-card-inset);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.piw-card__header:hover {
+  background: var(--piw-surface-card-hover);
+}
+
+.piw-card__header:focus-visible {
+  outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring);
+  outline-offset: var(--pi-focus-ring-offset-inset);
+}
+
+.piw-card__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--piw-size-section);
+  font-weight: 600;
+}
+
+.piw-card__count {
+  color: var(--piw-ink-muted);
+  font-weight: 500;
+}
+
+.piw-card__meta {
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.piw-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pi-space-2);
+  padding: 0 var(--piw-card-inset) var(--piw-card-inset);
+  border-top: 1px solid var(--piw-border-card);
+}
+
+.piw-transcript-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--piw-card-gap);
+}
+
+/* Messages: a role label and a timestamp on one line, the body below. */
+.piw-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pi-space-3);
+}
+
+.piw-message__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-3);
+}
+
+.piw-message__role {
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-label);
+  font-weight: 600;
+  letter-spacing: var(--piw-tracking-label);
+  text-transform: uppercase;
+}
+
+.piw-message__time {
+  margin-inline-start: auto;
+  color: var(--piw-ink-faint);
+  font-size: var(--piw-size-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.piw-message__model,
+.piw-message__mark {
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+}
+
+.piw-message__spacer {
+  flex: 1;
+}
+
+.piw-message__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pi-space-3);
+  min-width: 0;
+  color: var(--piw-ink);
+  font-size: var(--piw-size-body);
+  line-height: var(--piw-leading-body);
+}
+
+.piw-message--user .piw-message__body {
+  padding: var(--piw-user-inset);
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-user-radius);
+  background: var(--piw-surface-card);
+}
+
+.piw-message__text {
+  min-width: 0;
+}
+
+.piw-message__note {
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+}
+
+.piw-message__image {
+  max-width: min(100%, 520px);
+  border-radius: var(--piw-row-radius);
+}
+
+.piw-message__drawn {
+  margin: 0;
+  padding: var(--pi-space-3);
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-row-radius);
+  background: var(--piw-surface-inset);
+  color: var(--piw-ink-secondary);
+  font-family: var(--pi-font-mono);
+  font-size: var(--piw-code-size);
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A thinking block reads as a quiet pill, not a card. */
+.piw-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+  align-self: flex-start;
+  padding: var(--pi-space-1) var(--pi-space-3);
+  border: 1px solid var(--piw-border-card);
+  border-radius: 999px;
+  background: var(--piw-surface-card);
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+}
+
+.piw-thinking__body {
+  align-self: stretch;
+  padding: var(--pi-space-3);
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-row-radius);
+  background: var(--piw-surface-inset);
+  color: var(--piw-ink-secondary);
+  font-size: var(--piw-size-meta);
+  white-space: pre-wrap;
+}
+
+/* Tool execution: the card, then command rows with the duration on the right. */
+.piw-tool-card__body {
+  gap: 0;
+  padding: 0 var(--piw-card-inset) var(--pi-space-2);
+}
+
+.piw-tool-row {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--piw-row-radius);
+}
+
+.piw-tool-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-3);
+  width: 100%;
+  min-height: var(--piw-row-height);
+  padding: 0 var(--pi-space-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.piw-tool-row__head:hover:not(:disabled) {
+  background: var(--piw-surface-card-hover);
+}
+
+.piw-tool-row__head:disabled {
+  color: inherit;
+}
+
+.piw-tool-row__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--piw-ink);
+  font-size: var(--piw-size-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.piw-tool-row__duration {
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.piw-tool-row__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pi-space-2);
+  padding: var(--pi-space-2) var(--pi-space-2) var(--pi-space-3);
+}
+
+.piw-tool-row__output {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--pi-space-3);
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-row-radius);
+  background: var(--piw-surface-inset);
+  color: var(--piw-ink-secondary);
+  font-family: var(--pi-font-mono);
+  font-size: var(--piw-code-size);
+  line-height: 1.5;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.piw-tool-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+}
+
+.piw-plugin-card {
+  margin-block: var(--pi-space-2) 0;
+  min-width: 0;
+}
+

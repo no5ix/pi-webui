@@ -31,11 +31,17 @@ panel's state.
 - `components/conversation` — the transcript (markdown, thinking, images, tool
   groups, skill rows, extension rows and notices, delivery marks), the conversation
   header (rename, abort, reload, archive, fork), and the scroll anchoring that keeps
-  the reader's position when older pages load.
+  the reader's position when older pages load. A session opened from a link is
+  titled by its first prompt, and the invitation to say the first thing appears
+  only once the machine has answered: while the transcript is opening,
+  reconnecting or failed, the transcript says that instead, because a transcript
+  that has not been read is not an empty one.
 - `components/composer` — the prompt editor, slash commands, shell `!` commands,
   file suggestions, attachments, drafts, queue/steer behaviour, the model and
   thinking chips, the context meter, and the footer's queued-prompt list.
 - `components/workbench` — Git, Files, Terminal and Goals over the chosen workspace.
+  The Files surface edits in the CodeMirror PI WEB already ships for the composer
+  (`filesCodeView.tsx`), so the machine's own language label selects the grammar.
 - `components/common` — the command palette, quick switcher, settings overlay,
   new-project dialog, access gate, toasts, context menus, dialogs.
 - `state/*` — small stores built on one `createStore` primitive. Each store wraps an
@@ -86,26 +92,38 @@ These are real, said plainly:
   workspace file authority and the nav surface; the React shell draws those columns
   itself and has not built the equivalents. Asking for one of those surfaces gets the
   answer in words — the plugin's page is in `?ui=legacy` — rather than a tab with
-  nothing behind it. The React workbench implements Git, Files, Terminal and
-  Goals directly, reading the same plugin backends (`git`, `goal`) and workspace
-  routes the panels read. The bridge forwards a plugin's
+  nothing behind it. The React workbench implements Git, Files, Terminal and Goals
+  directly, reading the same plugin backends (`git`, `goal`) and workspace routes
+  the panels read, and a plugin's panel contribution is not given a tab. The bridge forwards a plugin's
   `openPage` as a `pi-web-plugin-open-page` event and gives the registry no fleet
   source, so a plugin that reads the fleet sees no machines in the React shell.
-- **Git write operations are absent because PI WEB has no endpoint for them.** The
-  Git tab reads the branch, the changed files and a file's diff, and states that
-  staging, committing, pushing and discarding are not offered; the panel says so
-  rather than drawing controls that cannot be honoured.
+- **Git staging, committing, fetching, pulling, pushing and branch switching are
+  absent because PI WEB has no endpoint for them.** The Git tab reads the branch,
+  upstream and counts, the grouped changes, a file's diff, the commit history a page
+  at a time, and one commit's patch (a merge commit says so); it offers the one
+  repository write the Git plugin backend performs, `worktree-add`, as a real form.
+  The operations with no route are named in words rather than drawn as controls that
+  cannot be honoured.
 - **The Goals tab reads.** Goals and their TODOs are pi's, stored per workspace and
   read through the Goal plugin's backend; planning and marking are the agent's goal
   tools, not this panel.
-- **The Files tab is a plain editor, not the CodeMirror viewer.** Text is opened,
-  edited, saved (`⌘S`), renamed, deleted, uploaded (one file per request) and
-  refreshed. A file the machine does not send as text is said to be unread here.
-  The Files plugin's own preview modes, upload batching and watcher live in the
-  legacy shell.
-- **Terminal soft keys, pinch zoom and expanded-terminal gestures are not ported.**
-  The React tab is one xterm with one socket per visible terminal, tabs, rename,
-  close and status.
+- **The Files tab has no image preview, upload batching, file watcher, or split
+  view.** Text is opened in the CodeMirror editor with the grammar the machine names
+  (and plain text when it names none), edited, saved (`⌘S`), discarded, created,
+  renamed, deleted, uploaded (one file per request) and refreshed; a markdown file
+  can be read as rendered text; the path, size, modification time, language and a
+  partial-read badge are stated beside the file. A file the machine does not send as
+  text is said to be unread here. A read the machine sent only in part refuses to
+  save, because writing the fragment back would delete the rest of the file. The
+  Files plugin's own preview modes, upload batching and watcher live in the legacy
+  shell.
+- **Pinch zoom, split terminals and the plugin terminal panel's text-selection copy
+  surface are not ported.** The React tab is one xterm with one socket per visible
+  terminal, and the socket speaks the daemon's framed protocol: keystrokes leave as
+  `input` frames, the fitted size leaves as `resize` frames, and the machine's
+  `output`, `exit` and `error` frames are decoded rather than printed. Tabs, create,
+  rename, close, close-all, reconnect, a full-height mode, and a coarse-pointer key
+  row (Escape, `^C`, `^D`, Tab, arrows, Page Up/Down, Return) are wired.
 - **The quick switcher's unread marks are coarse** (a session is marked when the
   board records an unread completion for it); the per-tool counts the legacy shell
   shows are not carried.

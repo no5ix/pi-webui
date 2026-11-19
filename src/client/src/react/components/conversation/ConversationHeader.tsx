@@ -18,8 +18,22 @@ import { boardRuntime } from "../../state/board";
  */
 export interface ConversationHeaderProps {
   machineId: string;
+  /** The shell's layout: on a phone the header opens the rail and the workbench. */
+  layout: "three" | "two" | "phone";
+  onCommandPalette: () => void;
+  onOpenNavigation: () => void;
+  onOpenWorkbench: () => void;
   session: SessionRef | undefined;
   sessionInfo: SessionInfo | undefined;
+  /**
+   * The first thing the reader said in the transcript that is on screen.
+   *
+   * The board names a session it lists; a session opened straight from a URL —
+   * a shared link, a bookmark, a session whose project has not answered the
+   * board yet — has no board entry, and the transcript is the only name it has.
+   * Without this the header would say "No session open" above a full transcript.
+   */
+  transcriptTitle: string | undefined;
   projectName: string | undefined;
   status: SessionStatus | undefined;
   activity: SessionActivity | undefined;
@@ -34,7 +48,10 @@ export function ConversationHeader(props: ConversationHeaderProps): ReactNode {
   const [renaming, setRenaming] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const { session, machineId, status, activity } = props;
-  const title = props.sessionInfo?.name ?? props.sessionInfo?.firstMessage ?? "No session open";
+  const title = props.sessionInfo?.name
+    ?? props.sessionInfo?.firstMessage
+    ?? props.transcriptTitle
+    ?? (session === undefined ? "No session open" : `Session ${session.id.slice(0, 8)}`);
   const running = isSessionActive(status, activity);
   const words = activity?.label ?? (running ? "Working" : status === undefined ? "Unknown" : "Idle");
   const fail = (label: string) => (error: unknown) => {
@@ -43,16 +60,22 @@ export function ConversationHeader(props: ConversationHeaderProps): ReactNode {
 
   return (
     <header className="piw-panel__header piw-conversation__header">
+      {props.layout === "phone" ? (
+        <IconButton icon="panelLeft" label="Open the session rail" onClick={props.onOpenNavigation} />
+      ) : null}
       <div className="piw-conversation__heading">
         <h1 className="piw-conversation__title" title={title}>{title}</h1>
         <div className="piw-conversation__meta">
-          <span className={`piw-dot ${running ? "piw-dot--working" : ""}`} />
-          <span>{words}</span>
           {props.projectName === undefined ? null : <span className="piw-conversation__project">{props.projectName}</span>}
+          <span className="piw-conversation__status">
+            <span className={`piw-dot ${running ? "piw-dot--working" : ""}`} />
+            <span>{words}</span>
+          </span>
         </div>
       </div>
       <span className="piw-panel__spacer" />
       <span aria-live="polite" className="piw-visually-hidden">{notice ?? ""}</span>
+      <IconButton icon="activity" label="Commands" onClick={props.onCommandPalette} />
       {running && session !== undefined ? (
         <IconButton
           icon="square"
@@ -62,26 +85,12 @@ export function ConversationHeader(props: ConversationHeaderProps): ReactNode {
           }}
         />
       ) : null}
-      {session !== undefined ? (
-        <IconButton
-          icon="refresh"
-          label="Reload the session"
-          onClick={() => {
-            void sessionsApi.reloadSession(session, machineId).then(() => undefined, fail("Reload"));
-          }}
-        />
-      ) : null}
-      {props.sessionInfo !== undefined ? (
-        <IconButton icon="edit" label="Rename this session" onClick={() => { setRenaming(true); }} />
-      ) : null}
       <button aria-label="Session actions" className="piw-icon-button" onClick={() => { setMenuAnchor(more.current); }} ref={more} title="Session actions" type="button">
         <Icon label="" name="more" />
       </button>
-      <IconButton
-        icon={props.width === "wide" ? "panelRight" : "panelLeft"}
-        label={props.width === "wide" ? "Use the reading measure" : "Use the full width"}
-        onClick={props.onToggleWidth}
-      />
+      {props.layout === "phone" ? (
+        <IconButton icon="panelRight" label="Open the workbench" onClick={props.onOpenWorkbench} />
+      ) : null}
       <IconButton icon="gear" label="Settings" onClick={() => { props.onOpenSettings(); }} />
       <ContextMenu
         anchor={menuAnchor}
@@ -120,9 +129,18 @@ function sessionActions(
   };
   const items: ContextMenuItem[] = [
     { label: "Rename", icon: "edit", onSelect: onRename },
+    { label: "Reload the session", icon: "refresh", onSelect: run("Reload", () => sessionsApi.reloadSession(session, machineId)) },
+    {
+      label: props.width === "wide" ? "Use the reading measure" : "Use the full width",
+      icon: "layers",
+      onSelect: props.onToggleWidth,
+    },
     { label: "Copy session id", icon: "copy", onSelect: () => { void writeClipboardText(session.id); }},
     { label: "Copy working directory", icon: "copy", onSelect: () => { void writeClipboardText(session.cwd); }},
   ];
+  if (status?.isStreaming === true) {
+    items.push({ label: "Stop the running turn", icon: "square", onSelect: run("Stop", () => sessionsApi.abort(session, machineId)) });
+  }
   if (status?.queuedMessages.length !== undefined && status.queuedMessages.length > 0) {
     items.push({ label: "Clear queued prompts", icon: "queue", onSelect: run("Clear queue", () => sessionsApi.clearQueue(session, machineId)) });
   }

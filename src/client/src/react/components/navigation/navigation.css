@@ -1,13 +1,12 @@
 /*
-  The navigation rail's own measurements.
-
-  Everything that is a nav row, a section header, a dot, a field or a badge comes from
-  primitives.css and shell.css. This file only carries what is specific to the rail: the
-  two stacked sections and the divider between them, the indent that puts a session row
-  under its project row, the kebab button that appears where a pointer can hover, and the
-  tabular timestamp column.
-*/
-
+ * The session rail, as the reference draws it.
+ *
+ * Two sections, each a title with its count and a control at the right: Running
+ * Sessions, then Projects. A session row is a dot, a name, and an age on the right;
+ * a project row is a chevron, a folder, and a name; its sessions sit indented in
+ * muted type, and the selected row is a filled pill. "Show 5 more" is a row, not a
+ * button styled like a link. The rail scrolls; its headers do not move.
+ */
 .piw-navigation {
   display: flex;
   flex: 1;
@@ -15,143 +14,158 @@
   min-height: 0;
 }
 
-.piw-navigation__body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--piw-nav-group-gap);
-  min-height: 0;
-  padding-bottom: var(--pi-space-6);
-  overflow: auto;
-}
-
-.piw-navigation__divider {
-  flex: none;
-  height: 1px;
-  margin: 0 var(--piw-nav-inset);
-  background: var(--piw-divider);
-}
-
 .piw-navigation__search {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--pi-space-3);
-  padding: var(--pi-space-3) var(--piw-nav-inset);
+  padding: var(--pi-space-2) var(--piw-inset-column) var(--pi-space-3);
 }
 
-.piw-navigation__search .piw-field {
+.piw-navigation__search .piw-input {
   flex: 1;
-  min-width: 0;
-}
-
-.piw-navigation__search-icon {
-  flex: none;
-  color: var(--pi-dim);
 }
 
 .piw-navigation__list {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: var(--piw-nav-row-gap);
-  margin: 0;
-  padding: 0 var(--piw-nav-inset);
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--piw-inset-column) var(--pi-space-5);
   list-style: none;
+  margin: 0;
 }
 
-.piw-navigation__list--indented {
-  padding-left: calc(var(--piw-nav-inset) + var(--pi-space-6));
+.piw-navigation__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--piw-row-gap);
+}
+
+.piw-navigation__group + .piw-navigation__group {
+  margin-block-start: var(--pi-space-3);
+}
+
+.piw-navigation__section {
+  display: flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+  width: 100%;
+  min-height: var(--piw-section-header-height);
+  padding: 0 var(--pi-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--piw-ink);
+  font: inherit;
+  text-align: start;
+}
+
+.piw-navigation__section-title {
+  font-size: var(--piw-size-section);
+  font-weight: 600;
+}
+
+.piw-navigation__section .piw-section-header__count {
+  font-weight: 500;
+}
+
+.piw-navigation__kebab {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.piw-navigation__divider {
+  height: 1px;
+  margin: var(--pi-space-4) 0 var(--pi-space-3);
+  border: 0;
+  background: var(--piw-border-card);
 }
 
 .piw-navigation__row {
   display: flex;
   align-items: center;
-  gap: var(--pi-space-2);
-}
-
-.piw-navigation__row .piw-row:focus-visible {
-  outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring);
-  outline-offset: var(--pi-focus-ring-offset-tight);
-}
-
-.piw-navigation__kebab {
-  flex: none;
-  opacity: 0;
-}
-
-.piw-navigation__row:hover .piw-navigation__kebab,
-.piw-navigation__row:focus-within .piw-navigation__kebab {
-  opacity: 1;
-}
-
-@media (pointer: coarse) {
-  .piw-navigation__kebab {
-    opacity: 1;
-  }
-}
-
-.piw-navigation__status {
-  display: flex;
-  flex: none;
-  align-items: center;
   gap: var(--pi-space-3);
-  min-width: 0;
+  width: 100%;
+  min-height: var(--piw-row-height);
+  padding: 0 var(--pi-space-2);
+  border: 0;
+  border-radius: var(--piw-row-radius);
+  background: transparent;
+  color: var(--piw-ink-secondary);
+  font: inherit;
+  text-align: start;
 }
 
-.piw-navigation__time {
-  flex: none;
-  min-width: 3.5ch;
-  text-align: right;
-  font-size: var(--pi-text-2xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--pi-dim);
+.piw-navigation__row:hover {
+  background: var(--piw-surface-card-hover);
+  color: var(--piw-ink);
 }
 
-.piw-navigation__path {
-  flex: none;
-  max-width: 42%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--pi-text-2xs);
-  color: var(--pi-dim);
+.piw-navigation__row--selected {
+  background: var(--piw-surface-selected);
+  color: var(--piw-ink);
 }
 
-.piw-navigation__missing {
-  flex: none;
-  font-size: var(--pi-text-2xs);
-  color: var(--pi-danger);
+.piw-navigation__project {
+  color: var(--piw-ink);
+  font-weight: 500;
 }
 
 .piw-navigation__project-icon {
   flex: none;
-  color: var(--pi-muted);
+  color: var(--piw-ink-muted);
+}
+
+.piw-navigation__chevron {
+  flex: none;
+  color: var(--piw-ink-muted);
+  transition: transform var(--piw-motion-fast) var(--piw-ease);
+}
+
+.piw-navigation__chevron--open {
+  transform: rotate(90deg);
+}
+
+.piw-navigation__children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--piw-row-gap);
+  padding-inline-start: var(--piw-indent-child);
+  list-style: none;
+  margin: 0;
+}
+
+.piw-navigation__session .piw-navigation__path,
+.piw-navigation__time {
+  flex: none;
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.piw-navigation__status {
+  flex: none;
+}
+
+.piw-navigation__missing {
+  color: var(--piw-ink-faint);
+  font-size: var(--piw-size-label);
 }
 
 .piw-navigation__show-more {
-  justify-content: flex-start;
-  color: var(--pi-muted);
+  min-height: 30px;
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
 }
 
-.piw-navigation__notice {
-  display: flex;
-  align-items: center;
-  gap: var(--pi-space-3);
-  margin: 0 var(--piw-nav-inset);
-  padding: var(--pi-space-3) var(--pi-space-4);
-  border: 1px solid var(--pi-danger-border, var(--pi-danger));
-  border-radius: var(--piw-nav-row-radius);
-  font-size: var(--pi-text-xs);
-  color: var(--pi-text-secondary);
+.piw-navigation__show-more:hover {
+  color: var(--piw-ink);
+  background: transparent;
 }
 
 .piw-navigation__note {
-  margin: 0 var(--piw-nav-inset);
-  font-size: var(--pi-text-2xs);
-  color: var(--pi-dim);
-}
-
-.piw-navigation__skeleton {
-  margin: var(--pi-space-2) var(--piw-nav-inset) 0;
+  padding: var(--pi-space-3) var(--pi-space-2);
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
 }

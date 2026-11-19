@@ -1,365 +1,146 @@
-/* The workbench column: the tab bar and the four tool pages it hosts. */
-
+/*
+ * The workbench: the tab row and the frame every tab's body sits in.
+ *
+ * The reference's tab row is a strip of pills: an icon and a label, the selected
+ * pill filled with the theme's accent, a count badge on the pill that has
+ * something to report. Below it, one body fills the column, and each surface
+ * (Git, Files, Terminal, Goals, a plugin's panel) styles itself in its own file.
+ */
 .piw-workbench {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
 }
 
 .piw-workbench__tabs {
   display: flex;
   align-items: center;
+  gap: var(--piw-tab-gap);
   flex: none;
-  box-sizing: border-box;
-  gap: 4px;
-  height: 44px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--pi-border);
+  height: var(--piw-tab-row-height);
+  padding: 0 var(--piw-panel-inset);
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.piw-workbench__tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .piw-workbench__tabs .piw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pi-space-2);
   flex: none;
+  height: var(--piw-tab-height);
+  padding: 0 var(--pi-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--piw-tab-radius);
+  background: transparent;
+  color: var(--piw-ink-secondary);
+  font: inherit;
+  font-size: var(--piw-size-row);
+}
+
+.piw-workbench__tabs .piw-tab:hover {
+  background: var(--piw-surface-card-hover);
+  color: var(--piw-ink);
+}
+
+.piw-workbench__tabs .piw-tab--selected {
+  border-color: transparent;
+  background: var(--piw-accent-fill);
+  color: var(--piw-accent-ink);
+  font-weight: 600;
+}
+
+.piw-workbench__tabs .piw-tab--selected:hover {
+  background: var(--piw-accent-fill-hover);
+}
+
+.piw-workbench__tabs .piw-tab:focus-visible {
+  outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring);
+  outline-offset: var(--pi-focus-ring-offset-inset);
+}
+
+.piw-badge {
+  margin-inline-start: var(--pi-space-1);
 }
 
 .piw-workbench__body {
   display: flex;
-  flex-direction: column;
   flex: 1;
+  flex-direction: column;
+  box-sizing: border-box;
   min-height: 0;
+  padding: 0 var(--piw-panel-inset) var(--piw-panel-inset);
+  overflow: hidden;
 }
 
-.piw-workbench__scroller {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: var(--pi-space-5);
+.piw-workbench__body > .piw-panel__body {
+  padding: 0;
+}
+
+.piw-workbench__message {
+  padding: var(--pi-space-4) 0;
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
 }
 
 .piw-workbench__toolbar {
   display: flex;
   align-items: center;
-  gap: var(--pi-space-3);
-  padding: var(--pi-space-4) var(--pi-space-5);
+  gap: var(--pi-space-2);
+  flex: none;
+  min-height: var(--piw-field-height);
+  padding-block: var(--pi-space-2);
 }
 
-.piw-workbench__toolbar-spacer {
+.piw-workbench__toolbar .piw-input {
   flex: 1;
 }
 
-.piw-workbench__message {
-  padding: var(--pi-space-5);
-  color: var(--pi-text-secondary);
-  font-size: var(--pi-text-sm);
+.piw-section-header {
+  padding-inline: 0;
 }
 
-/* Git */
-
-.piw-git__meta {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--pi-space-3);
-  padding: 0 var(--pi-space-5) var(--pi-space-4);
-  color: var(--pi-text-secondary);
-  font-size: var(--pi-text-sm);
+.piw-workbench .piw-section-header {
+  padding-inline: 0;
 }
 
-.piw-git__files {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pi-space-2);
-  padding: 0 var(--pi-space-3);
-}
-
-.piw-git__row {
-  display: flex;
-  align-items: center;
-  gap: var(--pi-space-3);
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.piw-git__row-state {
-  flex: none;
-  color: var(--pi-text-secondary);
-  font-size: var(--pi-text-2xs);
-  text-transform: uppercase;
-  letter-spacing: var(--pi-tracking-label);
-}
-
-.piw-git__diff {
-  margin: 0;
-  padding: var(--pi-space-4) var(--pi-space-5);
-  overflow: auto;
-  font-family: var(--pi-font-mono);
-  font-size: var(--pi-text-xs);
-  line-height: var(--pi-leading-normal);
-  white-space: pre;
-}
-
-.piw-git__diff-line--added {
-  background: color-mix(in srgb, var(--pi-success) 18%, transparent);
-  color: var(--pi-success);
-}
-
-.piw-git__diff-line--removed {
-  background: color-mix(in srgb, var(--pi-danger) 18%, transparent);
-  color: var(--pi-danger);
-}
-
-.piw-git__diff-line--hunk {
-  color: var(--pi-accent);
-}
-
-.piw-git__diff-line--meta {
-  color: var(--pi-text-secondary);
-}
-
-/* Files */
-
-.piw-files__filter {
-  display: flex;
-  align-items: center;
-  flex: none;
-  gap: var(--pi-space-2);
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--pi-space-3);
-  border-bottom: 1px solid var(--pi-border);
-}
-
-.piw-files__filter-glyph {
-  flex: none;
-  color: var(--pi-muted);
-}
-
-.piw-files__filter-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--pi-text-bright);
-  font: inherit;
-  font-size: var(--pi-text-sm);
-}
-
-.piw-files__filter-input:focus-visible {
-  outline: var(--pi-focus-ring-width) solid var(--pi-focus-ring);
-  outline-offset: var(--pi-focus-ring-offset-tight);
-}
-
-.piw-files__level {
-  margin: 0;
-  padding: 0 0 0 var(--pi-space-4);
-  list-style: none;
-}
-
-.piw-files__level--root {
-  padding-left: var(--pi-space-2);
-}
-
-.piw-files__tree {
-  display: flex;
-  flex-direction: column;
-  padding: var(--pi-space-2) 0;
-}
-
-.piw-files__row {
-  display: flex;
-  align-items: center;
-  gap: var(--pi-space-2);
-  box-sizing: border-box;
-  width: 100%;
-  height: 27px;
-  border: 0;
-  background: transparent;
-  color: var(--pi-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.piw-files__row-button {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: var(--pi-space-2);
-  box-sizing: border-box;
-  min-width: 0;
-  height: 100%;
-  padding: 0 var(--pi-space-3);
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.piw-files__row:hover {
-  background: var(--pi-surface-hover);
-}
-
-.piw-files__row--selected {
-  background: var(--pi-selection-bg);
-  color: var(--pi-text-bright);
-}
-
-.piw-files__row-twisty {
+.piw-tab {
   display: inline-flex;
-  flex: none;
-  width: 14px;
-  justify-content: center;
-  color: var(--pi-muted);
+  align-items: center;
+  gap: var(--pi-space-2);
 }
 
-.piw-files__row-name {
+.piw-tab--selected {
+  background: var(--piw-surface-selected);
+}
+
+.piw-workbench__surface {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-card-radius);
+  background: var(--piw-surface-card);
   overflow: hidden;
-  font-family: var(--pi-font-mono);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.piw-files__surface {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  border-top: 1px solid var(--pi-border);
-}
-
-.piw-files__surface-header {
+.piw-workbench__surface-header {
   display: flex;
   align-items: center;
-  gap: var(--pi-space-3);
+  gap: var(--pi-space-2);
   flex: none;
-  padding: var(--pi-space-3) var(--pi-space-5);
-  color: var(--pi-text-secondary);
-  font-size: var(--pi-text-xs);
+  padding: var(--pi-space-3) var(--pi-space-3) var(--pi-space-2);
 }
 
-.piw-files__editor {
+.piw-workbench__surface-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-
-.piw-files__editor .cm-editor {
-  height: 100%;
-  font-size: var(--pi-text-sm);
-}
-
-.piw-files__editor .cm-scroller {
-  font-family: var(--pi-font-mono);
-}
-
-.piw-files__preview {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
-  padding: var(--pi-space-5);
-}
-
-.piw-files__preview-image {
-  max-width: 100%;
-  height: auto;
-}
-
-.piw-files__menu {
-  position: absolute;
-  z-index: var(--pi-layer-popover);
-}
-
-.piw-files__progress {
-  padding: var(--pi-space-3) var(--pi-space-5);
-  color: var(--pi-text-secondary);
-  font-size: var(--pi-text-xs);
-}
-
-/* Terminal */
-
-.piw-terminal__strip {
-  display: flex;
-  align-items: center;
-  flex: none;
-  gap: var(--pi-space-2);
-  padding: var(--pi-space-3) var(--pi-space-5);
-  overflow-x: auto;
-}
-
-.piw-terminal__host {
-  flex: 1;
-  min-height: 0;
-  padding: var(--pi-space-3) var(--pi-space-5);
-  background: var(--pi-terminal-bg);
-}
-
-.piw-terminal__host .xterm-screen {
-  outline: none;
-}
-
-.piw-terminal__host .xterm-viewport::-webkit-scrollbar {
-  width: 10px;
-}
-
-/* Goals */
-
-.piw-goals__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pi-space-2);
-  padding: 0 var(--pi-space-3);
-}
-
-.piw-goals__todos {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pi-space-2);
-  padding: var(--pi-space-3);
-}
-
-.piw-goals__todo {
-  display: flex;
-  align-items: baseline;
-  gap: var(--pi-space-3);
-}
-
-.piw-goals__todo-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.piw-goals__todo-meta {
-  flex: none;
-  color: var(--pi-muted);
-  font-size: var(--pi-text-2xs);
-}
-
-.piw-goals__status--running {
-  color: var(--pi-accent);
-}
-
-.piw-goals__status--done {
-  color: var(--pi-success);
-}
-
-.piw-goals__status--blocked {
-  color: var(--pi-danger);
-}
-
-.piw-goals__status--paused {
-  color: var(--pi-warning);
+  overscroll-behavior: contain;
 }

@@ -22,6 +22,12 @@ export interface TranscriptCardsProps {
   status: SessionStatus | undefined;
   open: Record<ConversationCard, boolean>;
   onToggle: (card: ConversationCard) => void;
+  /**
+   * Which end of the transcript these cards sit in. The reference puts Subagents
+   * above the first message and Background and Edited Files under the last, so the
+   * same component serves both ends and the counts are the machine's.
+   */
+  surface: "subagents" | "footer";
 }
 
 export function TranscriptCards(props: TranscriptCardsProps): ReactNode {
@@ -36,7 +42,7 @@ export function TranscriptCards(props: TranscriptCardsProps): ReactNode {
 
   return (
     <div className="piw-transcript-cards">
-      {children.length === 0 ? null : (
+      {props.surface !== "subagents" ? null : (
         <Card card="subagents" count={children.length} label="Subagents" onToggle={props.onToggle} open={props.open.subagents}>
           <ul className="piw-card__list">
             {children.map((child) => (
@@ -60,13 +66,13 @@ export function TranscriptCards(props: TranscriptCardsProps): ReactNode {
         </Card>
       )}
 
-      {backgroundCount === undefined || backgroundCount === 0 ? null : (
-        <Card card="background" count={backgroundCount} label="Background" onToggle={props.onToggle} open={props.open.background}>
+      {props.surface !== "footer" ? null : (
+        <Card card="background" count={backgroundCount ?? 0} label="Background" onToggle={props.onToggle} open={props.open.background}>
           <p className="piw-card__note">The machine reports {String(backgroundCount)} background {backgroundCount === 1 ? "run" : "runs"} for this session. It does not send their output on this channel; open the terminal to read them.</p>
         </Card>
       )}
 
-      {edited.length === 0 ? null : (
+      {props.surface !== "footer" ? null : (
         <Card card="editedFiles" count={edited.length} label="Edited Files" onToggle={props.onToggle} open={props.open.editedFiles}>
           <ul className="piw-card__list">
             {edited.map((file) => (

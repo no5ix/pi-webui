@@ -1,4 +1,5 @@
 import { terminalsApi } from "../../api/clients";
+import { isRecord } from "../../../../shared/unknownValues";
 import { createStore, idleRead, readFailed, useStoreSelect, type ReadState } from "./store";
 
 /**
@@ -91,3 +92,67 @@ export async function renameTerminal(scope: TerminalScope, terminalId: string, n
   await readTerminals(scope);
 }
 
+
+/**
+ * The terminal socket's frames, in both directions.
+ *
+ * The daemon's terminal socket is not a raw pty pipe: a client sends
+ * `{ type: "input", data }` and `{ type: "resize", cols, rows }`, and the
+ * machine answers `{ type: "output", data, replay }`, `{ type: "exit", exitCode }`
+ * and `{ type: "error", message }` (daemon/terminals/terminalRoutes.ts). Writing
+ * bytes straight into the socket types JSON into the shell, and printing the
+ * machine's frames straight into the terminal prints its control words as
+ * output, so both directions are coded here and tested.
+ */
+export type TerminalServerFrame =
+  | { readonly type: "output"; readonly data: string; readonly replay: boolean }
+  | { readonly type: "exit"; readonly exitCode: number | undefined }
+  | { readonly type: "error"; readonly message: string };
+
+const frameDecoder = new TextDecoder();
+
+function isView(value: unknown): value is ArrayBufferView {
+  return ArrayBuffer.isView(value);
+}
+
+export function terminalInputFrame(data: string): string {
+  return JSON.stringify({ type: "input", data });
+}
+
+export function terminalResizeFrame(cols: number, rows: number): string {
+  return JSON.stringify({ type: "resize", cols, rows });
+}
+
+/**
+ * Reads one machine frame.
+ *
+ * A frame that is not one the daemon sends is no frame: the panel keeps its
+ * connection words rather than writing a hole into the shell.
+ */
+export function parseTerminalServerFrame(raw: unknown): TerminalServerFrame | undefined {
+  const text = typeof raw === "string"
+    ? raw
+    : raw instanceof ArrayBuffer
+      ? frameDecoder.decode(new Uint8Array(raw))
+      : isView(raw)
+        ? frameDecoder.decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
+        : undefined;
+  if (text === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed)) return undefined;
+  if (parsed["type"] === "output" && typeof parsed["data"] === "string") {
+    return { type: "output", data: parsed["data"], replay: parsed["replay"] === true };
+  }
+  if (parsed["type"] === "exit") {
+    return { type: "exit", exitCode: typeof parsed["exitCode"] === "number" ? parsed["exitCode"] : undefined };
+  }
+  if (parsed["type"] === "error" && typeof parsed["message"] === "string") {
+    return { type: "error", message: parsed["message"] };
+  }
+  return undefined;
+}

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import {
-  DEFAULT_THEME_PREFERENCE,
+  CORE_MATERIAL_DARK_THEME_ID,
   NATIVE_THEME_PAIRS,
   THEME_STORAGE_KEY,
   applyNativeThemeById,
@@ -29,7 +29,13 @@ export interface ThemeState {
   readonly followsSystem: boolean;
 }
 
-const storedPreference = readStoredThemePreference() ?? DEFAULT_THEME_PREFERENCE;
+/*
+ * The reference workspace is the dark one, so a browser that has never chosen a
+ * theme starts on the app's native dark palette with "follow the system" off; a
+ * reader's stored choice - including a light theme, a plugin theme, or following
+ * the system - is honoured exactly as the app has always honoured it.
+ */
+const storedPreference = readStoredThemePreference() ?? { themeId: CORE_MATERIAL_DARK_THEME_ID, auto: false };
 
 export const themeStore = createStore<ThemeState>({
   preference: storedPreference,

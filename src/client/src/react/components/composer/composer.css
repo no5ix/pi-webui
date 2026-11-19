@@ -1,136 +1,121 @@
+/*
+ * The composer and the status strip under it, as the reference draws them.
+ *
+ * The composer is one rounded field inset from the column's edges, the send
+ * control inside its right end, and a muted strip under it that names the
+ * project, the model, the thinking level and what is live.
+ *
+ * The prompt surface is PI WEB's own element: it owns the draft, the mentions,
+ * the slash commands, the attachments, the queue and the send path, and it styles
+ * itself from the theme's custom properties. Custom properties inherit across a
+ * shadow boundary, so this file tunes the element by setting its own properties
+ * for this corner of the screen (`--pi-radius-*`, the control height, the
+ * surfaces) instead of reaching into its shadow DOM, and wraps it in the frame
+ * the reference measures.
+ */
+.piw-conversation__footer {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--pi-space-2);
+  padding: var(--pi-space-3) var(--piw-composer-inset) var(--pi-space-4);
+  border-top: 1px solid var(--piw-border-card);
+  background: var(--piw-surface-conversation);
+}
+
 .piw-composer {
-  flex: 0 0 auto;
-  padding: var(--pi-space-2) var(--pi-space-4) 0;
-  max-width: var(--piw-chat-measure, 820px);
+  --pi-radius-sm: var(--piw-row-radius);
+  --pi-radius-md: var(--piw-composer-radius);
+  --pi-radius-lg: var(--piw-composer-radius);
+  --pi-surface: var(--piw-surface-card);
+  --pi-surface-hover: var(--piw-surface-card-hover);
+  --pi-border-muted: var(--piw-border-card);
+  --pi-control-height-comfort: 34px;
+  --composer-surface: var(--piw-surface-card);
+  --composer-border: var(--piw-border-card);
+
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: var(--piw-composer-min-height);
+  padding: var(--pi-space-2);
+  border: 1px solid var(--piw-border-card);
+  border-radius: var(--piw-composer-radius);
+  background: var(--piw-surface-card);
+}
+
+.piw-composer:focus-within {
+  border-color: var(--piw-border-strong);
+}
+
+.piw-composer prompt-editor,
+.piw-composer [data-testid="prompt-editor"] > * {
+  display: block;
   width: 100%;
-  margin: 0 auto;
+  min-width: 0;
 }
 
 .piw-composer--empty {
-  padding: var(--pi-space-4);
+  min-height: var(--piw-composer-min-height);
 }
 
-prompt-editor,
-.piw-composer [data-testid="prompt-editor"] > * {
-  display: block;
-  min-height: 56px;
-}
-
+/* The status strip: project, model, thinking, live services. */
 .piw-footer {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--pi-space-2);
-  padding: var(--pi-space-2) var(--pi-space-4) var(--pi-space-3);
-  max-width: var(--piw-chat-measure, 820px);
-  width: 100%;
-  margin: 0 auto;
-  font: var(--pi-text-xs) var(--pi-font-ui);
-  color: var(--pi-muted);
+  gap: var(--pi-space-3);
+  min-height: var(--piw-footer-height);
+  color: var(--piw-ink-muted);
+  font-size: var(--piw-size-meta);
 }
 
 .piw-footer__spacer {
-  flex: 1 1 auto;
+  flex: 1;
+  min-width: 0;
 }
 
-.piw-footer button.piw-chip {
-  cursor: pointer;
+.piw-footer__pick,
+.piw-footer__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pi-space-2);
+  min-height: 28px;
+  padding: 0 var(--pi-space-2);
   border: 1px solid transparent;
+  border-radius: var(--piw-row-radius);
+  background: transparent;
+  color: var(--piw-ink-muted);
+  font: inherit;
+  font-size: var(--piw-size-meta);
 }
 
-.piw-footer button.piw-chip:hover {
-  border-color: var(--pi-border-muted);
+.piw-footer__pick:hover,
+.piw-footer__toggle:hover {
+  background: var(--piw-surface-card-hover);
+  color: var(--piw-ink);
 }
 
 .piw-footer__model {
-  max-width: 20ch;
+  max-width: 42ch;
   overflow: hidden;
+  font-family: var(--pi-font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .piw-footer__list {
-  list-style: none;
-  margin: var(--pi-space-2) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 46vh;
-  overflow: auto;
-}
-
-.piw-footer__pick {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--pi-space-2);
-  background: none;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  padding: 0;
-  cursor: pointer;
-}
-
-.piw-footer__toggle {
-  flex: 0 0 auto;
-  font: var(--pi-text-xs) var(--pi-font-ui);
-  color: var(--pi-muted);
-  background: none;
-  border: 1px solid var(--pi-border-muted);
-  border-radius: var(--pi-radius-sm);
-  padding: 2px var(--pi-space-2);
-  cursor: pointer;
-}
-
-.piw-meter {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pi-space-1);
-  font-variant-numeric: tabular-nums;
-}
-
-.piw-meter__track {
-  width: 48px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--pi-surface-raised);
-  overflow: hidden;
-}
-
-.piw-meter__fill {
-  display: block;
-  height: 100%;
-  background: var(--pi-accent);
-}
-
-.piw-queued {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--pi-space-2);
-  padding: var(--pi-space-2);
-  border: 1px solid var(--pi-border-muted);
-  border-radius: var(--pi-radius-md);
-  background: var(--pi-surface-panel);
-  max-width: var(--piw-chat-measure, 820px);
-  width: 100%;
-  margin: 0 auto var(--pi-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.piw-queued__item {
-  display: inline-flex;
-  gap: var(--pi-space-1);
-  font: var(--pi-text-sm) var(--pi-font-ui);
-  color: var(--pi-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40ch;
-}
-
-.piw-queued__kind {
-  color: var(--pi-muted);
+.piw-queued {
+  padding: 0 var(--pi-space-1);
 }

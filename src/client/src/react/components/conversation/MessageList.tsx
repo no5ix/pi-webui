@@ -22,6 +22,12 @@ export interface MessageListProps {
   sessionId: string;
   messages: readonly ChatLine[];
   streaming: boolean;
+  /**
+   * The stream's connection. An empty transcript while the transcript is still
+   * opening, reconnecting, or failed is not an empty conversation, so the
+   * "say something" invitation stays hidden until the machine has answered.
+   */
+  connection: "idle" | "opening" | "live" | "gap" | "closed" | "failed";
   hasOlder: boolean;
   hasNewer: boolean;
   loadingOlder: boolean;
@@ -31,6 +37,10 @@ export interface MessageListProps {
   onNewer: () => void;
   imagePathFor?: ((ref: DeferredImageRef) => string | undefined) | undefined;
   onInsertPrompt?: ((text: string) => void) | undefined;
+}
+
+function answered(connection: MessageListProps["connection"]): boolean {
+  return connection === "live" || connection === "gap" || connection === "closed";
 }
 
 const bottomThreshold = 64;
@@ -90,7 +100,7 @@ export function MessageList(props: MessageListProps): ReactNode {
         role="log"
       >
         {props.loadingOlder ? <div className="piw-skeleton piw-skeleton--row">Loading older messages…</div> : null}
-        {groups.length === 0 ? <div className="piw-empty">No messages yet. Say something below.</div> : null}
+        {groups.length === 0 && answered(props.connection) ? <div className="piw-empty">No messages yet. Say something below.</div> : null}
         {groups.map((group) => {
           if (group.kind === "group") {
             const key = `group-${String(group.startIndex)}-${keyOfGroup(group.messages[0], group.startIndex)}`;
