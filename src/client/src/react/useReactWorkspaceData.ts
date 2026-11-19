@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { workspacesApi, type FileContentResponse, type FileTreeEntry, type Project, type SessionInfo, type SessionStatus, type Workspace } from "../api";
+import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, workspacesApi, type FileContentResponse, type FileTreeEntry, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiSkillInfo } from "../api";
 import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
@@ -15,8 +15,6 @@ import type { GetState, SetState, UpdateUrl } from "../controllers/types";
 import { machineSessionKey } from "../machineKeys";
 import { saveDraft, loadDraft } from "../promptDraftStorage";
 import { operationKindOf, pageMaySend, writeOutgoingOperation } from "../composerWrites";
-import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
-import type { PromptAttachment } from "../api";
 import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
 import type { PromptAttachment } from "../api";
 
@@ -38,6 +36,19 @@ export interface ReactWorkspaceData {
   readonly sessionStatus: SessionStatus | undefined;
   readonly fileEntries: readonly FileTreeEntry[];
   readonly filePath: string;
+  readonly modelOptions: Awaited<ReturnType<typeof sessionsApi.models>> | undefined;
+  readonly thinkingOptions: Awaited<ReturnType<typeof sessionsApi.thinkingLevels>> | undefined;
+  readonly settings: { config?: PiWebConfigResponse; plugins?: PiWebPluginsResponse; packages?: PiPackagesResponse; skills?: PiSkillsResponse; mcp?: PiMcpListResponse; loading: boolean; error?: string; notice?: string };
+  readonly loadSettings: () => Promise<void>;
+  readonly saveSettings: (config: PiWebConfigResponse["config"]) => Promise<void>;
+  readonly setPluginEnabled: (id: string, enabled: boolean) => Promise<void>;
+  readonly installPackage: (source: string) => Promise<void>;
+  readonly updatePackage: (source?: string) => Promise<void>;
+  readonly removePackage: (source: string, scope: PiPackageScope) => Promise<void>;
+  readonly setSkillEnabled: (skill: PiSkillInfo, enabled: boolean) => Promise<void>;
+  readonly setMcpEnabled: (server: PiMcpServerInfo, enabled: boolean) => Promise<void>;
+  readonly testMcp: (server: PiMcpServerInfo) => Promise<void>;
+  readonly removeMcp: (server: PiMcpServerInfo) => Promise<void>;
   readonly selectedFile: FileContentResponse | undefined;
   readonly loading: boolean;
   readonly projectsError: string | undefined;
@@ -83,6 +94,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const runtimeRef = useRef<Runtime | undefined>(undefined);
   const [fileEntries, setFileEntries] = useState<readonly FileTreeEntry[]>([]);
   const [filePath, setFilePath] = useState("");
+  const [modelOptions, setModelOptions] = useState<Awaited<ReturnType<typeof sessionsApi.models>>>();
+  const [thinkingOptions, setThinkingOptions] = useState<Awaited<ReturnType<typeof sessionsApi.thinkingLevels>>>();
+  const [settings, setSettings] = useState<{ config?: PiWebConfigResponse; plugins?: PiWebPluginsResponse; packages?: PiPackagesResponse; skills?: PiSkillsResponse; mcp?: PiMcpListResponse; loading: boolean; error?: string; notice?: string }>({ loading: false });
   const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
   const [filesError, setFilesError] = useState<string>();
   const [draft, setDraftState] = useState("");
@@ -290,6 +304,110 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     await runtime.sessions.selectSession(session);
   }, [runtime]);
 
+
+  const loadSettings = useCallback(async () => {
+    const current = stateRef.current;
+    const machineId = current.selectedMachine?.id ?? "local";
+    setSettings(value => ({ ...value, loading: true, error: undefined, notice: undefined }));
+    const results = await Promise.allSettled([
+      configApi.config(machineId), pluginsApi.plugins(machineId), piPackagesApi.packages(machineId),
+      piSkillsApi.list(current.selectedProject?.id, machineId),
+      piMcpApi.list(current.selectedProject?.id, machineId),
+    ]);
+    setSettings({
+      config: results[0].status === "fulfilled" ? results[0].value : undefined,
+      plugins: results[1].status === "fulfilled" ? results[1].value : undefined,
+      packages: results[2].status === "fulfilled" ? results[2].value : undefined,
+      skills: results[3].status === "fulfilled" ? results[3].value : undefined,
+      mcp: results[4].status === "fulfilled" ? results[4].value : undefined,
+      loading: false,
+      error: results.some(result => result.status === "rejected")
+        ? results.filter((result): result is PromiseRejectedResult => result.status === "rejected").map(result => errorText(result.reason)).join("\n")
+        : undefined,
+    });
+  }, []);
+  const saveSettings = useCallback(async (config: PiWebConfigResponse["config"]) => {
+    const machineId = stateRef.current.selectedMachine?.id ?? "local";
+    const response = await configApi.saveConfig(config, machineId);
+    setSettings(value => ({ ...value, config: response, notice: "Settings saved. Some changes may require a PI WEB restart." }));
+  }, []);
+  const setPluginEnabled = useCallback(async (id: string, enabled: boolean) => {
+    const machineId = stateRef.current.selectedMachine?.id ?? "local";
+    const current = await configApi.config(machineId);
+    const plugins = { ...(current.config.plugins ?? {}), [id]: { ...(current.config.plugins?.[id] ?? {}), enabled } };
+    const config = await configApi.saveConfig({ ...current.config, plugins }, machineId);
+    const response = await pluginsApi.plugins(machineId);
+    setSettings(value => ({ ...value, config, plugins: response, notice: "Plugin preference saved. A server restart or reload may be required." }));
+  }, []);
+  const installPackage = useCallback(async (source: string) => {
+    const response = await piPackagesApi.install(source, stateRef.current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, packages: response, notice: response.requiresReload ? "Package installed. Reload sessions to activate it." : "Package installed." }));
+  }, []);
+  const updatePackage = useCallback(async (source?: string) => {
+    const response = await piPackagesApi.update(source, stateRef.current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, packages: response, notice: "Package update completed." }));
+  }, []);
+  const removePackage = useCallback(async (source: string, scope: PiPackageScope) => {
+    const response = await piPackagesApi.remove(source, scope, stateRef.current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, packages: response, notice: "Package removed." }));
+  }, []);
+  const setSkillEnabled = useCallback(async (skill: PiSkillInfo, enabled: boolean) => {
+    const current = stateRef.current;
+    const response = await piSkillsApi.setEnabled({
+      id: skill.id, name: skill.name, scope: skill.scope, enabled,
+      ...(skill.scope === "project" && current.selectedProject ? { projectId: current.selectedProject.id } : {}),
+    }, current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, skills: response, notice: response.requiresReload ? "Skill saved. Reload running sessions to apply it." : "Skill preference saved." }));
+  }, []);
+  const setMcpEnabled = useCallback(async (server: PiMcpServerInfo, enabled: boolean) => {
+    const current = stateRef.current;
+    const target = server.targets[0];
+    if (!target) throw new Error("This MCP server has no writable target.");
+    const response = await piMcpApi.setEnabled({
+      name: server.name, target: target.kind, enabled,
+      ...(target.kind === "override" && current.selectedProject ? { projectId: current.selectedProject.id } : {}),
+      scope: server.scope,
+    }, current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, mcp: response, notice: response.requiresReload ? "MCP configuration saved. Reload running sessions to apply it." : "MCP configuration saved." }));
+  }, []);
+  const testMcp = useCallback(async (server: PiMcpServerInfo) => {
+    const current = stateRef.current;
+    const response = await piMcpApi.test({ name: server.name, ...(current.selectedProject ? { projectId: current.selectedProject.id } : {}) }, current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, mcp: response, notice: response.probe?.message ?? "MCP probe completed." }));
+  }, []);
+  const removeMcp = useCallback(async (server: PiMcpServerInfo) => {
+    const current = stateRef.current;
+    const target = server.targets[0];
+    if (!target) throw new Error("This MCP server has no writable target.");
+    const response = await piMcpApi.remove({
+      name: server.name, target: target.kind,
+      ...(target.kind === "override" && current.selectedProject ? { projectId: current.selectedProject.id } : {}),
+      scope: server.scope,
+    }, current.selectedMachine?.id ?? "local");
+    setSettings(value => ({ ...value, mcp: response, notice: response.requiresReload ? "MCP entry removed. Reload running sessions to apply it." : "MCP entry removed." }));
+  }, []);
+
+
+  useEffect(() => {
+    const session = selectedSession;
+    if (session === undefined) {
+      setModelOptions(undefined);
+      setThinkingOptions(undefined);
+      return;
+    }
+    let active = true;
+    const machineId = state.selectedMachine?.id ?? "local";
+    void Promise.allSettled([
+      sessionsApi.models({ id: session.id, cwd: session.cwd }, machineId),
+      sessionsApi.thinkingLevels({ id: session.id, cwd: session.cwd }, machineId),
+    ]).then(([models, thinking]) => {
+      if (!active) return;
+      setModelOptions(models.status === "fulfilled" ? models.value : undefined);
+      setThinkingOptions(thinking.status === "fulfilled" ? thinking.value : undefined);
+    });
+    return () => { active = false; };
+  }, [selectedSession?.id, selectedSession?.cwd, state.selectedMachine?.id]);
+
   const loadDirectory = useCallback(async (path = "") => {
     const current = stateRef.current;
     const project = current.selectedProject;
@@ -444,6 +562,19 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     sessionStatus: state.status,
     fileEntries,
     filePath,
+    modelOptions,
+    thinkingOptions,
+    settings,
+    loadSettings,
+    saveSettings,
+    setPluginEnabled,
+    installPackage,
+    updatePackage,
+    removePackage,
+    setSkillEnabled,
+    setMcpEnabled,
+    testMcp,
+    removeMcp,
     loading: state.machinesLoad !== "loaded" || state.projectsLoad === "unloaded" || state.projectsLoad === "loading",
     projectsError,
     sessionError,
