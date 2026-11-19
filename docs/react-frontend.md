@@ -57,6 +57,57 @@ panel's state.
   and nav sections, transcript/tool/code-fence renderers, workspace panels, and the
   `showDialog` layer.
 
+## The subject: one answer for all three columns
+
+The URL names ids; the machine says what they mean, and the two arrive at
+different times. `state/subjectResolver.ts` decides the subject in one pure
+function over named states — `empty`, `loading`, `resolved`, `open-preferred`,
+`workspace-empty`, `asking`, `needs-locate`, `blocked` — and
+`state/subjectRuntime.ts` turns a decision into a plan (the next selection, the
+status to publish, whether to ask the machine where a session went) that a thin
+executor performs. The panels receive one subject, so the navigation row, the
+conversation header, the transcript, the composer and the four workbench tabs
+cannot disagree.
+
+The rules that follow from that shape:
+
+- **A selection is never discarded because a store is behind.** A session id the
+  shell has not been told about while the board is still answering is `loading`;
+  the transcript opens at the workspace the route points at and says what is
+  unknown. An empty list is never treated as a refusal, and a refusal is never
+  treated as an empty list.
+- **A workspace opens the session the reader was last in.** PI WEB opens a project
+  at its main workspace and that workspace at its preferred session — the one this
+  browser last read there, else the newest live one, skipping archived rows and
+  sessions whose folder is gone. The memory is per workspace path
+  (`state/selectionMemory.ts`), so a reload, a Back gesture, or returning from the
+  switcher opens the same session. Opening a project row chooses its main
+  workspace, and a fresh page with an empty URL opens the first open project's
+  main workspace and its preferred session, then writes the URL.
+- **A session no listing shows is asked for, machine-wide.** The route can name a
+  session whose project is closed, archived, or on another workspace. The shell
+  calls the machine's locate (`cwd: "/"`, the same call the legacy shell makes),
+  and a located session is placed at the workspace and project its folder belongs
+  to, so the URL, the navigation row and the workbench scopes follow it. A session
+  the machine reports gone is titled as gone; a locate that failed is titled as
+  failed with the machine's reason. A located session is kept, so the same session
+  is never located twice.
+- **The state is said in the surface that shows it.** The header titles a session
+  that is being looked for as being looked for; the workbench says the machine is
+  finding the workspace of this session while it is, and says a workspace is not
+  chosen only when that is the fact.
+- **The stream says what it is doing.** The transcript's connection is set live
+  when the session socket opens, and a socket that closed before it opened — a
+  stored session with no running runtime — is `closed`: the transcript on screen is
+  the machine's stored history, and the panel says so with the control that tries
+  again. A join that has not opened yet is given a moment before it is announced,
+  so a transcript that is joining is not labelled as a problem.
+
+`state/subjectResolver.test.ts` and `state/subjectRuntime.test.tsx` cover these
+states, including a deep link that only names a session, a workspace id the
+machine no longer uses, a board that refused, a session reported gone, and the
+URL a resolved subject writes.
+
 ## Plugin compatibility
 
 Plugin UI is Custom Elements, so the React shell hosts Custom Elements.

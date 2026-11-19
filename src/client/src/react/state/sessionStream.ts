@@ -117,9 +117,15 @@ class SessionStreamRuntime {
         this.socket.noteApplied(event.seq ?? 0);
       },
       onInitialOpen: () => {
+        // The socket is open: the stream is live from this moment, and a read that
+        // follows fills the history. Leaving the state at "opening" after a
+        // successful join made the panel announce a stream that was still starting
+        // above a transcript that was already on screen and updating.
+        streamStore.update((current) => ({ ...current, connection: "live" }));
         void this.read(generation, "join");
       },
       onReconnect: () => {
+        streamStore.update((current) => ({ ...current, connection: "live" }));
         void this.resync(generation);
       },
       onGap: (lastSeen) => {
@@ -128,7 +134,16 @@ class SessionStreamRuntime {
       },
       onDisconnect: () => {
         if (this.key !== key) return;
-        streamStore.update((current) => ({ ...current, connection: current.connection === "live" ? "gap" : current.connection }));
+        // A stream that was open and fell over is a gap: frames were missed and
+        // the resync repairs them. A stream that closed before it opened — a
+        // stored session with no running runtime, a daemon that hung up — is
+        // closed: the transcript on screen is the machine's stored history, and
+        // leaving the state at "opening" announced a stream that was never
+        // starting over a transcript that was already readable.
+        streamStore.update((current) => ({
+          ...current,
+          connection: current.connection === "live" ? "gap" : current.connection === "opening" ? "closed" : current.connection,
+        }));
       },
       onQuiet: () => {
         void this.resync(generation);

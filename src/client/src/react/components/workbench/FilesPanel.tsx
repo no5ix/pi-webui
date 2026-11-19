@@ -154,7 +154,22 @@ export function FilesPanel(props: FilesPanelProps): ReactNode {
           )}
           <div className="piw-files__tree">
             {root === undefined || root.phase === "loading" ? <p className="piw-empty">Reading the workspace…</p> : null}
-            {root?.phase === "failed" ? <p className="piw-empty">{`The file tree did not answer: ${root.error ?? "no reason given"}`}</p> : null}
+            {root?.phase === "failed" ? (
+              <div className="piw-files__failed" role="alert">
+                <p className="piw-empty">{`The file tree did not answer: ${root.error ?? "no reason given"}`}</p>
+                <button
+                  className="piw-button"
+                  disabled={props.scope === undefined}
+                  onClick={() => {
+                    const scope = props.scope;
+                    if (scope !== undefined) void readTree(scope, "");
+                  }}
+                  type="button"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : null}
             {root?.phase === "ready" ? (
               <FileLevel
                 depth={0}

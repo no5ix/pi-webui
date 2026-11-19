@@ -1,11 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { DESKTOP_SIDE_BY_SIDE_MEDIA_QUERY, PHONE_LAYOUT_MEDIA_QUERY } from "../../breakpoints";
-import type { Project, SessionInfo, SessionRef, Workspace } from "../../../../shared/apiTypes";
+import type { SessionInfo, SessionRef, Workspace } from "../../../../shared/apiTypes";
 import { useBoard, useBoardMachine } from "../state/board";
 import { usePanels, usePanelPersistence, setPanelWidth, setPanelCollapsed, togglePanel, selectWorkbenchTab, openLayer, closeLayer, type ResizablePanelSide } from "../state/panels";
 import { useProjects, readProjects } from "../state/projectsStore";
 import { sessionLabel } from "../../sessionLabels";
 import { selectSession, useSelection } from "../state/selection";
+import { mergeWorkspaces } from "../state/workspaces";
+import { lastSessionMemory } from "../state/selectionMemory";
+import { subjectOf, workspaceOfSession, type Subject, type SubjectFacts } from "../state/subjectResolver";
+import { useSubjectResolution } from "../state/subjectRuntime";
 import { useSessionStreamSession } from "../state/sessionStream";
 import { useThemeSystemFollow } from "../state/theme";
 import { useSelectionUrl } from "../state/selection";
@@ -44,13 +48,8 @@ import { useShellShortcuts } from "../state/shellShortcuts";
  */
 export type ShellLayout = "three" | "two" | "phone";
 
-export interface Subject {
-  machineId: string;
-  project: Project | undefined;
-  workspace: Workspace | undefined;
-  session: SessionRef | undefined;
-  sessionInfo: SessionInfo | undefined;
-}
+/** The subject type lives with the resolver that computes it. */
+export type { Subject };
 
 export function AppShell(): ReactNode {
   const board = useBoard();
@@ -89,21 +88,37 @@ export function AppShell(): ReactNode {
     if (layout === "phone") setPanelCollapsed("navigation", true);
   }, [layout]);
 
-  const subject = useMemo<Subject>(() => resolveSubject(board, projects.projects, selected), [board, projects.projects, selected]);
+  const workspaces = useMemo(() => mergeWorkspaces(board.board?.workspaces ?? [], projects.workspacesByProject), [board.board, projects.workspacesByProject]);
+  const facts = useMemo<SubjectFacts>(() => {
+    const selectedWorkspace = workspaces.find((workspace) => workspace.id === selected.workspaceId);
+    return {
+      machineId: selected.machineId,
+      selection: selected,
+      sessions: board.board?.sessions ?? [],
+      workspaces,
+      projects: projects.projects,
+      boardPhase: board.phase,
+      projectsPhase: projects.read.phase,
+      rememberedSessionId: selectedWorkspace === undefined ? undefined : lastSessionMemory.latestSessionId(selectedWorkspace.path),
+    };
+  }, [board, projects, selected, workspaces]);
+  useSubjectResolution(facts);
+  const subject = useMemo<Subject>(() => subjectOf(facts), [facts]);
   useSessionStreamSession(subject.session, selected.machineId);
 
   const grid = useMemo(() => gridTemplate(panels, layout), [panels, layout]);
   const columnsStyle: CSSProperties & Record<string, string> = { "--piw-columns-template": grid };
 
-  const onNavigate = useCallback((session: SessionInfo, workspace: Workspace): void => {
+  const onNavigate = useCallback((session: SessionInfo, workspace: Workspace | undefined): void => {
+    const listed = workspace ?? workspaceOfSession(workspaces, session);
     selectSession({
       machineId: selected.machineId,
-      projectId: workspace.projectId,
-      workspaceId: workspace.id,
+      projectId: listed?.projectId,
+      workspaceId: listed?.id,
       sessionId: session.id,
     });
     if (layout === "phone") setLayer("none");
-  }, [layout, selected.machineId]);
+  }, [board.board, layout, projects.workspacesByProject, selected.machineId, workspaces]);
 
   useShellShortcuts({
     onCommandPalette: () => { setLayer("palette"); },
@@ -304,33 +319,4 @@ function gridTemplate(panels: { navigationCollapsed: boolean; navigationWidth: n
   const navigation = panels.navigationCollapsed ? [] : [`${String(panels.navigationWidth)}px`, "7px"];
   const workbench = panels.workbenchCollapsed ? [] : ["7px", `${String(panels.workbenchWidth)}px`];
   return [...navigation, "minmax(0, 1fr)", ...workbench].join(" ");
-}
-
-/**
- * The URL names a session; the board says where it lives. A session the board
- * has is opened at its own workspace, and a selection that named a project
- * opens that project's main workspace, so a bookmark and a click land on the
- * same subject.
- */
-export function resolveSubject(board: ReturnType<typeof useBoard>, projects: readonly Project[], selected: ReturnType<typeof useSelection>): Subject {
-  const sessions = board.board?.sessions ?? [];
-  const workspaces = board.board?.workspaces ?? [];
-  const sessionInfo = selected.sessionId === undefined ? undefined : sessions.find((session) => session.id === selected.sessionId);
-  const sessionWorkspace = sessionInfo === undefined ? undefined : workspaces.find((workspace) => workspace.path === sessionInfo.cwd);
-  const project = projects.find((candidate) => candidate.id === selected.projectId);
-  const workspace =
-    workspaces.find((candidate) => candidate.id === selected.workspaceId)
-    ?? sessionWorkspace
-    ?? workspaces.find((candidate) => candidate.projectId === selected.projectId && candidate.isMain)
-    ?? workspaces.find((candidate) => candidate.projectId === selected.projectId);
-  const session: SessionRef | undefined = sessionInfo === undefined
-    ? (selected.sessionId === undefined || selected.sessionId === "" ? undefined : { id: selected.sessionId, cwd: workspace?.path ?? "" })
-    : { id: sessionInfo.id, cwd: sessionInfo.cwd };
-  return {
-    machineId: selected.machineId,
-    project: project ?? (workspace === undefined ? undefined : projects.find((candidate) => candidate.id === workspace.projectId)),
-    workspace,
-    session,
-    sessionInfo,
-  };
 }

@@ -37,12 +37,7 @@ export const selection: Store<Selection> = createStore<Selection>(
   selectionFromUrl({ machineId: localMachineId, projectId: undefined, workspaceId: undefined, sessionId: undefined }),
 );
 
-export function selectSession(next: {
-  machineId?: string;
-  projectId?: string;
-  workspaceId?: string;
-  sessionId?: string;
-}): void {
+export function selectSession(next: Partial<Selection>): void {
   selection.update((current) => ({
     machineId: next.machineId ?? current.machineId,
     projectId: next.projectId ?? current.projectId,

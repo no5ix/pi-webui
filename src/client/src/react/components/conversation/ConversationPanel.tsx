@@ -1,9 +1,10 @@
 import "./conversation.css";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { sessionsApi } from "../../../api";
 import type { ChatLine } from "../../../components/shared";
 import type { ExtensionDialogAnswer, Project, SessionInfo, SessionRef, Workspace, DeferredImageRef } from "../../../../../shared/apiTypes";
 import { useSessionStream, useSessionStreamSession, streamRuntime } from "../../state/sessionStream";
+import { useSubjectStatus } from "../../state/subjectRuntime";
 import { registerShellCommands } from "../../state/shellCommands";
 import { isCardOpen, toggleCard, useConversation, setTranscriptWidth } from "../../state/conversationStore";
 import { LitBoundary } from "../common/LitBoundary";
@@ -42,6 +43,7 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
   const conversation = useConversation();
   const { session, sessionInfo, workspace, project } = props.subject;
   const [dismissed, setDismissed] = useState<Record<string, true>>({});
+  const subjectStatus = useSubjectStatus();
   useSessionStreamSession(session, props.machineId);
 
   const streaming = stream.status !== undefined && (stream.status.isStreaming || stream.status.isCompacting);
@@ -68,6 +70,8 @@ export function ConversationPanel(props: ConversationPanelProps): ReactNode {
         session={session}
         sessionInfo={sessionInfo}
         status={stream.status}
+        subjectReason={subjectStatus.reason}
+        subjectState={subjectStatus.state}
         transcriptTitle={transcriptTitle(stream.messages)}
         width={conversation.width}
       />
@@ -210,9 +214,35 @@ function QueuedPrompts({ machineId, queued, session }: { machineId: string; queu
   );
 }
 
+/**
+ * The stream's own state, where a join that has not opened yet is normal for a
+ * moment. The notice waits for "opening" to have persisted before it speaks, so
+ * a transcript that is joining is not labelled as a problem, and a join that is
+ * stuck says so with the control that tries again.
+ */
+const openingGraceMs = 2000;
+
 function ConnectionNotice({ connection, error, onRetry }: { connection: string; error: string | undefined; onRetry: () => void }): ReactNode {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const sinceRef = useRef(Date.now());
+  useEffect(() => {
+    sinceRef.current = Date.now();
+    setNowMs(Date.now());
+  }, [connection]);
+  useEffect(() => {
+    if (connection !== "opening") return;
+    const tick = window.setInterval(() => { setNowMs(Date.now()); }, 500);
+    return () => { window.clearInterval(tick); };
+  }, [connection]);
   if (connection === "live" || connection === "idle") return null;
-  const words = connection === "gap" ? "The transcript stream fell behind" : connection === "failed" ? "The transcript stream failed" : `The transcript stream is ${connection}`;
+  if (connection === "opening" && nowMs - sinceRef.current < openingGraceMs) return null;
+  const words = connection === "gap"
+    ? "The transcript stream fell behind"
+    : connection === "failed"
+      ? "The transcript stream failed"
+      : connection === "closed"
+        ? "The transcript stream is closed: the transcript below is the machine's stored history"
+        : `The transcript stream is ${connection}`;
   return (
     <div className="piw-notice piw-notice--warning" role="status">
       <span className="piw-notice__text">{`${words}${error === undefined ? "" : `: ${error}`}`}</span>

@@ -6,6 +6,8 @@ import { useProjects, readProjects, readWorkspaces, closeProject } from "../../s
 import { useSelection, selectSession } from "../../state/selection";
 import { registerShellCommands } from "../../state/shellCommands";
 import { useNavigation, usePins, readPins, toggleProjectExpanded, expandProjects, collapseAllProjects, raiseSessionCap, setSearchText, toggleShowArchived } from "../../state/navStore";
+import { mergeWorkspaces } from "../../state/workspaces";
+import { workspaceOfSession } from "../../state/subjectResolver";
 import { IconButton } from "../common/icons";
 import { ContextMenu, type ContextMenuItem } from "../common/ContextMenu";
 import { LitBoundary } from "../common/LitBoundary";
@@ -25,7 +27,12 @@ import "./navigation.css";
  */
 export interface NavigationPanelProps {
   machineId: string;
-  onNavigate: (session: SessionInfo, workspace: Workspace) => void;
+  /**
+   * Open a session row. The workspace is the row's own when the machine lists
+   * one for it; a session with no listing (a pin whose project was closed) is
+   * handed over by id alone and the shell asks the machine where it lives.
+   */
+  onNavigate: (session: SessionInfo, workspace: Workspace | undefined) => void;
   onNewProject: () => void;
   onQuickSwitcher: () => void;
 }
@@ -121,7 +128,7 @@ export function NavigationPanel(props: NavigationPanelProps): ReactNode {
   }, [groups, props, startSession]);
 
   const openRow = (session: SessionInfo, workspace: Workspace | undefined): void => {
-    props.onNavigate(session, workspace ?? fallbackWorkspace(session, workspaces));
+    props.onNavigate(session, workspace ?? workspaceOfSession(workspaces, session));
   };
 
   return (
@@ -185,7 +192,14 @@ export function NavigationPanel(props: NavigationPanelProps): ReactNode {
                   onMenu={(anchor) => { setMenu({ anchor, items: projectMenu(group.project, group.workspaces, group.pinned, navigation.showArchived, props.machineId, { startSession, rename: setRenamingProject, refresh: refreshAll, toggleArchived: toggleShowArchived }) }); }}
                   onToggle={() => {
                     toggleProjectExpanded(group.project.id);
-                    if (!expanded) void readWorkspaces(group.project.id, props.machineId).catch(() => undefined);
+                    if (!expanded) {
+                      void readWorkspaces(group.project.id, props.machineId).catch(() => undefined);
+                      // Opening a project chooses its main workspace, and the subject resolver opens
+                      // that workspace's preferred session: the one this browser last read there,
+                      // else the newest live one. This is how PI WEB has always opened a project.
+                      const main = group.workspaces.find((workspace) => workspace.isMain) ?? group.workspaces[0];
+                      selectSession({ projectId: group.project.id, workspaceId: main?.id });
+                    }
                   }}
                   pinned={group.pinned}
                   project={group.project}
@@ -316,28 +330,3 @@ function projectMenu(project: Project, workspaces: readonly Workspace[], pinned:
 async function refreshAll(machineId: string): Promise<void> {
   await Promise.all([readProjects(machineId), readPins(machineId), boardRuntime.read({ force: true })]);
 }
-
-function mergeWorkspaces(boardWorkspaces: readonly Workspace[], byProject: ReadonlyMap<string, readonly Workspace[]>): Workspace[] {
-  const merged = new Map<string, Workspace>();
-  for (const workspace of boardWorkspaces) merged.set(workspace.id, workspace);
-  for (const workspaces of byProject.values()) {
-    for (const workspace of workspaces) {
-      if (!merged.has(workspace.id)) merged.set(workspace.id, workspace);
-    }
-  }
-  return [...merged.values()];
-}
-
-function fallbackWorkspace(session: SessionInfo, workspaces: readonly Workspace[]): Workspace {
-  const match = workspaces.find((workspace) => workspace.path === session.cwd);
-  if (match !== undefined) return match;
-  return {
-    id: session.cwd,
-    projectId: "",
-    path: session.cwd,
-    label: session.cwd.split("/").pop() ?? session.cwd,
-    isMain: true,
-    effectiveConfig: {},
-  };
-}
-

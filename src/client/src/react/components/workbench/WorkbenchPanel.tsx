@@ -4,6 +4,7 @@ import { setWorkbenchTab, usePanels, type WorkbenchTab } from "../../state/panel
 import { useGit, readGitStatus, type GitScope } from "../../state/gitStore";
 import { Icon, type IconName } from "../common/icons";
 import { GitPanel } from "./GitPanel";
+import { useSubjectStatus, type SubjectStatus } from "../../state/subjectRuntime";
 import { GoalsPanel } from "./GoalsPanel";
 
 /**
@@ -44,6 +45,7 @@ const tabs: readonly { tab: WorkbenchTab; label: string; icon: IconName; chord: 
 export function WorkbenchPanel(props: WorkbenchPanelProps): ReactNode {
   const panels = usePanels();
   const git = useGit();
+  const subjectStatus = useSubjectStatus();
   const { project, workspace } = props.subject;
   const scope = project === undefined || workspace === undefined ? undefined : { machineId: props.machineId, projectId: project.id, workspaceId: workspace.id };
 
@@ -98,7 +100,7 @@ export function WorkbenchPanel(props: WorkbenchPanelProps): ReactNode {
 
       <div className="piw-workbench__body" id="workspace-panel-body" role="tabpanel" tabIndex={0}>
         {scope === undefined ? (
-          <p className="piw-empty">{workspace === undefined ? "No workspace is chosen. The workbench acts on a workspace." : "The project of this workspace is unknown."}</p>
+          <p className="piw-empty">{workbenchScopeWords(workspace, subjectStatus.state, subjectStatus.reason)}</p>
         ) : panels.workbenchTab === "git" ? (
           <GitPanel scope={scope} />
         ) : panels.workbenchTab === "files" ? (
@@ -120,3 +122,22 @@ export function WorkbenchPanel(props: WorkbenchPanelProps): ReactNode {
 }
 
 export type { GitScope };
+
+/**
+ * Why the workbench has nothing to act on, in words the reader can use.
+ *
+ * The four tabs act on one workspace, so a missing scope is said once. The
+ * shell's subject state decides the sentence: a workspace the machine has not
+ * named yet is being looked for, a workspace no selection names is not chosen,
+ * and a refusal is named as a refusal.
+ */
+function workbenchScopeWords(workspace: Workspace | undefined, state: SubjectStatus["state"], reason: string | undefined): string {
+  if (workspace === undefined) {
+    if (state === "locating" || state === "asking" || state === "loading") return "The machine is finding the workspace of this session…";
+    if (state === "missing") return "This session has no workspace to act on: it is not in the machine's list.";
+    if (state === "failed") return reason === undefined ? "The machine could not find the workspace of this session." : `The machine could not find the workspace of this session: ${reason}`;
+    if (state === "blocked") return reason === undefined ? "The machine refused the board, so no workspace is known." : `The machine refused the board: ${reason}`;
+    return "No workspace is chosen. The workbench acts on a workspace.";
+  }
+  return "The project of this workspace is unknown.";
+}

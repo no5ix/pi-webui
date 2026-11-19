@@ -226,3 +226,10 @@
   align-items: flex-start;
   justify-content: flex-start;
 }
+
+.piw-files__failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pi-space-2);
+  padding: var(--pi-space-2) 0;
+}

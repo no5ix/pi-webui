@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { sessionsApi } from "../../../api";
 import { isSessionActive } from "../../../../../shared/activity";
 import type { SessionActivity, SessionInfo, SessionRef, SessionStatus } from "../../../../../shared/apiTypes";
+import type { SubjectStatus } from "../../state/subjectRuntime";
 import { Icon, IconButton } from "../common/icons";
 import { ContextMenu, type ContextMenuItem } from "../common/ContextMenu";
 import { LitBoundary } from "../common/LitBoundary";
@@ -34,6 +35,14 @@ export interface ConversationHeaderProps {
    * Without this the header would say "No session open" above a full transcript.
    */
   transcriptTitle: string | undefined;
+  /**
+   * What the shell knows about the subject: a session the machine has not named
+   * yet is titled as being looked for, and one the machine says is gone is
+   * titled as gone. The header never calls an unanswered session "No session
+   * open", because that reads as an empty conversation.
+   */
+  subjectState: SubjectStatus["state"];
+  subjectReason: string | undefined;
   projectName: string | undefined;
   status: SessionStatus | undefined;
   activity: SessionActivity | undefined;
@@ -48,7 +57,8 @@ export function ConversationHeader(props: ConversationHeaderProps): ReactNode {
   const [renaming, setRenaming] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const { session, machineId, status, activity } = props;
-  const title = props.sessionInfo?.name
+  const title = subjectStateTitle(props.subjectState, props.subjectReason)
+    ?? props.sessionInfo?.name
     ?? props.sessionInfo?.firstMessage
     ?? props.transcriptTitle
     ?? (session === undefined ? "No session open" : `Session ${session.id.slice(0, 8)}`);
@@ -164,4 +174,21 @@ async function rename(props: ConversationHeaderProps, name: string, close: () =>
   } catch (error) {
     notify(`Rename: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/**
+ * The title a subject state earns, or nothing when the state needs no words.
+ *
+ * `loading` and `resolved` are ordinary: the transcript and the board say more
+ * than a title can. `asking`, `locating`, `missing`, `failed` and `blocked` are
+ * the machine not having answered, having not found it, or refusing, and each is
+ * named as itself.
+ */
+function subjectStateTitle(state: SubjectStatus["state"], reason: string | undefined): string | undefined {
+  if (state === "locating") return "Looking for this session…";
+  if (state === "asking") return "Opening this session…";
+  if (state === "missing") return "This session is not in the machine's list";
+  if (state === "failed") return reason === undefined ? "The machine could not find this session" : `The machine could not find this session: ${reason}`;
+  if (state === "blocked") return reason === undefined ? "The machine refused the board" : `The machine refused the board: ${reason}`;
+  return undefined;
 }
