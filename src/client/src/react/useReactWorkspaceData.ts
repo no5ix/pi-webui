@@ -39,7 +39,7 @@ export interface ReactWorkspaceData {
   readonly modelOptions: Awaited<ReturnType<typeof sessionsApi.models>> | undefined;
   readonly modelCatalog: SessionModelCatalogResponse | undefined;
   readonly thinkingOptions: Awaited<ReturnType<typeof sessionsApi.thinkingLevels>> | undefined;
-  readonly settings: { config?: PiWebConfigResponse; plugins?: PiWebPluginsResponse; packages?: PiPackagesResponse; skills?: PiSkillsResponse; mcp?: PiMcpListResponse; loading: boolean; error?: string; notice?: string };
+  readonly settings: { config?: PiWebConfigResponse | undefined; plugins?: PiWebPluginsResponse | undefined; packages?: PiPackagesResponse | undefined; skills?: PiSkillsResponse | undefined; mcp?: PiMcpListResponse | undefined; loading: boolean; error?: string | undefined; notice?: string | undefined };
   readonly loadSettings: () => Promise<void>;
   readonly saveSettings: (config: PiWebConfigResponse["config"]) => Promise<void>;
   readonly setPluginEnabled: (id: string, enabled: boolean) => Promise<void>;
@@ -70,7 +70,7 @@ export interface ReactWorkspaceData {
   readonly runCommand: (text: string) => Promise<void>;
 }
 
-type Runtime = {
+interface Runtime {
   getState: GetState;
   setState: SetState;
   projects: ProjectController;
@@ -78,7 +78,7 @@ type Runtime = {
   machines: MachineController;
   sessions: SessionController;
   boards: SessionBoardController;
-};
+}
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -98,7 +98,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [modelOptions, setModelOptions] = useState<Awaited<ReturnType<typeof sessionsApi.models>>>();
   const [modelCatalog, setModelCatalog] = useState<SessionModelCatalogResponse>();
   const [thinkingOptions, setThinkingOptions] = useState<Awaited<ReturnType<typeof sessionsApi.thinkingLevels>>>();
-  const [settings, setSettings] = useState<{ config?: PiWebConfigResponse; plugins?: PiWebPluginsResponse; packages?: PiPackagesResponse; skills?: PiSkillsResponse; mcp?: PiMcpListResponse; loading: boolean; error?: string; notice?: string }>({ loading: false });
+  const [settings, setSettings] = useState<ReactWorkspaceData["settings"]>({ loading: false });
   const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
   const [filesError, setFilesError] = useState<string>();
   const [draft, setDraftState] = useState("");
@@ -107,13 +107,14 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
 
   if (runtimeRef.current === undefined) {
     const getState: GetState = () => stateRef.current;
-    let workspaceController: WorkspaceController | undefined;
+    const workspaceControllerRef: { current: WorkspaceController | undefined } = { current: undefined };
+    const projectControllerRef: { current: ProjectController | undefined } = { current: undefined };
     const setStatePatch: SetState = (patch) => {
       const previous = stateRef.current;
       const next = { ...previous, ...patch };
       stateRef.current = next;
       setReactState(next);
-      if (previous.selectedProject?.id !== next.selectedProject?.id) workspaceController?.selectionChanged();
+      if (previous.selectedProject?.id !== next.selectedProject?.id) workspaceControllerRef.current?.selectionChanged();
     };
     const updateUrl: UpdateUrl = (options) => {
       const current = readRoute();
@@ -127,7 +128,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
         view: current.view,
       }, options);
     };
-    let projectController: ProjectController | undefined;
     const sessionController = new SessionController(
       getState,
       setStatePatch,
@@ -136,12 +136,12 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       {
         urlSessionId: () => readRoute().sessionId,
         catalogue: {
-          projects: (machineId, wanted) => projectController?.answeredProjects(machineId, wanted) ?? Promise.resolve(undefined),
-          workspaces: (machineId, projectId, wanted) => workspaceController?.answeredWorkspaces(machineId, projectId, wanted) ?? Promise.resolve(undefined),
+          projects: (machineId, wanted) => projectControllerRef.current?.answeredProjects(machineId, wanted) ?? Promise.resolve(undefined),
+          workspaces: (machineId, projectId, wanted) => workspaceControllerRef.current?.answeredWorkspaces(machineId, projectId, wanted) ?? Promise.resolve(undefined),
         },
       },
     );
-    workspaceController = new WorkspaceController(
+    const workspaceController = new WorkspaceController(
       getState,
       setStatePatch,
       updateUrl,
@@ -149,7 +149,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       new SessionStorageWorkspaceSelectionMemory(),
       { opensPreferredSession: () => true },
     );
-    projectController = new ProjectController(getState, setStatePatch, workspaceController);
+    workspaceControllerRef.current = workspaceController;
+    const projectController = new ProjectController(getState, setStatePatch, workspaceController);
+    projectControllerRef.current = projectController;
     const machineController = new MachineController(getState, setStatePatch, updateUrl, projectController);
     const boardController = new SessionBoardController({
       knownProjects: (machineId) => machineId === (getState().selectedMachine?.id ?? "local") && getState().projectsLoad === "loaded" ? getState().projects : undefined,
@@ -343,7 +345,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   }, []);
   const installPackage = useCallback(async (source: string) => {
     const response = await piPackagesApi.install(source, stateRef.current.selectedMachine?.id ?? "local");
-    setSettings(value => ({ ...value, packages: response, notice: response.requiresReload ? "Package installed. Reload sessions to activate it." : "Package installed." }));
+    setSettings(value => ({ ...value, packages: response, notice: response.requiresReload === true ? "Package installed. Reload sessions to activate it." : "Package installed." }));
   }, []);
   const updatePackage = useCallback(async (source?: string) => {
     const response = await piPackagesApi.update(source, stateRef.current.selectedMachine?.id ?? "local");
@@ -571,6 +573,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     modelCatalog,
     thinkingOptions,
     settings,
+    selectedFile,
     loadSettings,
     saveSettings,
     setPluginEnabled,

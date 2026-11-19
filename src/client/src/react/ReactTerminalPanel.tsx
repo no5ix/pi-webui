@@ -14,6 +14,13 @@ function messageText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function terminalFrameText(data: unknown): Promise<string> {
+  if (typeof data === "string") return data;
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  if (data instanceof Blob) return data.text();
+  return String(data);
+}
+
 export function ReactTerminalPanel({ workspace, machineId }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
@@ -103,32 +110,18 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
     const fit = fitRef.current;
     if (output === null || fit === null) return;
     socketRef.current?.close();
-    socketRef.current = undefined;
+    socketRef.current = null;
     output.reset();
     output.writeln("\x1b[90mConnecting to " + terminal.name + "…\x1b[0m");
     const size = fit.proposeDimensions();
     const socket = sessions.connect(terminal.id, size ? { cols: size.cols, rows: size.rows } : undefined);
+    socket.binaryType = "arraybuffer";
     socketRef.current = socket;
     socket.addEventListener("open", () => {
       output.writeln("\x1b[90mConnected.\x1b[0m");
     });
     socket.addEventListener("message", event => {
-      try {
-        const frame: unknown = JSON.parse(String(event.data));
-        if (typeof frame !== "object" || frame === null) return;
-        const type = Reflect.get(frame, "type");
-        if (type === "output" && typeof Reflect.get(frame, "data") === "string") {
-          output.write(String(Reflect.get(frame, "data")));
-        } else if (type === "exit") {
-          const code = Reflect.get(frame, "exitCode");
-          output.writeln("\r\n\x1b[90mProcess exited" + (typeof code === "number" ? " (" + code + ")" : "") + ".\x1b[0m");
-          void refresh(terminal.id);
-        } else if (type === "error" && typeof Reflect.get(frame, "message") === "string") {
-          output.writeln("\r\n\x1b[31m" + String(Reflect.get(frame, "message")) + "\x1b[0m");
-        }
-      } catch {
-        output.writeln("\r\n\x1b[31mReceived an invalid terminal frame.\x1b[0m");
-      }
+      void handleTerminalFrame(event.data, output, terminal, refresh);
     });
     socket.addEventListener("close", () => {
       if (socketRef.current === socket) output.writeln("\r\n\x1b[90mTerminal connection closed.\x1b[0m");
@@ -138,12 +131,32 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
     });
   }, [sessions, refresh]);
 
+  const handleTerminalFrame = async (data: unknown, output: XTerm, terminal: TerminalInfo, refreshList: (preferId?: string) => Promise<void>) => {
+      try {
+        const frame: unknown = JSON.parse(await terminalFrameText(data));
+        if (typeof frame !== "object" || frame === null) return;
+        const type = Reflect.get(frame, "type");
+        if (type === "output" && typeof Reflect.get(frame, "data") === "string") {
+          output.write(String(Reflect.get(frame, "data")));
+        } else if (type === "exit") {
+          const code = Reflect.get(frame, "exitCode");
+          output.writeln("\r\n\x1b[90mProcess exited" + (typeof code === "number" ? " (" + code + ")" : "") + ".\x1b[0m");
+          void refreshList(terminal.id);
+        } else if (type === "error" && typeof Reflect.get(frame, "message") === "string") {
+          output.writeln("\r\n\x1b[31m" + String(Reflect.get(frame, "message")) + "\x1b[0m");
+        }
+      } catch {
+        output.writeln("\r\n\x1b[31mReceived an invalid terminal frame.\x1b[0m");
+      }
+  };
+
+
   useEffect(() => {
     const selected = terminals.find(item => item.id === selectedId);
     if (selected !== undefined) connect(selected);
     else {
       socketRef.current?.close();
-      socketRef.current = undefined;
+      socketRef.current = null;
       terminalRef.current?.reset();
     }
   }, [selectedId, terminals, connect]);

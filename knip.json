@@ -4,6 +4,7 @@
     "src/cli.ts",
     "src/plugin-api.ts",
     "src/server-plugin-api.ts",
+    "src/client/src/react/ReactWorkspaceApp.tsx",
     "extensions/pi-web.ts",
     "pi-web-plugins/**/pi-web-plugin.ts",
     "pi-web-plugins/**/server-plugin.ts",
@@ -11,6 +12,7 @@
   ],
   "project": [
     "src/**/*.ts",
+    "src/**/*.tsx",
     "extensions/**/*.ts",
     "pi-web-plugins/**/*.ts"
   ],

@@ -1,71 +1,46 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { capturePromptAttachments, type CapturedAttachment } from "../promptAttachmentCapture";
 import { readBlobAsBase64 } from "../sentImages";
+import { filesApi, requestPluginBackend, sessionsApi } from "../api";
+import { readPluginManifest } from "../plugins/external";
+import { detectPromptCompletionTrigger, fileCompletionInsertText, modelCompletionChoices, asksExtensionCompletion } from "../promptCompletions";
+import { historyIndexStep, loadPromptHistory, recallPromptHistoryAttachments, rememberPromptHistory, type HistoryDirection } from "../promptHistory";
+import { machineSessionKey } from "../machineKeys";
+import { MOBILE_NAVIGATION_MEDIA_QUERY } from "../breakpoints";
+import type { CompletionItem } from "../components/shared";
+import { GIT_DIFF_OPERATION, GIT_STATUS_OPERATION, parseGitDiffResponse, parseGitStatusResponse, type GitDiffResponse, type GitStatusResponse } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
+import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
 
 type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals" | "Settings";
 const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals", "Settings"];
-function displayMessage(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (typeof value !== "object" || value === null) return JSON.stringify(value);
-  const parts = Reflect.get(value, "parts");
-  if (Array.isArray(parts)) {
-    return parts.map(part => {
-      if (typeof part !== "object" || part === null) return "";
-      const type = Reflect.get(part, "type");
-      if (type === "text" || type === "thinking") return String(Reflect.get(part, "text") ?? "");
-      if (type === "toolCall") return "\n[" + String(Reflect.get(part, "toolName") ?? "Tool") + "] " + String(Reflect.get(part, "summary") ?? "");
-      if (type === "toolResult") return String(Reflect.get(part, "text") ?? "");
-      if (type === "image") return "[Image attachment]";
-      if (type === "skillInvocation") return String(Reflect.get(part, "content") ?? "");
-      if (type === "extensionNotice") return String(Reflect.get(part, "text") ?? "");
-      return "";
-    }).filter(Boolean).join("\n");
-  }
-  const content = Reflect.get(value, "content");
-  if (typeof content === "string") return content;
-  const text = Reflect.get(value, "text");
-  return typeof text === "string" ? text : JSON.stringify(value);
-}
-function displayRole(value: unknown): "user" | "assistant" | "system" {
-  if (typeof value === "object" && value !== null) {
-    const role = Reflect.get(value, "role");
-    if (role === "user" || role === "assistant" || role === "system") return role;
-  }
-  return "assistant";
-}
-function displayTime(value: unknown): string {
-  if (typeof value === "object" && value !== null) {
-    const meta = Reflect.get(value, "meta");
-    if (typeof meta === "object" && meta !== null) {
-      const timestamp = Reflect.get(meta, "timestamp");
-      if (typeof timestamp === "string") return timestamp;
-    }
-    const timestamp = Reflect.get(value, "timestamp");
-    if (typeof timestamp === "string") return timestamp;
-  }
-  return "";
-}
 export function ReactWorkspaceApp() {
   const data = useReactWorkspaceData();
+  const narrowScreen = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches;
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("Files");
   const [projectQuery, setProjectQuery] = useState("");
-  const [leftWidth, setLeftWidth] = useState(280);
-  const [rightWidth, setRightWidth] = useState(390);
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
+  const [leftWidth, setLeftWidth] = useState(327);
+  const [rightWidth, setRightWidth] = useState(402);
+  const [leftOpen, setLeftOpen] = useState(!narrowScreen);
+  const [rightOpen, setRightOpen] = useState(!narrowScreen);
   const [expanded, setExpanded] = useState<string[]>([]);
   const [showMoreByProject, setShowMoreByProject] = useState<Record<string, boolean>>({});
   const [composerFocused, setComposerFocused] = useState(false);
+  const [composerCursor, setComposerCursor] = useState(0);
+  const [completionItems, setCompletionItems] = useState<CompletionItem[]>([]);
+  const [completionIndex, setCompletionIndex] = useState(0);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const promptHistoryRef = useRef<{ key: string | undefined; index: number | undefined; draft: string }>({ key: undefined, index: undefined, draft: "" });
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
   const [fileFilter, setFileFilter] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<CapturedAttachment[]>([]);
+  const historyRecallRef = useRef(0);
   const [attachmentError, setAttachmentError] = useState<string>();
   const [attaching, setAttaching] = useState(false);
   const [fileDraft, setFileDraft] = useState("");
@@ -74,6 +49,12 @@ export function ReactWorkspaceApp() {
   const [packageSource, setPackageSource] = useState("");
   const [settingsNotice, setSettingsNotice] = useState<string>();
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [gitRefresh, setGitRefresh] = useState(0);
+  const [gitStatus, setGitStatus] = useState<GitStatusResponse>();
+  const [gitSelectedPath, setGitSelectedPath] = useState<string>();
+  const [gitDiffs, setGitDiffs] = useState<{ path: string; unstaged?: GitDiffResponse; staged?: GitDiffResponse }>();
+  const [gitError, setGitError] = useState<string>();
+  const [gitLoading, setGitLoading] = useState(false);
   const projectRows = data.projects.map(row => ({
     id: row.project.id,
     name: row.project.name,
@@ -106,21 +87,100 @@ export function ReactWorkspaceApp() {
     try {
       const sent = await data.sendPrompt(text, attachments);
       if (!sent) setSendError("The message could not be saved. Your draft has been kept.");
+      else if (promptHistoryKey !== undefined) {
+        rememberPromptHistory(promptHistoryKey, text, attachments);
+        promptHistoryRef.current = { key: promptHistoryKey, index: undefined, draft: "" };
+        setCompletionItems([]);
+      }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : String(error));
     } finally {
       setSending(false);
     }
   };
+  const browsePromptHistory = (direction: HistoryDirection): boolean => {
+    const key = promptHistoryKey;
+    const input = composerRef.current;
+    if (key === undefined || input === null) return false;
+    const history = loadPromptHistory(key);
+    if (history.length === 0) return false;
+    const current = promptHistoryRef.current;
+    if (current.key !== key) promptHistoryRef.current = { key, index: undefined, draft: data.draft };
+    const state = promptHistoryRef.current;
+    if (state.index === undefined) {
+      if (direction !== "older" || input.selectionStart !== data.draft.length || data.draft.trim() !== "") return false;
+      state.draft = data.draft;
+      state.index = 0;
+    } else {
+      const nextIndex = state.index + historyIndexStep(direction);
+      if (nextIndex < 0) {
+        historyRecallRef.current += 1;
+        state.index = undefined;
+        data.setDraft(state.draft);
+        setAttachments([]);
+        setAttachmentError(undefined);
+        setComposerCursor(state.draft.length);
+        return true;
+      }
+      if (nextIndex >= history.length) {
+        historyRecallRef.current += 1;
+        state.index = undefined;
+        data.setDraft(state.draft);
+        setAttachments([]);
+        setAttachmentError(undefined);
+        setComposerCursor(state.draft.length);
+        return true;
+      }
+      state.index = nextIndex;
+    }
+    const next = history[state.index]?.text ?? state.draft;
+    const entry = history[state.index];
+    data.setDraft(next);
+    if (entry !== undefined && key !== undefined) {
+      const request = ++historyRecallRef.current;
+      void recallPromptHistoryAttachments(key, entry).then(result => {
+        if (request !== historyRecallRef.current || promptHistoryRef.current.key !== key || promptHistoryRef.current.index !== state.index) return;
+        setAttachments(result.attachments);
+        setAttachmentError(result.shortfall === undefined ? undefined : `${result.shortfall.missing} attachment${result.shortfall.missing === 1 ? " is" : "s are"} no longer available.`);
+      });
+    }
+    setComposerCursor(next.length);
+    return true;
+  };
+  const pickCompletion = async (item: CompletionItem) => {
+    setCompletionItems([]);
+    const session = data.selectedSession;
+    const machineId = data.state.selectedMachine?.id ?? "local";
+    if (item.extension !== undefined) {
+      if (session === undefined || data.draft !== item.extension.text) return;
+      try {
+        const applied = await sessionsApi.applyExtensionCompletion({ id: session.id, cwd: session.cwd }, item.extension, machineId);
+        if (data.selectedSession?.id !== session.id || data.draft !== item.extension.text) return;
+        data.setDraft(applied.text);
+        setComposerCursor(applied.cursor);
+        requestAnimationFrame(() => { composerRef.current?.focus(); composerRef.current?.setSelectionRange(applied.cursor, applied.cursor); });
+      } catch (error) {
+        setSendError(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
+    const suffix = item.kind === "file" && item.insertText.endsWith("/") ? "" : " ";
+    const replaceTo = item.insertText.endsWith('"') && data.draft.slice(item.replaceTo).startsWith('"') ? item.replaceTo + 1 : item.replaceTo;
+    const next = `${data.draft.slice(0, item.replaceFrom)}${item.insertText}${suffix}${data.draft.slice(replaceTo)}`;
+    const cursor = item.replaceFrom + item.insertText.length + suffix.length;
+    data.setDraft(next);
+    setComposerCursor(cursor);
+    requestAnimationFrame(() => { composerRef.current?.focus(); composerRef.current?.setSelectionRange(cursor, cursor); });
+  };
   const activeActivities = Object.values(data.state.sessionActivities).filter(activity => activity.phase === "active" && activity.startup !== true);
   const backgroundCount = data.sessionStatus?.backgroundRunCount ?? 0;
   const queuedCount = data.sessionStatus?.queuedMessages.length ?? 0;
-  const [modelProvider, setModelProvider] = useState("");
-  const [modelId, setModelId] = useState("");
   const model = data.sessionStatus?.model;
-  const modelLabel = model === undefined ? "Model unavailable" : [model.provider, model.name ?? model.id].filter(Boolean).join(" / ");
   const contextUsage = data.sessionStatus?.contextUsage;
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
+  const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
+  const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
+  const subagentExecutions = useMemo(() => data.messages.flatMap(message => message.parts).filter((part): part is Extract<typeof part, { type: "toolExecution" | "toolCall" }> => (part.type === "toolExecution" || part.type === "toolCall") && part.toolName.toLowerCase().includes("subagent")), [data.messages]);
   useEffect(() => {
     if (data.selectedFile !== undefined) {
       setFileDraft(data.selectedFile.content);
@@ -130,6 +190,127 @@ export function ReactWorkspaceApp() {
       setFileDirty(false);
     }
   }, [data.selectedFile?.path, data.selectedFile?.modifiedAt]);
+
+  useEffect(() => {
+    const workspace = data.selectedWorkspace;
+    const machineId = data.state.selectedMachine?.id ?? "local";
+    if (activeTab !== "Git") return;
+    if (workspace === undefined) {
+      setGitStatus(undefined);
+      setGitDiffs(undefined);
+      setGitSelectedPath(undefined);
+      setGitError(undefined);
+      setGitLoading(false);
+      return;
+    }
+    let active = true;
+    setGitLoading(true);
+    setGitError(undefined);
+    setGitStatus(undefined);
+    setGitDiffs(undefined);
+    setGitSelectedPath(undefined);
+    const manifestPath = machineId === "local" ? "pi-web-plugins/manifest.json" : `api/machines/${encodeURIComponent(machineId)}/pi-web-plugins/manifest.json`;
+    void readPluginManifest(manifestPath).then(async manifest => {
+      const pluginId = workspace.provider?.pluginId;
+      const backendRevision = manifest?.plugins.find(plugin => plugin.id === pluginId)?.backendRevision;
+      if (pluginId === undefined || backendRevision === undefined || workspace.provider?.capabilities.request !== true) throw new Error("This workspace does not provide a Git backend.");
+      const target = { pluginId, backendRevision, machineId, projectId: workspace.projectId, workspaceId: workspace.id };
+      const response = parseGitStatusResponse(await requestPluginBackend(target, GIT_STATUS_OPERATION, null));
+      if (!active) return;
+      setGitStatus(response);
+      setGitSelectedPath(response.files[0]?.path);
+    }).catch(error => {
+      if (active) setGitError(error instanceof Error ? error.message : String(error));
+    }).finally(() => {
+      if (active) setGitLoading(false);
+    });
+    return () => { active = false; };
+  }, [activeTab, data.selectedWorkspace?.id, data.selectedWorkspace?.provider?.pluginId, data.selectedWorkspace?.provider?.capabilities.request, data.state.selectedMachine?.id, gitRefresh]);
+
+  useEffect(() => {
+    const workspace = data.selectedWorkspace;
+    const path = gitSelectedPath;
+    const machineId = data.state.selectedMachine?.id ?? "local";
+    if (activeTab !== "Git" || workspace === undefined || path === undefined) return;
+    let active = true;
+    const manifestPath = machineId === "local" ? "pi-web-plugins/manifest.json" : `api/machines/${encodeURIComponent(machineId)}/pi-web-plugins/manifest.json`;
+    void readPluginManifest(manifestPath).then(async manifest => {
+      const pluginId = workspace.provider?.pluginId;
+      const backendRevision = manifest?.plugins.find(plugin => plugin.id === pluginId)?.backendRevision;
+      if (pluginId === undefined || backendRevision === undefined || workspace.provider?.capabilities.request !== true) return;
+      const target = { pluginId, backendRevision, machineId, projectId: workspace.projectId, workspaceId: workspace.id };
+      const [unstaged, staged] = await Promise.all([
+        requestPluginBackend(target, GIT_DIFF_OPERATION, { path }).then(parseGitDiffResponse),
+        requestPluginBackend(target, GIT_DIFF_OPERATION, { path, staged: true }).then(parseGitDiffResponse),
+      ]);
+      if (active) setGitDiffs({ path, unstaged, staged });
+    }).catch(error => {
+      if (active) setGitError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { active = false; };
+  }, [activeTab, data.selectedWorkspace?.id, data.selectedWorkspace?.provider?.pluginId, data.selectedWorkspace?.provider?.capabilities.request, data.state.selectedMachine?.id, gitSelectedPath]);
+
+  useEffect(() => {
+    promptHistoryRef.current = { key: promptHistoryKey, index: undefined, draft: data.draft };
+  }, [data.selectedSession?.id, data.state.selectedMachine?.id]);
+
+  useEffect(() => {
+    const session = data.selectedSession;
+    const text = data.draft;
+    const cursor = Math.min(composerCursor, text.length);
+    const trigger = detectPromptCompletionTrigger(text, cursor);
+    const triggerCharacters = data.sessionStatus?.extensionUi?.completion?.triggerCharacters;
+    const extensionEligible = session !== undefined && triggerCharacters !== undefined && asksExtensionCompletion(text, cursor, triggerCharacters);
+    if (trigger === undefined && !extensionEligible) {
+      setCompletionItems([]);
+      setCompletionIndex(0);
+      return;
+    }
+    if (session === undefined) return;
+    let active = true;
+    const machineId = data.state.selectedMachine?.id ?? "local";
+    const ownCompletions = async (): Promise<CompletionItem[]> => {
+      if (trigger === undefined) return [];
+      if (trigger.kind === "command") {
+        const commands = await sessionsApi.commands({ id: session.id, cwd: session.cwd }, machineId);
+        return commands.filter(command => command.name.toLowerCase().includes(trigger.query.toLowerCase())).slice(0, 12).map(command => ({
+          kind: "command", replaceFrom: trigger.from, replaceTo: trigger.to, insertText: `/${command.name}`, detail: command.source,
+          ...(command.description === undefined ? {} : { description: command.description }),
+          ...(command.argumentHint === undefined ? {} : { argumentHint: command.argumentHint }),
+        }));
+      }
+      if (trigger.kind === "file" && data.selectedProject !== undefined && data.selectedWorkspace !== undefined) {
+        const files = await filesApi.files(trigger.query, { scope: trigger.fileScope, machineId, projectId: data.selectedProject.id, workspaceId: data.selectedWorkspace.id });
+        return files.slice(0, 12).map(file => ({
+          kind: "file", replaceFrom: trigger.from, replaceTo: trigger.to,
+          insertText: fileCompletionInsertText(file.path, trigger.quoted === true, file.path.endsWith("/") ? trigger.allPrefix : undefined), detail: file.kind,
+        }));
+      }
+      const models = await sessionsApi.models({ id: session.id, cwd: session.cwd }, machineId);
+      return modelCompletionChoices(models.models, trigger.query).map(choice => ({ kind: "model", replaceFrom: trigger.from, replaceTo: cursor, ...choice }));
+    };
+    void (async () => {
+      if (extensionEligible) {
+        const extension = await sessionsApi.extensionCompletions({ id: session.id, cwd: session.cwd }, { text, cursor }, machineId).catch(() => undefined);
+        if (!active) return;
+        if (extension !== undefined && extension.items.length > 0) {
+          setCompletionItems(extension.items.map(item => ({ kind: "extension", replaceFrom: cursor, replaceTo: cursor, insertText: item.label, detail: "", ...(item.description === undefined ? {} : { description: item.description }), extension: { item, prefix: extension.prefix, text, cursor } })));
+          setCompletionIndex(0);
+          return;
+        }
+      }
+      try {
+        const items = await ownCompletions();
+        if (active) {
+          setCompletionItems(items);
+          setCompletionIndex(0);
+        }
+      } catch {
+        if (active) setCompletionItems([]);
+      }
+    })();
+    return () => { active = false; };
+  }, [composerCursor, data.draft, data.selectedProject?.id, data.selectedSession?.id, data.selectedSession?.cwd, data.selectedWorkspace?.id, data.sessionStatus?.extensionUi?.completion?.triggerCharacters, data.state.selectedMachine?.id]);
 
   const saveOpenFile = async () => {
     if (data.selectedFile === undefined || !fileDirty || data.selectedFile.binary || data.selectedFile.truncated) return;
@@ -160,13 +341,8 @@ export function ReactWorkspaceApp() {
     window.addEventListener("pointerup", done, { once: true });
   };
   return <div className="rw-app" style={{ "--left-width": leftOpen ? leftWidth + "px" : "0px", "--right-width": rightOpen ? rightWidth + "px" : "0px" } as React.CSSProperties}>
-    <header className="rw-windowbar">
-      <div className="rw-traffic"><i/><i/><i/></div><strong>pi-webui</strong>
-      <div className="rw-window-actions"><button title="Quick actions" onClick={() => setActiveTab("Goals")}><Icon name="zap"/></button><button title="Settings" onClick={() => setActiveTab("Settings")}><Icon name="settings"/></button></div>
-    </header>
     <div className="rw-workspace">
       <aside className="rw-sidebar" aria-label="Projects and sessions">
-        <div className="rw-side-toolbar"><span className="rw-sidebar-brand"><Icon name="panel-left"/> Workspace</span><div><button title="Settings"><Icon name="settings"/></button><button title="Actions"><Icon name="command"/></button></div></div>
         <section className="rw-running">
           <div className="rw-section-heading"><strong>Running Sessions <span>({activeActivities.length})</span></strong><button title="Refresh sessions" onClick={data.refresh}><Icon name="refresh-cw"/></button></div>
           {activeActivities.length === 0 ? <div className="rw-data-state">No active sessions reported.</div> : activeActivities.map(activity => { const session = data.projects.flatMap(row => row.sessions).find(item => item.id === activity.sessionId); return <button className="rw-running-item" key={activity.sessionId} onClick={() => session && void data.selectSession(session)}><i className="rw-dot green"/><span>{session?.name || activity.label}</span><time>{activity.detail || activity.phase}</time></button>; })}
@@ -184,37 +360,39 @@ export function ReactWorkspaceApp() {
         <header className="rw-conversation-header">
           <button className="rw-icon-button" aria-label={leftOpen ? "Collapse sidebar" : "Expand sidebar"} onClick={() => setLeftOpen(v => !v)}><Icon name="panel-left"/></button>
           <div className="rw-session-heading"><strong>{data.selectedSession?.name?.trim() || data.selectedSession?.firstMessage || "No session selected"}</strong><span>{data.selectedProject?.name ?? "Select a project"}</span></div>
-          <div className="rw-header-actions"><button title="Session actions"><Icon name="zap"/></button><button title="Session settings"><Icon name="settings"/></button><button title="More actions"><Icon name="more-horizontal"/></button></div>
+          <div className="rw-header-actions"><button title="Session actions"><Icon name="zap"/></button><button title="Session settings"><Icon name="settings"/></button><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button><button title="More actions"><Icon name="more-horizontal"/></button></div>
         </header>
         {data.state.activity && <div className="rw-subagents"><div className="rw-activity-line"><i className={data.state.activity.phase === "active" ? "rw-dot green" : "rw-dot"}/><strong>{data.state.activity.label}</strong><span>{data.state.activity.detail}</span></div></div>}
         <div className="rw-transcript">
           {data.sessionError && <div className="rw-data-error">{data.sessionError}</div>}
           {!data.selectedSession && <div className="rw-empty-state">Select a session to view its conversation.</div>}
           {data.selectedSession && !data.sessionError && data.messages.length === 0 && <div className="rw-empty-state">No messages in this session yet.</div>}
-          {data.messages.map((message, index) => <article className={"rw-message " + displayRole(message)} key={index}>
-            <div className="rw-message-meta"><span>{displayRole(message).toUpperCase()}</span><time>{displayTime(message)}</time></div>
-            <p>{displayMessage(message)}</p>
-          </article>)}
+          {data.messages.map((message, index) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
         </div>
         <div className="rw-chat-dock">
           {(queuedCount > 0 || backgroundCount > 0) && <div className="rw-live-summary">
             {queuedCount > 0 && <span><Icon name="list-ordered"/> {queuedCount} queued</span>}
             {backgroundCount > 0 && <span><Icon name="layers"/> {backgroundCount} background runs</span>}
           </div>}
+          <details className="rw-disclosure"><summary><Icon name="bot"/><strong>Subagents</strong><span>({subagentExecutions.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{subagentExecutions.length === 0 ? "No subagent-named tool activity is recorded in this session." : subagentExecutions.map((part, index) => <div key={index}>{part.toolName}: {part.summary}{part.type === "toolExecution" ? ` · ${part.status}` : " · running"}</div>)}</div></details>
+          <details className="rw-disclosure"><summary><Icon name="activity"/><strong>Background Runs</strong><span>({backgroundCount})</span><small>Show details</small></summary><div className="rw-disclosure-content">{backgroundCount === 0 ? "No background runs are reported." : "The session status reports the active count; this API response does not include individual process details."}</div></details>
+          <details className="rw-disclosure"><summary><Icon name="file-text"/><strong>Edited Files</strong><span>({editedFiles.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{editedFiles.length === 0 ? "No file edits are recorded in the visible transcript." : editedFiles.map(file => <button className="rw-edited-file" key={file.path} onClick={() => { if (!file.path.startsWith("/")) { void data.loadFile(file.path); setActiveTab("Files"); } }}><span>{file.path}</span><small>{file.status}</small></button>)}</div></details>
+          {completionItems.length > 0 && <div className="rw-autocomplete" role="listbox" aria-label="Composer suggestions">{completionItems.map((item, index) => <button key={`${item.kind}-${item.insertText}-${index}`} role="option" aria-selected={index === completionIndex} onMouseDown={event => event.preventDefault()} onClick={() => void pickCompletion(item)}><strong>{item.insertText}</strong><span>{item.detail}{item.argumentHint ? ` ${item.argumentHint}` : ""}</span>{item.description && <small>{item.description}</small>}</button>)}</div>}
           <div className={"rw-composer " + (composerFocused ? "focused" : "")} onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); } }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void addAttachments(files); } }}>
             <input ref={attachmentInputRef} type="file" multiple hidden onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void addAttachments(files); }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
-            <textarea value={data.draft} rows={1} placeholder={data.selectedSession ? "Message Pi..." : "Select a session first"} disabled={!data.selectedSession || data.selectedSession.archived === true} onChange={e => data.setDraft(e.target.value)} onFocus={() => setComposerFocused(true)} onBlur={() => setComposerFocused(false)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }} />
+            <textarea ref={composerRef} value={data.draft} rows={1} placeholder={data.selectedSession ? "Message Pi..." : "Select a session first"} disabled={!data.selectedSession || data.selectedSession.archived === true} onChange={e => { data.setDraft(e.target.value); setComposerCursor(e.currentTarget.selectionStart); }} onSelect={e => setComposerCursor(e.currentTarget.selectionStart)} onFocus={() => setComposerFocused(true)} onBlur={() => setComposerFocused(false)} onKeyDown={e => { if ((e.key === "ArrowUp" || e.key === "ArrowDown") && completionItems.length > 0) { e.preventDefault(); setCompletionIndex(current => (current + (e.key === "ArrowDown" ? 1 : completionItems.length - 1)) % completionItems.length); return; } if ((e.key === "ArrowUp" || e.key === "ArrowDown") && browsePromptHistory(e.key === "ArrowUp" ? "older" : "newer")) { e.preventDefault(); return; } if (e.key === "Escape" && completionItems.length > 0) { e.preventDefault(); setCompletionItems([]); return; } if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); const completion = completionItems[completionIndex]; if (completion !== undefined) void pickCompletion(completion); else void sendMessage(); } }} />
             <div className="rw-composer-tools">
               {isWorking && <button title="Stop current work" onClick={() => void data.stopSession()}><Icon name="square"/></button>}
+              <button title="Mention a project file" aria-label="Mention a project file" disabled={!data.selectedWorkspace} onClick={() => { const next = `${data.draft}@`; data.setDraft(next); setComposerCursor(next.length); requestAnimationFrame(() => { composerRef.current?.focus(); composerRef.current?.setSelectionRange(next.length, next.length); }); }}><Icon name="at-sign"/></button>
               <button className="rw-send" title="Send message" onClick={() => void sendMessage()} disabled={!data.selectedSession || data.selectedSession.archived === true || (data.draft.trim() === "" && attachments.length === 0) || sending || attaching}><Icon name={sending || attaching ? "loader-circle" : "send"}/></button>
             </div>
           </div>
-          {attachments.length > 0 && <div className="rw-attachment-list">{attachments.map((item,index) => <span key={index} title={item.name}>{item.kind === "image" ? <Icon name="image"/> : <Icon name="file-text"/>}{item.name}<button aria-label={"Remove " + item.name} onClick={() => setAttachments(current => current.filter((_,i) => i !== index))}>×</button></span>)}</div>}
+          {attachments.length > 0 && <div className="rw-attachment-list">{attachments.map((item,index) => <span key={index} title={item.name}>{item.kind === "image" ? <><img src={`data:${item.mimeType};base64,${item.data}`} alt=""/><Icon name="image"/></> : <Icon name="file-text"/>}{item.name}<button aria-label={"Remove " + item.name} onClick={() => setAttachments(current => current.filter((_,i) => i !== index))}>×</button></span>)}</div>}
           {(sendError || attachmentError) && <div className="rw-composer-error">{sendError ?? attachmentError}</div>}
           <div className="rw-model-row">
             <span><Icon name="folder"/> {data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "No workspace"}</span>
-            <span className="rw-model-picker"><Icon name="cpu"/><select aria-label="Model provider and model" value={(model?.provider ?? "") + "/" + (model?.id ?? "")} disabled={!data.selectedSession || !data.modelCatalog?.models.length} onChange={async event => { const [provider,...parts] = event.target.value.split("/"); const id = parts.join("/"); if (!provider || !id || !data.selectedSession) return; try { await sessionsApi.setModel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},provider,id,data.state.selectedMachine?.id ?? "local"); data.refresh(); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{(data.modelCatalog?.models ?? []).map(item => <option key={item.provider + "/" + item.id} value={item.provider + "/" + item.id}>{item.provider} / {item.name ?? item.id}{item.enabled ? "" : " (disabled)"}</option>)}</select></span>
-            {data.sessionStatus?.thinkingLevel && <span>{data.sessionStatus.thinkingLevel}</span>}
+            <span className="rw-model-picker"><Icon name="cpu"/><select aria-label="Model provider and model" value={(model?.provider ?? "") + "/" + (model?.id ?? "")} disabled={!data.selectedSession || !data.modelCatalog?.models.length} onChange={async event => { const [provider,...parts] = event.target.value.split("/"); const id = parts.join("/"); if (!provider || !id || !data.selectedSession) return; try { await sessionsApi.setModel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},provider,id,data.state.selectedMachine?.id ?? "local"); data.refresh(); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{(data.modelCatalog?.models ?? []).map(item => <option key={item.provider + "/" + item.id} value={item.provider + "/" + item.id} disabled={!item.enabled && item.id !== model?.id}>{item.provider} / {item.name ?? item.id}{item.enabled ? "" : " (disabled)"}</option>)}</select></span>
+            {data.thinkingOptions?.levels.length ? <span className="rw-thinking-picker"><Icon name="sliders"/><select aria-label="Thinking level" value={data.sessionStatus?.thinkingLevel ?? ""} disabled={!data.selectedSession} onChange={async event => { if (!data.selectedSession) return; try { await sessionsApi.setThinkingLevel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},event.target.value,data.state.selectedMachine?.id ?? "local"); data.refresh(); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{data.thinkingOptions.levels.map(level => <option key={level} value={level}>{level}</option>)}</select></span> : null}
           </div>
         </div>
         <footer className="rw-status">
@@ -227,7 +405,7 @@ export function ReactWorkspaceApp() {
       {rightOpen && <button className="rw-resize rw-resize-right" aria-label="Resize workbench" onPointerDown={e => startResize("right", e)}/>}
       <aside className="rw-workbench">
         <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
-        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><input ref={uploadInputRef} type="file" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void data.uploadFile(file).catch(() => undefined); event.target.value = ""; }}/><button title="Upload file to the current folder" onClick={() => uploadInputRef.current?.click()} disabled={!data.selectedWorkspace}><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh session branch information" onClick={data.refresh}><Icon name="refresh-cw"/></button>}</>}</div>
+        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><input ref={uploadInputRef} type="file" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void data.uploadFile(file).catch(() => undefined); event.target.value = ""; }}/><button title="Upload file to the current folder" onClick={() => uploadInputRef.current?.click()} disabled={!data.selectedWorkspace}><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh Git status" onClick={() => setGitRefresh(value => value + 1)}><Icon name="refresh-cw"/></button>}</>}</div>
         {activeTab === "Settings" ? <div className="rw-settings-panel">
           <header><div><strong>Settings & integrations</strong><small>Machine: {data.state.selectedMachine?.name ?? "Local"} · Project: {data.selectedProject?.name ?? "Global scope"}</small></div><button onClick={() => void data.loadSettings()} disabled={data.settings.loading}>Reload</button></header>
           {data.settings.loading && <p>Loading settings…</p>}
@@ -268,16 +446,16 @@ export function ReactWorkspaceApp() {
             : <div className="rw-empty-panel">Select a workspace before opening a terminal.</div>
         ) : activeTab === "Git" ? (
           <div className="rw-git-panel">
-            <div className="rw-git-card">
-              <span className="rw-git-label">WORKING DIRECTORY</span>
-              <strong>{data.selectedWorkspace?.path ?? "No workspace selected"}</strong>
-            </div>
-            <div className="rw-git-card">
-              <span className="rw-git-label">CURRENT BRANCH</span>
-              <strong>{data.sessionStatus?.gitBranch ?? "Branch information is available after a session status read."}</strong>
-            </div>
-            <p>Read-only branch information comes from the selected session's live status. Use the Terminal tab for Git commands and worktree operations.</p>
-            <button disabled={!data.selectedWorkspace} onClick={() => setActiveTab("Terminal")}><Icon name="terminal"/> Open terminal</button>
+            <div className="rw-git-toolbar"><strong>Working tree</strong><button onClick={() => setGitRefresh(value => value + 1)} disabled={gitLoading || !data.selectedWorkspace}>Refresh</button></div>
+            {gitLoading && <div className="rw-data-state">Loading Git status…</div>}
+            {gitError && <div className="rw-data-error">{gitError}<button onClick={() => setGitRefresh(value => value + 1)}>Retry</button></div>}
+            {!gitLoading && !gitError && gitStatus && <>
+              <div className="rw-git-card"><span className="rw-git-label">BRANCH</span><strong>{gitStatus.branch ?? "Detached HEAD"}</strong><small>{gitStatus.upstream ? `${gitStatus.upstream} · ${gitStatus.ahead ?? 0} ahead · ${gitStatus.behind ?? 0} behind` : "No upstream branch reported"}</small></div>
+              {!gitStatus.isGitRepo ? <p>This workspace is not a Git repository.</p> : gitStatus.files.length === 0 ? <p>Working tree clean.</p> : <section className="rw-git-changes"><strong>Changes ({gitStatus.files.length})</strong>{gitStatus.files.map(file => <button key={file.path} className={gitSelectedPath === file.path ? "selected" : ""} onClick={() => { setGitSelectedPath(file.path); setGitDiffs(undefined); }}><span>{file.path}</span><small>{[file.index !== "unmodified" ? `staged ${file.index}` : "", file.workingTree !== "unmodified" ? file.workingTree : ""].filter(Boolean).join(" · ")}</small></button>)}</section>}
+              {gitSelectedPath && <section className="rw-git-diff"><strong>{gitSelectedPath}</strong>{gitDiffs?.path === gitSelectedPath ? [gitDiffs.staged, gitDiffs.unstaged].map((diff, index) => diff?.diff ? <pre key={index} aria-label={index === 0 ? "Staged diff" : "Unstaged diff"}>{diff.diff.split("\n").map((line, lineIndex) => <span className={line.startsWith("+") && !line.startsWith("+++") ? "added" : line.startsWith("-") && !line.startsWith("---") ? "removed" : ""} key={lineIndex}>{line}{"\n"}</span>)}</pre> : null) : <p>Loading selected diff…</p>}</section>}
+            </>}
+            {!data.selectedWorkspace && <div className="rw-empty-state">Select a workspace to inspect Git status.</div>}
+            {gitStatus?.isGitRepo && <p className="rw-git-limit">The current Git backend provides status and diff reads. Stage, commit, branch, and remote operations are not exposed by it yet.</p>}
           </div>
         ) : (
           <div className="rw-goals-panel">

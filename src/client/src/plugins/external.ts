@@ -18,7 +18,7 @@ export interface PluginManifestEntry {
   sessionCommands?: readonly string[];
 }
 
-interface PluginManifest {
+export interface PluginManifest {
   plugins: PluginManifestEntry[];
 }
 
@@ -116,6 +116,10 @@ async function fetchPluginManifest(manifestUrl: string): Promise<PluginManifest 
     if (!response.ok) throw new Error(await pluginManifestResponseError(response));
     return parseManifest(await response.json());
   });
+}
+
+export async function readPluginManifest(manifestPath = "pi-web-plugins/manifest.json"): Promise<PluginManifest | undefined> {
+  return fetchPluginManifest(resolveAppUrl(manifestPath));
 }
 
 function parseManifest(value: unknown): PluginManifest {
