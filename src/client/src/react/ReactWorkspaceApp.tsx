@@ -17,13 +17,15 @@ function displayMessage(value: unknown): string {
       if (typeof part !== "object" || part === null) return "";
       const type = Reflect.get(part, "type");
       if (type === "text" || type === "thinking") return String(Reflect.get(part, "text") ?? "");
-      if (type === "toolCall") return "\n[" + String(Reflect.get(part, "toolName") ?? "Tool") + "] " + String(Reflect.get(part, "summary") ?? "");
+      if (type === "toolCall") return "
+[" + String(Reflect.get(part, "toolName") ?? "Tool") + "] " + String(Reflect.get(part, "summary") ?? "");
       if (type === "toolResult") return String(Reflect.get(part, "text") ?? "");
       if (type === "image") return "[Image attachment]";
       if (type === "skillInvocation") return String(Reflect.get(part, "content") ?? "");
       if (type === "extensionNotice") return String(Reflect.get(part, "text") ?? "");
       return "";
-    }).filter(Boolean).join("\n");
+    }).filter(Boolean).join("
+");
   }
   const content = Reflect.get(value, "content");
   if (typeof content === "string") return content;
@@ -70,7 +72,10 @@ export function ReactWorkspaceApp() {
   const [attaching, setAttaching] = useState(false);
   const [fileDraft, setFileDraft] = useState("");
   const [fileDirty, setFileDirty] = useState(false);
-  const [fileSaving, setFileSaving] = useState(false);\n  const [packageSource, setPackageSource] = useState("");\n  const [settingsNotice, setSettingsNotice] = useState<string>();\n  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [fileSaving, setFileSaving] = useState(false);
+  const [packageSource, setPackageSource] = useState("");
+  const [settingsNotice, setSettingsNotice] = useState<string>();
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const projectRows = data.projects.map(row => ({
     id: row.project.id,
     name: row.project.name,
@@ -85,7 +90,17 @@ export function ReactWorkspaceApp() {
     const session = data.projects.flatMap(row => row.sessions).find(item => item.id === sessionId);
     if (session !== undefined) void data.selectSession(session);
   };
-  const addAttachments = async (files: File[]) => {\n    if (files.length === 0) return;\n    setAttaching(true);\n    setAttachmentError(undefined);\n    try {\n      const result = await capturePromptAttachments(files, readBlobAsBase64);\n      setAttachments(current => [...current, ...result.attachments]);\n      if (result.error) setAttachmentError(result.error);\n    } finally { setAttaching(false); }\n  };\n  const sendMessage = async () => {
+  const addAttachments = async (files: File[]) => {
+    if (files.length === 0) return;
+    setAttaching(true);
+    setAttachmentError(undefined);
+    try {
+      const result = await capturePromptAttachments(files, readBlobAsBase64);
+      setAttachments(current => [...current, ...result.attachments]);
+      if (result.error) setAttachmentError(result.error);
+    } finally { setAttaching(false); }
+  };
+  const sendMessage = async () => {
     const text = data.draft.trim();
     if ((text === "" && attachments.length === 0) || sending || attaching) return;
     setSending(true);
@@ -102,7 +117,9 @@ export function ReactWorkspaceApp() {
   const activeActivities = Object.values(data.state.sessionActivities).filter(activity => activity.phase === "active" && activity.startup !== true);
   const backgroundCount = data.sessionStatus?.backgroundRunCount ?? 0;
   const queuedCount = data.sessionStatus?.queuedMessages.length ?? 0;
-  const [modelProvider, setModelProvider] = useState("");\n  const [modelId, setModelId] = useState("");\n  const model = data.sessionStatus?.model;
+  const [modelProvider, setModelProvider] = useState("");
+  const [modelId, setModelId] = useState("");
+  const model = data.sessionStatus?.model;
   const modelLabel = model === undefined ? "Model unavailable" : [model.provider, model.name ?? model.id].filter(Boolean).join(" / ");
   const contextUsage = data.sessionStatus?.contextUsage;
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
@@ -194,7 +211,8 @@ export function ReactWorkspaceApp() {
               <button className="rw-send" title="Send message" onClick={() => void sendMessage()} disabled={!data.selectedSession || data.selectedSession.archived === true || (data.draft.trim() === "" && attachments.length === 0) || sending || attaching}><Icon name={sending || attaching ? "loader-circle" : "send"}/></button>
             </div>
           </div>
-          {attachments.length > 0 && <div className="rw-attachment-list">{attachments.map((item,index) => <span key={index} title={item.name}>{item.kind === "image" ? <Icon name="image"/> : <Icon name="file-text"/>}{item.name}<button aria-label={"Remove " + item.name} onClick={() => setAttachments(current => current.filter((_,i) => i !== index))}>×</button></span>)}</div>}\n          {(sendError || attachmentError) && <div className="rw-composer-error">{sendError ?? attachmentError}</div>}
+          {attachments.length > 0 && <div className="rw-attachment-list">{attachments.map((item,index) => <span key={index} title={item.name}>{item.kind === "image" ? <Icon name="image"/> : <Icon name="file-text"/>}{item.name}<button aria-label={"Remove " + item.name} onClick={() => setAttachments(current => current.filter((_,i) => i !== index))}>×</button></span>)}</div>}
+          {(sendError || attachmentError) && <div className="rw-composer-error">{sendError ?? attachmentError}</div>}
           <div className="rw-model-row">
             <span><Icon name="folder"/> {data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "No workspace"}</span>
             <span className="rw-model-picker"><Icon name="cpu"/><select aria-label="Model provider" value={model?.provider ?? ""} disabled={!data.selectedSession || !data.modelOptions?.models.length} onChange={async event => { const candidate = data.modelOptions?.models.find(item => item.provider === event.target.value); if (!candidate || !data.selectedSession) return; try { await sessionsApi.setModel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},candidate.provider,candidate.id,data.state.selectedMachine?.id ?? "local"); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{[...new Set(data.modelOptions?.models.map(item => item.provider) ?? [])].map(provider => <option key={provider} value={provider}>{provider}</option>)}</select><select aria-label="Model" value={model?.id ?? ""} disabled={!data.selectedSession || !data.modelOptions?.models.length} onChange={async event => { if (!data.selectedSession || !model?.provider) return; try { await sessionsApi.setModel({id:data.selectedSession.id,cwd:data.selectedSession.cwd},model.provider,event.target.value,data.state.selectedMachine?.id ?? "local"); } catch (error) { setSendError(error instanceof Error ? error.message : String(error)); } }}>{(data.modelOptions?.models ?? []).filter(item => !model?.provider || item.provider === model.provider).map(item => <option key={item.id} value={item.id}>{item.name ?? item.id}</option>)}</select></span>
