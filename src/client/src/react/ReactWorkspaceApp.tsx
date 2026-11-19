@@ -17,6 +17,8 @@ import { ReactTerminalPanel } from "./ReactTerminalPanel";
 import { WorkspaceFileTree } from "./WorkspaceFileTree";
 import { WorkspaceCodeEditor } from "./WorkspaceCodeEditor";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
+import { SessionActionsMenu } from "./SessionActionsMenu";
+import { sessionActionIsPending } from "./sessionInstantActions";
 
 type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
 interface ReactWorkspaceScope {
@@ -29,7 +31,20 @@ const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals"];
 const GIT_REMOTE_REQUEST_TIMEOUT_MS = 130_000;
 export function ReactWorkspaceApp() {
   const data = useReactWorkspaceData();
+  useEffect(() => {
+    if (!data.undoAvailable) return;
+    const undo = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "z" || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.isComposing) return;
+      const origin = event.composedPath()[0];
+      if (origin instanceof HTMLElement && (origin.isContentEditable || origin instanceof HTMLInputElement || origin instanceof HTMLTextAreaElement || origin instanceof HTMLSelectElement)) return;
+      event.preventDefault();
+      data.undoSessionAction();
+    };
+    window.addEventListener("keydown", undo);
+    return () => window.removeEventListener("keydown", undo);
+  }, [data.undoAvailable, data.undoSessionAction]);
   const selectedMachineId = data.state.selectedMachine?.id ?? "local";
+  const selectedSessionActionPending = data.selectedSession !== undefined && sessionActionIsPending(data.sessionActions, selectedMachineId, data.selectedSession.id);
   const selectedMachineHealth = data.state.machineStatuses[selectedMachineId];
   const machineConnectionMessage = data.machineReadIssue ?? (data.state.machinesLoad !== "loaded" ? data.state.error : "");
   const machineConnectionLabel = data.state.error.includes("sign in")
@@ -793,7 +808,7 @@ export function ReactWorkspaceApp() {
         <header className="rw-conversation-header">
           <button className="rw-icon-button" aria-label={leftOpen ? "Collapse sidebar" : "Expand sidebar"} onClick={() => setLeftOpen(v => !v)}><Icon name="panel-left"/></button>
           <div className="rw-session-heading"><strong>{data.selectedSession === undefined ? "No session selected" : data.selectedSession.name?.trim() || data.selectedSession.firstMessage || "Untitled session"}</strong><span>{data.selectedProject?.name ?? "Select a project"}</span></div>
-          <div className="rw-header-actions"><button title="Session actions"><Icon name="zap"/></button><button title="Session settings"><Icon name="settings"/></button><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button><button title="More actions"><Icon name="more-horizontal"/></button></div>
+          <div className="rw-header-actions"><SessionActionsMenu session={data.selectedSession} machineId={selectedMachineId} pending={selectedSessionActionPending} rename={name => data.selectedSession ? data.renameSession(data.selectedSession, name) : Promise.resolve()} archive={(session, machineId) => data.archiveSession(session, machineId)} restore={(session, machineId) => data.restoreSession(session, machineId)} deleteArchived={(session, machineId) => data.deleteArchivedSession(session, machineId)}/><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button></div>
         </header>
         {data.state.activity && <div className="rw-subagents"><div className="rw-activity-line"><i className={data.state.activity.phase === "active" ? "rw-dot green" : "rw-dot"}/><strong>{data.state.activity.label}</strong><span>{data.state.activity.detail}</span></div></div>}
         <div className="rw-transcript" ref={transcriptRef} onScroll={event => {
@@ -802,6 +817,8 @@ export function ReactWorkspaceApp() {
           followTranscriptRef.current = following;
           setShowTranscriptJump(!following);
         }}>
+          {data.undoAvailable && <div className="rw-session-undo" role="status" onPointerEnter={() => data.pauseSessionUndo("pointer")} onPointerLeave={() => data.resumeSessionUndo("pointer")} onFocus={() => data.pauseSessionUndo("focus")} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) data.resumeSessionUndo("focus"); }}><span>{data.sessionActions.at(-1)?.kind === "delete-archived" ? "Archived session deletion is waiting" : "Session change is pending"}</span><button type="button" onClick={data.undoSessionAction}>Undo</button></div>}
+          {data.sessionActionNotice && <div className="rw-session-action-notice" role="status">{data.sessionActionNotice}</div>}
           {data.sessionError && <div className="rw-data-error">{data.sessionError}</div>}
           {!data.selectedSession && <div className="rw-empty-state">Select a session to view its conversation.</div>}
           {data.selectedSession && !data.sessionError && data.messages.length === 0 && <div className="rw-empty-state">No messages in this session yet.</div>}

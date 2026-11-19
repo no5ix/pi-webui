@@ -19,6 +19,10 @@ import { operationKindOf, pageMaySend, writeOutgoingOperation } from "../compose
 import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
 import type { PromptAttachment } from "../api";
 import { createConfigWriteQueue } from "./configWriteQueue";
+import { sessionsWithInstantActions } from "../instantActions";
+import { createSessionInstantActions, sessionActionIsPending, sessionActionTarget } from "./sessionInstantActions";
+import type { InstantActionController } from "../controllers/instantActionController";
+import type { InstantAction } from "../instantActions";
 
 export interface ReactWorkspaceProject {
   readonly project: Project;
@@ -76,6 +80,16 @@ export interface ReactWorkspaceData {
   readonly sendPrompt: (text: string, attachments?: readonly CapturedAttachment[]) => Promise<boolean>;
   readonly stopSession: () => Promise<void>;
   readonly loadEarlierMessages: () => Promise<void>;
+  readonly renameSession: (session: SessionInfo, name: string) => Promise<void>;
+  readonly archiveSession: (session: SessionInfo, machineId: string) => Promise<void>;
+  readonly restoreSession: (session: SessionInfo, machineId: string) => Promise<void>;
+  readonly deleteArchivedSession: (session: SessionInfo, machineId: string) => Promise<void>;
+  readonly sessionActions: readonly InstantAction[];
+  readonly undoAvailable: boolean;
+  readonly sessionActionNotice: string | undefined;
+  readonly undoSessionAction: () => void;
+  readonly pauseSessionUndo: (reason: "pointer" | "focus") => void;
+  readonly resumeSessionUndo: (reason: "pointer" | "focus") => void;
   readonly startSession: () => void;
   readonly runCommand: (text: string) => Promise<void>;
 }
@@ -88,6 +102,7 @@ interface Runtime {
   machines: MachineController;
   sessions: SessionController;
   boards: SessionBoardController;
+  instantActions: InstantActionController;
 }
 
 function errorText(error: unknown): string {
@@ -146,6 +161,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const fileReadRequestRef = useRef(0);
   const directoryReadRequestRef = useRef(0);
   const [board, setBoard] = useState<SessionBoard>();
+  const [sessionActions, setSessionActions] = useState<readonly InstantAction[]>([]);
+  const [undoAvailable, setUndoAvailable] = useState(false);
+  const [sessionActionNotice, setSessionActionNotice] = useState<string>();
   const realtimeRef = useRef<RealtimeSocket | undefined>(undefined);
 
   if (runtimeRef.current === undefined) {
@@ -201,6 +219,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const boardController = new SessionBoardController({
       knownProjects: (machineId) => machineId === (getState().selectedMachine?.id ?? "local") && getState().projectsLoad === "loaded" ? getState().projects : undefined,
     });
+    const instantActions = createSessionInstantActions(sessionController, boardController, (actions, undo) => {
+      setSessionActions(actions);
+      setUndoAvailable(undo);
+    }, setSessionActionNotice);
     runtimeRef.current = {
       getState,
       setState: setStatePatch,
@@ -209,6 +231,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       machines: machineController,
       sessions: sessionController,
       boards: boardController,
+      instantActions,
     };
   }
 
@@ -232,20 +255,37 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       runtime.sessions.kickOutbox();
       void runtime.sessions.recheckTranscript();
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") runtime.instantActions.pageShown();
+      else runtime.instantActions.pageHidden();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    onVisibilityChange();
     window.addEventListener("online", onOnline);
     return () => {
       active = false;
       window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       realtimeRef.current?.close();
       realtimeRef.current = undefined;
       runtime.sessions.stopOutbox();
       runtime.sessions.dispose();
+      runtime.instantActions.dispose();
       runtime.boards.dispose();
       runtime.workspaces.dispose();
       runtime.projects.dispose();
       runtime.machines.dispose();
     };
   }, [runtime]);
+
+  const lastActionMachineRef = useRef(state.selectedMachine?.id ?? "local");
+  useEffect(() => {
+    const machineId = state.selectedMachine?.id ?? "local";
+    if (lastActionMachineRef.current !== machineId) {
+      runtime.instantActions.endWindow();
+      lastActionMachineRef.current = machineId;
+    }
+  }, [state.selectedMachine?.id, runtime]);
 
   useEffect(() => {
     if (state.machinesLoad === "loaded" && state.projectsLoad === "unloaded") {
@@ -339,10 +379,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     return {
       project,
       workspaces,
-      sessions: sessions.sort((a, b) => Date.parse(b.modified) - Date.parse(a.modified)),
+      sessions: [...sessionsWithInstantActions(sessions, state.selectedMachine?.id ?? "local", sessionActions)].sort((a, b) => Date.parse(b.modified) - Date.parse(a.modified)),
       unknown,
     };
-  }), [state.projects, board]);
+  }), [state.projects, state.selectedMachine?.id, board, sessionActions]);
 
   const selectProject = useCallback(async (projectId: string) => {
     const project = stateRef.current.projects.find(item => item.id === projectId);
@@ -687,6 +727,36 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     await runtime.sessions.loadEarlierMessages();
   }, [runtime]);
 
+  const renameSession = useCallback(async (session: SessionInfo, name: string) => {
+    const machineId = stateRef.current.selectedMachine?.id ?? "local";
+    if (!await runtime.sessions.renameSession(session, name, machineId)) throw new Error("The session name was not changed.");
+  }, [runtime]);
+
+  const deleteArchivedSession = useCallback((session: SessionInfo, machineId: string) => {
+    const current = stateRef.current;
+    if (sessionActionIsPending(runtime.instantActions.list(), machineId, session.id)) return Promise.resolve();
+    const workspaces = runtime.boards.board(machineId)?.workspaces ?? [];
+    setSessionActionNotice(undefined);
+    const machineName = current.machines.find((machine) => machine.id === machineId)?.name ?? "This machine";
+    runtime.instantActions.start({ kind: "delete-archived", machineId, machineName, dock: "none", targets: [sessionActionTarget(session, workspaces)] });
+    return Promise.resolve();
+  }, [runtime]);
+
+  const startSessionAction = useCallback((kind: "archive" | "restore", session: SessionInfo, machineId: string) => {
+    const current = stateRef.current;
+    if (sessionActionIsPending(runtime.instantActions.list(), machineId, session.id)) return;
+    const workspaces = runtime.boards.board(machineId)?.workspaces ?? [];
+    setSessionActionNotice(undefined);
+    const machineName = current.machines.find((machine) => machine.id === machineId)?.name ?? "This machine";
+    runtime.instantActions.start({ kind, machineId, machineName, dock: "none", targets: [sessionActionTarget(session, workspaces)] });
+  }, [runtime]);
+
+  const archiveSession = useCallback((session: SessionInfo, machineId: string) => { startSessionAction("archive", session, machineId); return Promise.resolve(); }, [startSessionAction]);
+  const restoreSession = useCallback((session: SessionInfo, machineId: string) => { startSessionAction("restore", session, machineId); return Promise.resolve(); }, [startSessionAction]);
+  const undoSessionAction = useCallback(() => { runtime.instantActions.undoLatest(); }, [runtime]);
+  const pauseSessionUndo = useCallback((reason: "pointer" | "focus") => { runtime.instantActions.pause(`react-undo-${reason}`); }, [runtime]);
+  const resumeSessionUndo = useCallback((reason: "pointer" | "focus") => { runtime.instantActions.resume(`react-undo-${reason}`); }, [runtime]);
+
   const startSession = useCallback(() => {
     runtime.sessions.startSession();
   }, [runtime]);
@@ -755,6 +825,16 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     sendPrompt,
     stopSession,
     loadEarlierMessages,
+    renameSession,
+    archiveSession,
+    restoreSession,
+    deleteArchivedSession,
+    sessionActions,
+    undoAvailable,
+    sessionActionNotice,
+    undoSessionAction,
+    pauseSessionUndo,
+    resumeSessionUndo,
     startSession,
     runCommand,
   };
