@@ -35,6 +35,7 @@ button { cursor: pointer; }
 .rw-project-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rw-project-name svg,.rw-project-toggle svg{width:14px;height:14px;color:var(--rw-muted)}
 .rw-project-row small{color:var(--rw-muted);font-size:11px;padding:0 5px}
+.rw-project-close{flex:none;width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--rw-muted)}.rw-project-close:hover:not(:disabled){background:var(--rw-hover);color:var(--rw-text)}.rw-project-close:disabled{opacity:.5}.rw-project-close svg{width:14px;height:14px}@media(pointer:coarse){.rw-project-close{width:44px;height:44px}}
 .rw-activity-line{min-height:34px;display:flex;align-items:center;gap:8px;color:var(--rw-text-secondary);font-size:12px}
 .rw-activity-line span{margin-left:auto;color:var(--rw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rw-live-summary{display:flex;align-items:center;gap:14px;color:var(--rw-muted);font-size:11px;padding:2px 4px}

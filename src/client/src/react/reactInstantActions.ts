@@ -1,17 +1,22 @@
-import type { SessionInfo } from "../api";
+import { projectsApi, type MachineRuntime, type Project, type SessionInfo } from "../api";
 import { InstantActionController, type InstantKindExecutor } from "../controllers/instantActionController";
-import { sessionsWithInstantActions, type InstantAction, type InstantActionKind, type InstantAnswer } from "../instantActions";
+import type { ProjectController } from "../controllers/projectController";
+import { instantAdmission, mergedAnswers, sessionsWithInstantActions, type InstantAction, type InstantActionKind, type InstantAnswer } from "../instantActions";
 import type { SessionController } from "../controllers/sessionController";
 import type { SessionBoardController } from "../controllers/sessionBoardController";
 import type { Workspace } from "../api";
 import { sessionLocationVerdict } from "../sessionLocationVerdict";
 import { failedAnswer } from "../instantActions";
 import { describeError } from "../notice";
+import { CHECKING_REACHABILITY } from "../machineReachability";
+import { runtimeAvailability } from "../machineAvailability";
 
 const unanswered = (action: InstantAction): InstantAnswer => ({ doneIds: [], refused: [], unansweredIds: action.targets.map((target) => target.id) });
 
 type SessionMutationController = Pick<SessionController, "archiveSessions" | "applyArchivedSessions" | "restoreSessions" | "applyRestoredSessions" | "deleteArchivedSessions" | "applyDeletedSessions">;
 type SessionBoardReader = Pick<SessionBoardController, "readWhole" | "read" | "update">;
+type ProjectMutationController = Pick<ProjectController, "applyClosedProject">;
+type ProjectActionApi = Pick<typeof projectsApi, "closeProject" | "projects">;
 
 function sessionExecutor(sessions: SessionMutationController, boards: SessionBoardReader, kind: "archive" | "restore" | "delete-archived"): InstantKindExecutor {
   return {
@@ -61,11 +66,40 @@ function sessionExecutor(sessions: SessionMutationController, boards: SessionBoa
   };
 }
 
-export function createSessionInstantActions(
+function projectExecutor(projects: ProjectMutationController, api: ProjectActionApi): InstantKindExecutor {
+  return {
+    send: async (action, keepalive) => {
+      const answers: InstantAnswer[] = [];
+      for (const target of action.targets) {
+        try {
+          await api.closeProject(target.id, action.machineId, keepalive ? { keepalive: true } : undefined);
+          answers.push({ doneIds: [target.id], refused: [], unansweredIds: [] });
+        } catch (error) {
+          answers.push(failedAnswer([target.id], error, describeError(error)));
+        }
+      }
+      return mergedAnswers(answers);
+    },
+    read: async (action) => {
+      const listed = await api.projects(action.machineId).catch(() => undefined);
+      if (listed === undefined) return unanswered(action);
+      const ids = new Set(listed.map((project) => project.id));
+      return { doneIds: action.targets.filter((target) => !ids.has(target.id)).map((target) => target.id), refused: [], unansweredIds: [] };
+    },
+    apply: (action) => {
+      for (const target of action.targets) projects.applyClosedProject(target.id, action.machineId);
+      return Promise.resolve();
+    },
+  };
+}
+
+export function createWorkspaceInstantActions(
   sessions: SessionMutationController,
   boards: SessionBoardReader,
+  projects: ProjectMutationController,
   changed: (actions: readonly InstantAction[], undoAvailable: boolean) => void,
   notice: (text: string) => void,
+  projectApi: ProjectActionApi = projectsApi,
 ): InstantActionController {
   const unsupported: InstantKindExecutor = {
     send: (action) => Promise.resolve(unanswered(action)),
@@ -77,11 +111,12 @@ export function createSessionInstantActions(
     restore: sessionExecutor(sessions, boards, "restore"),
     "delete-archived": sessionExecutor(sessions, boards, "delete-archived"),
   };
+  const closeProject = projectExecutor(projects, projectApi);
   const executors: Record<InstantActionKind, InstantKindExecutor> = {
     archive: sessionKinds.archive,
     restore: sessionKinds.restore,
     "delete-archived": sessionKinds["delete-archived"],
-    "close-project": unsupported,
+    "close-project": closeProject,
     "remove-machine": unsupported,
     "remove-package": unsupported,
     "remove-page-access": unsupported,
@@ -96,6 +131,17 @@ export function createSessionInstantActions(
   return controller;
 }
 
+export function projectActionTarget(project: Project) {
+  return { id: project.id, label: project.name, projectId: project.id, workspacePath: project.path };
+}
+
+export function projectCloseAdmission(machineRuntime: MachineRuntime | undefined) {
+  return instantAdmission("close-project", {
+    machine: machineRuntime === undefined ? CHECKING_REACHABILITY : runtimeAvailability(machineRuntime),
+    daemon: CHECKING_REACHABILITY,
+  });
+}
+
 export function sessionActionTarget(session: SessionInfo, workspaces: readonly Workspace[]) {
   const workspace = workspaces.find((candidate) => sessionLocationVerdict(session.cwd, candidate.path) === "described");
   const name = session.name?.trim();
@@ -106,4 +152,8 @@ export function sessionActionTarget(session: SessionInfo, workspaces: readonly W
 
 export function sessionActionIsPending(actions: readonly InstantAction[], machineId: string, sessionId: string): boolean {
   return actions.some((action) => action.machineId === machineId && action.targets.some((target) => target.id === sessionId));
+}
+
+export function projectActionIsPending(actions: readonly InstantAction[], machineId: string, projectId: string): boolean {
+  return actions.some((action) => action.kind === "close-project" && action.machineId === machineId && action.targets.some((target) => target.id === projectId));
 }

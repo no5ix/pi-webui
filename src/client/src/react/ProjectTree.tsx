@@ -1,9 +1,9 @@
 import { Icon } from "./icons";
 import type { SessionInfo } from "../api";
 type ProjectSession = { id: string; name: string; session: SessionInfo };
-type Project = { id: string; name: string; sessions: ProjectSession[]; unknown: boolean };
-type Props = { projects: Project[]; query: string; expanded: string[]; onExpanded: (ids: string[]) => void; selectedProject: string; selectedSession: string; onSelectProject: (id: string) => void; onSelectSession: (projectId: string, sessionId: string) => void; showMoreByProject: Record<string, boolean>; onShowMore: (id: string) => void };
-export function ProjectTree({ projects, query, expanded, onExpanded, selectedProject, selectedSession, onSelectProject, onSelectSession, showMoreByProject, onShowMore }: Props) {
+type Project = { id: string; name: string; sessions: ProjectSession[]; unknown: boolean; pending: boolean };
+type Props = { projects: Project[]; query: string; expanded: string[]; onExpanded: (ids: string[]) => void; selectedProject: string; selectedSession: string; onSelectProject: (id: string) => void; onSelectSession: (projectId: string, sessionId: string) => void; onCloseProject: (projectId: string) => void; showMoreByProject: Record<string, boolean>; onShowMore: (id: string) => void };
+export function ProjectTree({ projects, query, expanded, onExpanded, selectedProject, selectedSession, onSelectProject, onSelectSession, onCloseProject, showMoreByProject, onShowMore }: Props) {
   const toggle = (id: string) => onExpanded(expanded.includes(id) ? expanded.filter(v => v !== id) : [...expanded, id]);
   const visible = projects.filter(p => p.name.toLowerCase().includes(query.toLowerCase()) || p.sessions.some(s => s.name.toLowerCase().includes(query.toLowerCase())));
   return <div className="rw-project-tree">
@@ -17,6 +17,7 @@ export function ProjectTree({ projects, query, expanded, onExpanded, selectedPro
           <button className="rw-project-toggle" title={open ? "Collapse project" : "Expand project"} onClick={() => toggle(project.id)}><Icon name={open ? "chevron-down" : "chevron-right"}/></button>
           <button className="rw-project-name" onClick={() => { onSelectProject(project.id); if (!open) toggle(project.id); }}><Icon name="folder"/><span>{project.name}</span></button>
           <small>{project.unknown ? "…" : project.sessions.length}</small>
+          <button className="rw-project-close" type="button" aria-label={`Close project ${project.name}`} title="Close project" disabled={project.pending} onClick={() => onCloseProject(project.id)}><Icon name="x"/></button>
         </div>
         {project.unknown && open && <div className="rw-data-state">{selectedProject === project.id ? "Loading this workspace's sessions…" : "Select this project to load its sessions."}</div>}
         <div className="rw-session-rows">

@@ -19,8 +19,8 @@ import { operationKindOf, pageMaySend, writeOutgoingOperation } from "../compose
 import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
 import type { PromptAttachment } from "../api";
 import { createConfigWriteQueue } from "./configWriteQueue";
-import { sessionsWithInstantActions } from "../instantActions";
-import { createSessionInstantActions, sessionActionIsPending, sessionActionTarget } from "./sessionInstantActions";
+import { instantRefusalWords, sessionsWithInstantActions, withoutInstantTargets } from "../instantActions";
+import { createWorkspaceInstantActions, projectActionIsPending, projectActionTarget, projectCloseAdmission, sessionActionIsPending, sessionActionTarget } from "./reactInstantActions";
 import type { InstantActionController } from "../controllers/instantActionController";
 import type { InstantAction } from "../instantActions";
 
@@ -84,9 +84,10 @@ export interface ReactWorkspaceData {
   readonly archiveSession: (session: SessionInfo, machineId: string) => Promise<void>;
   readonly restoreSession: (session: SessionInfo, machineId: string) => Promise<void>;
   readonly deleteArchivedSession: (session: SessionInfo, machineId: string) => Promise<void>;
-  readonly sessionActions: readonly InstantAction[];
+  readonly instantActions: readonly InstantAction[];
   readonly undoAvailable: boolean;
   readonly sessionActionNotice: string | undefined;
+  readonly closeProject: (project: Project) => void;
   readonly undoSessionAction: () => void;
   readonly pauseSessionUndo: (reason: "pointer" | "focus") => void;
   readonly resumeSessionUndo: (reason: "pointer" | "focus") => void;
@@ -161,7 +162,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const fileReadRequestRef = useRef(0);
   const directoryReadRequestRef = useRef(0);
   const [board, setBoard] = useState<SessionBoard>();
-  const [sessionActions, setSessionActions] = useState<readonly InstantAction[]>([]);
+  const [instantActions, setInstantActions] = useState<readonly InstantAction[]>([]);
   const [undoAvailable, setUndoAvailable] = useState(false);
   const [sessionActionNotice, setSessionActionNotice] = useState<string>();
   const realtimeRef = useRef<RealtimeSocket | undefined>(undefined);
@@ -219,8 +220,8 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const boardController = new SessionBoardController({
       knownProjects: (machineId) => machineId === (getState().selectedMachine?.id ?? "local") && getState().projectsLoad === "loaded" ? getState().projects : undefined,
     });
-    const instantActions = createSessionInstantActions(sessionController, boardController, (actions, undo) => {
-      setSessionActions(actions);
+    const instantActions = createWorkspaceInstantActions(sessionController, boardController, projectController, (actions, undo) => {
+      setInstantActions(actions);
       setUndoAvailable(undo);
     }, setSessionActionNotice);
     runtimeRef.current = {
@@ -370,7 +371,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const selectedWorkspace = state.selectedWorkspace;
   const selectedSession = state.selectedSession;
 
-  const projects = useMemo<ReactWorkspaceProject[]>(() => state.projects.map(project => {
+  const projects = useMemo<ReactWorkspaceProject[]>(() => withoutInstantTargets(state.projects, "close-project", state.selectedMachine?.id ?? "local", instantActions).map(project => {
     const workspaces = board?.workspaces.filter(workspace => workspace.projectId === project.id) ?? [];
     const sessions = workspaces.flatMap(workspace => boardSessionsOf(board, workspace.path) ?? []);
     const unknown = board === undefined
@@ -379,10 +380,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     return {
       project,
       workspaces,
-      sessions: [...sessionsWithInstantActions(sessions, state.selectedMachine?.id ?? "local", sessionActions)].sort((a, b) => Date.parse(b.modified) - Date.parse(a.modified)),
+      sessions: [...sessionsWithInstantActions(sessions, state.selectedMachine?.id ?? "local", instantActions)].sort((a, b) => Date.parse(b.modified) - Date.parse(a.modified)),
       unknown,
     };
-  }), [state.projects, state.selectedMachine?.id, board, sessionActions]);
+  }), [state.projects, state.selectedMachine?.id, board, instantActions]);
 
   const selectProject = useCallback(async (projectId: string) => {
     const project = stateRef.current.projects.find(item => item.id === projectId);
@@ -757,6 +758,20 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const pauseSessionUndo = useCallback((reason: "pointer" | "focus") => { runtime.instantActions.pause(`react-undo-${reason}`); }, [runtime]);
   const resumeSessionUndo = useCallback((reason: "pointer" | "focus") => { runtime.instantActions.resume(`react-undo-${reason}`); }, [runtime]);
 
+  const closeProject = useCallback((project: Project) => {
+    const current = stateRef.current;
+    const machineId = current.selectedMachine?.id ?? "local";
+    if (projectActionIsPending(runtime.instantActions.list(), machineId, project.id)) return;
+    const machineName = current.machines.find((machine) => machine.id === machineId)?.name ?? "This machine";
+    const admission = projectCloseAdmission(current.machineRuntimes[machineId]);
+    if (admission.kind === "refused") {
+      setSessionActionNotice(instantRefusalWords("close-project", machineName, admission.reason));
+      return;
+    }
+    setSessionActionNotice(undefined);
+    runtime.instantActions.start({ kind: "close-project", machineId, machineName, dock: "none", targets: [projectActionTarget(project)] });
+  }, [runtime]);
+
   const startSession = useCallback(() => {
     runtime.sessions.startSession();
   }, [runtime]);
@@ -829,9 +844,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     archiveSession,
     restoreSession,
     deleteArchivedSession,
-    sessionActions,
+    instantActions,
     undoAvailable,
     sessionActionNotice,
+    closeProject,
     undoSessionAction,
     pauseSessionUndo,
     resumeSessionUndo,

@@ -18,7 +18,7 @@ import { WorkspaceFileTree } from "./WorkspaceFileTree";
 import { WorkspaceCodeEditor } from "./WorkspaceCodeEditor";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import { SessionActionsMenu } from "./SessionActionsMenu";
-import { sessionActionIsPending } from "./sessionInstantActions";
+import { projectActionIsPending, sessionActionIsPending } from "./reactInstantActions";
 
 type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
 interface ReactWorkspaceScope {
@@ -44,7 +44,7 @@ export function ReactWorkspaceApp() {
     return () => window.removeEventListener("keydown", undo);
   }, [data.undoAvailable, data.undoSessionAction]);
   const selectedMachineId = data.state.selectedMachine?.id ?? "local";
-  const selectedSessionActionPending = data.selectedSession !== undefined && sessionActionIsPending(data.sessionActions, selectedMachineId, data.selectedSession.id);
+  const selectedSessionActionPending = data.selectedSession !== undefined && sessionActionIsPending(data.instantActions, selectedMachineId, data.selectedSession.id);
   const selectedMachineHealth = data.state.machineStatuses[selectedMachineId];
   const machineConnectionMessage = data.machineReadIssue ?? (data.state.machinesLoad !== "loaded" ? data.state.error : "");
   const machineConnectionLabel = data.state.error.includes("sign in")
@@ -155,6 +155,7 @@ export function ReactWorkspaceApp() {
   const projectRows = data.projects.map(row => ({
     id: row.project.id,
     name: row.project.name,
+    pending: projectActionIsPending(data.instantActions, selectedMachineId, row.project.id),
     sessions: row.sessions.map(session => ({ id: session.id, name: session.name?.trim() || session.firstMessage || "New session", session })),
     unknown: row.unknown,
   }));
@@ -800,7 +801,7 @@ export function ReactWorkspaceApp() {
         {machineConnectionMessage && <div className="rw-data-error" role="alert">{machineConnectionMessage}<button onClick={data.state.error && data.state.machinesLoad !== "loaded" ? () => window.location.reload() : data.refresh}>{data.state.error && data.state.machinesLoad !== "loaded" ? "Reload after access changes" : "Retry"}</button></div>}
         {data.loading && !machineConnectionMessage && <div className="rw-data-state">Loading projects and sessions…</div>}
         {data.projectsError && <div className="rw-data-error">{data.projectsError}<button onClick={data.refresh}>Retry</button></div>}
-        {!data.loading && !data.projectsError && <ProjectTree projects={projectRows} query={projectQuery} expanded={expanded} onExpanded={setExpanded} selectedProject={data.selectedProject?.id ?? ""} selectedSession={data.selectedSession?.id ?? ""} onSelectProject={selectProject} onSelectSession={selectSession} showMoreByProject={showMoreByProject} onShowMore={id => setShowMoreByProject(current => ({ ...current, [id]: !current[id] }))}/>}
+        {!data.loading && !data.projectsError && <ProjectTree projects={projectRows} query={projectQuery} expanded={expanded} onExpanded={setExpanded} selectedProject={data.selectedProject?.id ?? ""} selectedSession={data.selectedSession?.id ?? ""} onSelectProject={selectProject} onSelectSession={selectSession} onCloseProject={id => { const project = data.projects.find(row => row.project.id === id)?.project; if (project !== undefined) data.closeProject(project); }} showMoreByProject={showMoreByProject} onShowMore={id => setShowMoreByProject(current => ({ ...current, [id]: !current[id] }))}/>}
         <div className="rw-sidebar-footer"><span>{data.state.selectedMachine?.name ?? "Local machine"}</span><span className="rw-connection" title={data.machineReadIssue ?? selectedMachineHealth?.error ?? data.state.error}><i className={machineConnectionLabel === "Connected" ? "" : "offline"}/> {machineConnectionLabel}</span></div>
       </aside>
       {leftOpen && <button className="rw-resize rw-resize-left" aria-label="Resize sidebar" onPointerDown={e => startResize("left", e)}/>}
@@ -817,7 +818,7 @@ export function ReactWorkspaceApp() {
           followTranscriptRef.current = following;
           setShowTranscriptJump(!following);
         }}>
-          {data.undoAvailable && <div className="rw-session-undo" role="status" onPointerEnter={() => data.pauseSessionUndo("pointer")} onPointerLeave={() => data.resumeSessionUndo("pointer")} onFocus={() => data.pauseSessionUndo("focus")} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) data.resumeSessionUndo("focus"); }}><span>{data.sessionActions.at(-1)?.kind === "delete-archived" ? "Archived session deletion is waiting" : "Session change is pending"}</span><button type="button" onClick={data.undoSessionAction}>Undo</button></div>}
+          {data.undoAvailable && <div className="rw-session-undo" role="status" onPointerEnter={() => data.pauseSessionUndo("pointer")} onPointerLeave={() => data.resumeSessionUndo("pointer")} onFocus={() => data.pauseSessionUndo("focus")} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) data.resumeSessionUndo("focus"); }}><span>{data.instantActions.at(-1)?.kind === "delete-archived" ? "Archived session deletion is waiting" : data.instantActions.at(-1)?.kind === "close-project" ? "Project close is waiting" : "Session change is pending"}</span><button type="button" onClick={data.undoSessionAction}>Undo</button></div>}
           {data.sessionActionNotice && <div className="rw-session-action-notice" role="status">{data.sessionActionNotice}</div>}
           {data.sessionError && <div className="rw-data-error">{data.sessionError}</div>}
           {!data.selectedSession && <div className="rw-empty-state">Select a session to view its conversation.</div>}
