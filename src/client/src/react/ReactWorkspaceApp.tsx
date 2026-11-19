@@ -17,15 +17,13 @@ function displayMessage(value: unknown): string {
       if (typeof part !== "object" || part === null) return "";
       const type = Reflect.get(part, "type");
       if (type === "text" || type === "thinking") return String(Reflect.get(part, "text") ?? "");
-      if (type === "toolCall") return "
-[" + String(Reflect.get(part, "toolName") ?? "Tool") + "] " + String(Reflect.get(part, "summary") ?? "");
+      if (type === "toolCall") return "\n[" + String(Reflect.get(part, "toolName") ?? "Tool") + "] " + String(Reflect.get(part, "summary") ?? "");
       if (type === "toolResult") return String(Reflect.get(part, "text") ?? "");
       if (type === "image") return "[Image attachment]";
       if (type === "skillInvocation") return String(Reflect.get(part, "content") ?? "");
       if (type === "extensionNotice") return String(Reflect.get(part, "text") ?? "");
       return "";
-    }).filter(Boolean).join("
-");
+    }).filter(Boolean).join("\n");
   }
   const content = Reflect.get(value, "content");
   if (typeof content === "string") return content;
