@@ -18,6 +18,7 @@ import { WorkspaceFileTree } from "./WorkspaceFileTree";
 import { WorkspaceCodeEditor } from "./WorkspaceCodeEditor";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import { SessionActionsMenu } from "./SessionActionsMenu";
+import { AddProjectDialog } from "./AddProjectDialog";
 import { projectActionIsPending, sessionActionIsPending } from "./reactInstantActions";
 
 type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
@@ -77,6 +78,7 @@ export function ReactWorkspaceApp() {
   const narrowScreen = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches;
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("Files");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addProjectTarget, setAddProjectTarget] = useState<{ machineId: string; machineName: string }>();
   const [projectQuery, setProjectQuery] = useState("");
   const [leftWidth, setLeftWidth] = useState(327);
   const [rightWidth, setRightWidth] = useState(402);
@@ -795,7 +797,7 @@ export function ReactWorkspaceApp() {
           <div className="rw-section-heading"><strong>Running Sessions <span>({runningSessionsKnown ? activeActivities.length : "—"})</span></strong><button title="Refresh sessions" onClick={data.refresh}><Icon name="refresh-cw"/></button></div>
           {activeActivities.length > 0 ? activeActivities.map(activity => { const session = data.projects.flatMap(row => row.sessions).find(item => item.id === activity.sessionId); return <button className="rw-running-item" key={activity.sessionId} onClick={() => session && void data.selectSession(session)}><i className="rw-dot green"/><span>{session?.name || activity.label}</span><time>{activity.detail || activity.phase}</time></button>; }) : runningSessionsKnown ? <div className="rw-data-state">No active sessions reported.</div> : <div className="rw-data-state">{data.board?.unknownSources.length ? "Some session lists are still loading…" : "Loading sessions…"}</div>}
         </section>
-        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><div><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button><button title="Settings" aria-label="Open settings" onClick={() => setSettingsOpen(true)}><Icon name="settings"/></button></div></div>
+        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><div><button title="Add project" aria-label="Add project" onClick={() => setAddProjectTarget({ machineId: selectedMachineId, machineName: data.state.selectedMachine?.name ?? "Local machine" })}><Icon name="folder-plus"/></button><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button><button title="Settings" aria-label="Open settings" onClick={() => setSettingsOpen(true)}><Icon name="settings"/></button></div></div>
         <div className="rw-search"><Icon name="search"/><input aria-label="Search sessions" placeholder="Search sessions" value={projectQuery} onChange={e => setProjectQuery(e.target.value)}/>{projectQuery && <button onClick={() => setProjectQuery("")}><Icon name="x"/></button>}</div>
         <button className="rw-all-projects" onClick={data.refresh}>Refresh project list</button>
         {machineConnectionMessage && <div className="rw-data-error" role="alert">{machineConnectionMessage}<button onClick={data.state.error && data.state.machinesLoad !== "loaded" ? () => window.location.reload() : data.refresh}>{data.state.error && data.state.machinesLoad !== "loaded" ? "Reload after access changes" : "Retry"}</button></div>}
@@ -930,5 +932,6 @@ export function ReactWorkspaceApp() {
       </aside>
     </div>
     <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
+    <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
   </div>;
 }

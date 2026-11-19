@@ -34,6 +34,7 @@ describe("ProjectController", () => {
           projects: vi.fn().mockResolvedValue([currentProject]),
           addProject: vi.fn(),
           reorderProjects: vi.fn(),
+          workspaces: vi.fn(),
           setWorkspaceTrust: vi.fn(),
         },
       },
@@ -64,6 +65,7 @@ describe("ProjectController", () => {
           projects: vi.fn(),
           addProject: vi.fn().mockResolvedValue(addedProject),
           reorderProjects: vi.fn(),
+          workspaces: vi.fn(),
           setWorkspaceTrust: vi.fn(),
         },
       },
@@ -92,6 +94,7 @@ describe("ProjectController", () => {
           projects: vi.fn(),
           addProject: vi.fn().mockResolvedValue(addedProject),
           reorderProjects: vi.fn(),
+          workspaces: vi.fn().mockResolvedValue([addedWorkspace]),
           setWorkspaceTrust,
         },
       },
@@ -100,6 +103,38 @@ describe("ProjectController", () => {
     await controller.addProject("/added", true, { trusted: true, changed: true });
 
     expect(setWorkspaceTrust).toHaveBeenCalledOnce();
+    expect(setWorkspaceTrust).toHaveBeenCalledWith(addedProject.id, addedWorkspace.id, true, "local");
+  });
+
+  it("saves a captured trust choice when the selected machine changes during workspace loading", async () => {
+    const addedProject = project("added", "/added");
+    const addedWorkspace = workspace(addedProject.id, addedProject.path);
+    let state: AppState = { ...initialAppState() };
+    let finishSelection: ((selected: boolean) => void) | undefined;
+    const workspaces = vi.fn().mockResolvedValue([addedWorkspace]);
+    const setWorkspaceTrust = vi.fn().mockResolvedValue({ path: addedProject.path, decision: true, trusted: true });
+    const controller = new ProjectController(
+      () => state,
+      (patch) => { state = { ...state, ...patch }; },
+      { selectProject: vi.fn(() => new Promise<boolean>((resolve) => { finishSelection = resolve; })), forgetProject: vi.fn(), clearSelection: vi.fn() },
+      {
+        api: {
+          projects: vi.fn(),
+          addProject: vi.fn().mockResolvedValue(addedProject),
+          reorderProjects: vi.fn(),
+          workspaces,
+          setWorkspaceTrust,
+        },
+      },
+    );
+
+    const adding = controller.addProject("/added", true, { trusted: true, changed: true }, "local");
+    await vi.waitFor(() => { expect(finishSelection).toBeDefined(); });
+    state = { ...state, selectedMachine: { id: "remote-1", name: "Remote", kind: "remote", createdAt: "now", updatedAt: "now" }, workspaces: [] };
+    finishSelection?.(false);
+    await adding;
+
+    expect(workspaces).toHaveBeenCalledWith(addedProject.id, "local");
     expect(setWorkspaceTrust).toHaveBeenCalledWith(addedProject.id, addedWorkspace.id, true, "local");
   });
 
@@ -120,6 +155,7 @@ describe("ProjectController", () => {
           projects: vi.fn(),
           addProject: vi.fn().mockResolvedValue(addedProject),
           reorderProjects: vi.fn(),
+          workspaces: vi.fn(),
           setWorkspaceTrust,
         },
       },
@@ -161,6 +197,7 @@ describe("ProjectController", () => {
           projects: vi.fn(),
           addProject: vi.fn(),
           reorderProjects: vi.fn(),
+          workspaces: vi.fn(),
           setWorkspaceTrust: vi.fn(),
         },
       },
@@ -199,7 +236,7 @@ describe("ProjectController.loadProjects", () => {
       () => state,
       (patch) => { state = { ...state, ...patch }; },
       { selectProject: vi.fn(), forgetProject: vi.fn(), clearSelection: vi.fn() },
-      { api: { projects, addProject: vi.fn(), reorderProjects: vi.fn(), setWorkspaceTrust: vi.fn() }, clock },
+      { api: { projects, addProject: vi.fn(), reorderProjects: vi.fn(), workspaces: vi.fn(), setWorkspaceTrust: vi.fn() }, clock },
     );
 
     await controller.loadProjects();
@@ -218,7 +255,7 @@ describe("ProjectController.loadProjects", () => {
       () => state,
       (patch) => { state = { ...state, ...patch }; },
       { selectProject: vi.fn(), forgetProject: vi.fn(), clearSelection: vi.fn() },
-      { api: { projects, addProject: vi.fn(), reorderProjects: vi.fn(), setWorkspaceTrust: vi.fn() }, clock: { now: () => 5, setTimer: () => () => undefined } },
+      { api: { projects, addProject: vi.fn(), reorderProjects: vi.fn(), workspaces: vi.fn(), setWorkspaceTrust: vi.fn() }, clock: { now: () => 5, setTimer: () => () => undefined } },
     );
 
     await controller.loadProjects();
@@ -240,6 +277,7 @@ describe("ProjectController.loadProjects", () => {
           projects: vi.fn().mockResolvedValue([listed]),
           addProject: vi.fn(),
           reorderProjects: vi.fn(),
+          workspaces: vi.fn(),
           setWorkspaceTrust: vi.fn(),
         },
       },

@@ -23,6 +23,7 @@ import { instantRefusalWords, sessionsWithInstantActions, withoutInstantTargets 
 import { createWorkspaceInstantActions, projectActionIsPending, projectActionTarget, projectCloseAdmission, sessionActionIsPending, sessionActionTarget } from "./reactInstantActions";
 import type { InstantActionController } from "../controllers/instantActionController";
 import type { InstantAction } from "../instantActions";
+import type { ProjectTrustChoice } from "../controllers/projectController";
 
 export interface ReactWorkspaceProject {
   readonly project: Project;
@@ -88,6 +89,7 @@ export interface ReactWorkspaceData {
   readonly undoAvailable: boolean;
   readonly sessionActionNotice: string | undefined;
   readonly closeProject: (project: Project) => void;
+  readonly addProject: (path: string, create: boolean, trust: ProjectTrustChoice | undefined, machineId: string) => Promise<string | undefined>;
   readonly undoSessionAction: () => void;
   readonly pauseSessionUndo: (reason: "pointer" | "focus") => void;
   readonly resumeSessionUndo: (reason: "pointer" | "focus") => void;
@@ -772,6 +774,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     runtime.instantActions.start({ kind: "close-project", machineId, machineName, dock: "none", targets: [projectActionTarget(project)] });
   }, [runtime]);
 
+  const addProject = useCallback((path: string, create: boolean, trust: ProjectTrustChoice | undefined, machineId: string) => {
+    return runtime.projects.addProject(path, create, trust, machineId);
+  }, [runtime]);
+
   const startSession = useCallback(() => {
     runtime.sessions.startSession();
   }, [runtime]);
@@ -848,6 +854,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     undoAvailable,
     sessionActionNotice,
     closeProject,
+    addProject,
     undoSessionAction,
     pauseSessionUndo,
     resumeSessionUndo,
