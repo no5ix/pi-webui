@@ -7,11 +7,13 @@ type Props = {
   open: boolean;
   machineId: string;
   machineName: string;
+  initialPath?: string;
+  pickerNotice?: string;
   onClose: () => void;
   onSubmit: (path: string, create: boolean, trust: ProjectTrustChoice | undefined, machineId: string) => Promise<string | undefined>;
 };
 
-export function AddProjectDialog({ open, machineId, machineName, onClose, onSubmit }: Props) {
+export function AddProjectDialog({ open, machineId, machineName, initialPath = "", pickerNotice, onClose, onSubmit }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [path, setPath] = useState("");
   const [create, setCreate] = useState(true);
@@ -27,6 +29,8 @@ export function AddProjectDialog({ open, machineId, machineName, onClose, onSubm
   const [folderError, setFolderError] = useState("");
   const [trustLoading, setTrustLoading] = useState(false);
   const trustRequest = useRef(0);
+
+  useEffect(() => { if (open) { setPath(initialPath); setBrowsePath(initialPath || "."); setFolderListing(undefined); setFolderError(pickerNotice ?? ""); } }, [open, initialPath, pickerNotice]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -117,6 +121,7 @@ export function AddProjectDialog({ open, machineId, machineName, onClose, onSubm
       <header><div><h2 id="rw-add-project-title">Add project</h2><small>On {machineName}</small></div><button type="button" aria-label="Close add project" onClick={() => dialogRef.current?.close()} disabled={busy}>×</button></header>
       <label>Project folder<input name="path" value={path} onChange={event => setPath(event.target.value)} list="rw-project-directory-suggestions" autoComplete="off" spellCheck={false} placeholder="/path/to/project" required disabled={busy}/></label>
       <datalist id="rw-project-directory-suggestions">{suggestions.map(item => <option key={item.path} value={item.path}/>)}</datalist>
+      {pickerNotice && <p role="status" className="rw-folder-picker-notice">{pickerNotice}</p>}
       <section className="rw-folder-browser" aria-label="Browse folders">
         <div className="rw-folder-browser-toolbar"><button type="button" onClick={() => folderListing?.parent && void browse(folderListing.parent)} disabled={busy || folderLoading || !folderListing?.parent}>‹</button><strong>{folderListing?.path ?? "Choose a folder"}</strong><button type="button" onClick={() => folderListing && void browse(folderListing.path)} disabled={busy || folderLoading}>↻</button></div>
         {folderListing && <nav className="rw-folder-crumbs" aria-label="Folder location">{folderListing.crumbs.map(crumb => <button type="button" key={crumb.path} onClick={() => void browse(crumb.path)} disabled={busy || folderLoading}>{crumb.name || folderListing.separator}</button>)}</nav>}
