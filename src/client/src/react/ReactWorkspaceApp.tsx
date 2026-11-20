@@ -20,6 +20,8 @@ import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import { SessionActionsMenu } from "./SessionActionsMenu";
 import { AddProjectDialog } from "./AddProjectDialog";
 import { projectActionIsPending, sessionActionIsPending } from "./reactInstantActions";
+import { gitCanCommit, gitChangeGroups, gitChangeLabel } from "./gitPresentation";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
 interface ReactWorkspaceScope {
@@ -138,6 +140,7 @@ export function ReactWorkspaceApp() {
   const [gitStatusScopeKey, setGitStatusScopeKey] = useState("");
   const [gitSelectedPath, setGitSelectedPath] = useState<string>();
   const [gitDiffs, setGitDiffs] = useState<{ path: string; scopeKey: string; unstaged?: GitDiffResponse; staged?: GitDiffResponse }>();
+  const [gitDiffError, setGitDiffError] = useState<{ message: string; path: string; scopeKey: string }>();
   const [gitError, setGitError] = useState<string>();
   const [gitErrorScopeKey, setGitErrorScopeKey] = useState("");
   const [gitLoading, setGitLoading] = useState(false);
@@ -145,14 +148,21 @@ export function ReactWorkspaceApp() {
   const [gitOperationScopeKey, setGitOperationScopeKey] = useState("");
   const [gitOperationError, setGitOperationError] = useState<string>();
   const [gitOperationErrorScopeKey, setGitOperationErrorScopeKey] = useState("");
+  const [gitOperationSuccess, setGitOperationSuccess] = useState<string>();
+  const [gitOperationSuccessScopeKey, setGitOperationSuccessScopeKey] = useState("");
   const [gitBranches, setGitBranches] = useState<GitBranchesResponse>();
   const [gitBranchesScopeKey, setGitBranchesScopeKey] = useState("");
   const [gitCommitMessage, setGitCommitMessage] = useState("");
+  const [gitDiscardTarget, setGitDiscardTarget] = useState<{ path: string; scopeKey: string }>();
   const gitOperationSequence = useRef(0);
+  const gitOperationInFlight = useRef(false);
   const visibleGitOperation = gitOperationScopeKey === selectedScopeKey ? gitOperation : undefined;
+  const gitMutationBusy = gitOperation !== undefined;
   const visibleGitOperationError = gitOperationErrorScopeKey === selectedScopeKey ? gitOperationError : undefined;
+  const visibleGitOperationSuccess = gitOperationSuccessScopeKey === selectedScopeKey ? gitOperationSuccess : undefined;
   const visibleGitStatus = gitStatusScopeKey === selectedScopeKey ? gitStatus : undefined;
   const visibleGitError = gitErrorScopeKey === selectedScopeKey ? gitError : undefined;
+  const visibleGitDiffError = gitDiffError !== undefined && gitDiffError.path === gitSelectedPath && gitDiffError.scopeKey === selectedScopeKey ? gitDiffError : undefined;
   const visibleGitBranches = gitBranchesScopeKey === selectedScopeKey ? gitBranches : undefined;
   const projectRows = data.projects.map(row => ({
     id: row.project.id,
@@ -567,6 +577,7 @@ export function ReactWorkspaceApp() {
       setGitStatus(undefined);
       setGitStatusScopeKey(selectedScopeKey);
       setGitDiffs(undefined);
+      setGitDiffError(undefined);
       setGitSelectedPath(undefined);
       setGitError(undefined);
       setGitErrorScopeKey(selectedScopeKey);
@@ -580,6 +591,7 @@ export function ReactWorkspaceApp() {
     setGitStatus(undefined);
     setGitStatusScopeKey(selectedScopeKey);
     setGitDiffs(undefined);
+    setGitDiffError(undefined);
     setGitSelectedPath(undefined);
     const manifestPath = machineId === "local" ? "pi-web-plugins/manifest.json" : `api/machines/${encodeURIComponent(machineId)}/pi-web-plugins/manifest.json`;
     void readPluginManifest(manifestPath).then(async manifest => {
@@ -601,7 +613,7 @@ export function ReactWorkspaceApp() {
       if (active) setGitLoading(false);
     });
     return () => { active = false; };
-  }, [activeTab, data.selectedWorkspace?.id, data.selectedWorkspace?.provider?.pluginId, data.selectedWorkspace?.provider?.capabilities.request, data.state.selectedMachine?.id, gitRefresh]);
+  }, [activeTab, data.selectedWorkspace?.id, data.selectedWorkspace?.provider?.pluginId, data.selectedWorkspace?.provider?.capabilities.request, data.state.selectedMachine?.id, gitRefresh, selectedScopeKey]);
 
   useEffect(() => {
     const workspace = data.selectedWorkspace;
@@ -609,6 +621,7 @@ export function ReactWorkspaceApp() {
     const machineId = data.state.selectedMachine?.id ?? "local";
     if (activeTab !== "Git" || workspace === undefined || path === undefined) return;
     let active = true;
+    setGitDiffError(undefined);
     const manifestPath = machineId === "local" ? "pi-web-plugins/manifest.json" : `api/machines/${encodeURIComponent(machineId)}/pi-web-plugins/manifest.json`;
     void readPluginManifest(manifestPath).then(async manifest => {
       const pluginId = workspace.provider?.pluginId;
@@ -622,12 +635,15 @@ export function ReactWorkspaceApp() {
       if (active) setGitDiffs({ path, scopeKey: selectedScopeKey, unstaged, staged });
     }).catch(error => {
       if (active) {
-        setGitError(error instanceof Error ? error.message : String(error));
-        setGitErrorScopeKey(selectedScopeKey);
+        setGitDiffError({ message: error instanceof Error ? error.message : String(error), path, scopeKey: selectedScopeKey });
       }
     });
     return () => { active = false; };
-  }, [activeTab, data.selectedWorkspace?.id, data.selectedWorkspace?.provider?.pluginId, data.selectedWorkspace?.provider?.capabilities.request, data.state.selectedMachine?.id, gitSelectedPath]);
+  }, [activeTab, data.selectedWorkspace?.id, data.selectedWorkspace?.provider?.pluginId, data.selectedWorkspace?.provider?.capabilities.request, data.state.selectedMachine?.id, gitSelectedPath, selectedScopeKey]);
+
+  useEffect(() => {
+    if (gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey !== selectedScopeKey) setGitDiscardTarget(undefined);
+  }, [gitDiscardTarget, selectedScopeKey]);
 
   useEffect(() => {
     promptHistoryRef.current = { key: promptHistoryKey, index: undefined, draft: data.draft };
@@ -713,7 +729,8 @@ export function ReactWorkspaceApp() {
 
   const performGitOperation = async (mutation: GitMutation) => {
     const workspace = data.selectedWorkspace;
-    if (workspace === undefined) return;
+    if (workspace === undefined || gitOperationInFlight.current) return;
+    gitOperationInFlight.current = true;
     const machineId = data.state.selectedMachine?.id ?? "local";
     const scope = { projectId: workspace.projectId, workspaceId: workspace.id, machineId };
     const scopeKey = JSON.stringify([machineId, workspace.projectId, workspace.id]);
@@ -723,6 +740,8 @@ export function ReactWorkspaceApp() {
     setGitOperationScopeKey(scopeKey);
     setGitOperationError(undefined);
     setGitOperationErrorScopeKey(scopeKey);
+    setGitOperationSuccess(undefined);
+    setGitOperationSuccessScopeKey(scopeKey);
     try {
       const manifest = await readPluginManifest(manifestPath);
       const pluginId = workspace.provider?.pluginId;
@@ -736,6 +755,8 @@ export function ReactWorkspaceApp() {
       await requestPluginBackend(target, GIT_MUTATE_OPERATION, mutation, timeout);
       if (scopeIsCurrent(scope)) {
         if (mutation.action === "commit") setGitCommitMessage("");
+        setGitOperationSuccess(gitMutationSuccess(mutation));
+        setGitOperationSuccessScopeKey(scopeKey);
         setGitRefresh(value => value + 1);
         if (mutation.action === "switch") void loadGitBranches();
       }
@@ -745,7 +766,10 @@ export function ReactWorkspaceApp() {
         setGitOperationErrorScopeKey(scopeKey);
       }
     } finally {
-      if (gitOperationSequence.current === operationId) setGitOperation(undefined);
+      if (gitOperationSequence.current === operationId) {
+        gitOperationInFlight.current = false;
+        setGitOperation(undefined);
+      }
     }
   };
 
@@ -773,6 +797,13 @@ export function ReactWorkspaceApp() {
         setGitOperationErrorScopeKey(scopeKey);
       }
     }
+  };
+  const moveGitSelection = (files: readonly GitStatusResponse["files"][number][], path: string, direction: -1 | 1) => {
+    if (files.length < 2) return;
+    const currentIndex = files.findIndex(file => file.path === path);
+    const nextIndex = (Math.max(currentIndex, 0) + direction + files.length) % files.length;
+    setGitSelectedPath(files[nextIndex]?.path);
+    setGitDiffs(undefined);
   };
   const startResize = (side: "left" | "right", event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -897,25 +928,30 @@ export function ReactWorkspaceApp() {
             : <div className="rw-empty-panel">Select a workspace before opening a terminal.</div>
         ) : activeTab === "Git" ? (
           <div className="rw-git-panel">
-            <div className="rw-git-toolbar"><strong>Working tree</strong><button onClick={() => setGitRefresh(value => value + 1)} disabled={gitLoading || !data.selectedWorkspace}>Refresh</button></div>
+            <div className="rw-git-toolbar"><strong>Working tree</strong><button onClick={() => setGitRefresh(value => value + 1)} disabled={gitLoading || gitMutationBusy || !data.selectedWorkspace}>Refresh</button></div>
             <div className="rw-git-actions">
-              <button onClick={() => void performGitOperation({ action: "stage-all" })} disabled={visibleGitOperation !== undefined || !visibleGitStatus?.isGitRepo}>Stage all</button>
-              <button onClick={() => void performGitOperation({ action: "unstage-all" })} disabled={visibleGitOperation !== undefined || !visibleGitStatus?.isGitRepo}>Unstage all</button>
-              <button onClick={() => void loadGitBranches()} disabled={visibleGitOperation !== undefined || !visibleGitStatus?.isGitRepo}>Branches</button>
-              <button onClick={() => void performGitOperation({ action: "fetch" })} disabled={visibleGitOperation !== undefined || !visibleGitStatus?.isGitRepo}>Fetch</button>
-              <button onClick={() => void performGitOperation({ action: "pull" })} disabled={visibleGitOperation !== undefined || !visibleGitStatus?.isGitRepo}>Pull</button>
-              <button onClick={() => void performGitOperation({ action: "push" })} disabled={visibleGitOperation !== undefined || !visibleGitStatus?.isGitRepo}>Push</button>
+              <button onClick={() => void performGitOperation({ action: "stage-all" })} disabled={gitMutationBusy || !visibleGitStatus?.isGitRepo}>Stage all</button>
+              <button onClick={() => void performGitOperation({ action: "unstage-all" })} disabled={gitMutationBusy || !visibleGitStatus?.isGitRepo}>Unstage all</button>
+              <button onClick={() => void loadGitBranches()} disabled={gitMutationBusy || !visibleGitStatus?.isGitRepo}>{visibleGitBranches ? "Reload branches" : "Load branches"}</button>
+              <button onClick={() => void performGitOperation({ action: "fetch" })} disabled={gitMutationBusy || !visibleGitStatus?.isGitRepo}>Fetch</button>
+              <button onClick={() => void performGitOperation({ action: "pull" })} disabled={gitMutationBusy || !visibleGitStatus?.isGitRepo}>Pull</button>
+              <button onClick={() => void performGitOperation({ action: "push" })} disabled={gitMutationBusy || !visibleGitStatus?.isGitRepo}>Push</button>
             </div>
             {visibleGitOperation && <div className="rw-data-state" role="status">Running Git {visibleGitOperation}…</div>}
+            {gitMutationBusy && !visibleGitOperation && <div className="rw-data-state" role="status">A Git operation is still running in another workspace.</div>}
             {visibleGitOperationError && <div className="rw-data-error" role="alert">{visibleGitOperationError}</div>}
-            {visibleGitBranches && <label className="rw-branch-picker">Local branch<select value={visibleGitBranches.current ?? ""} onChange={event => { const branch = event.target.value; if (branch && branch !== visibleGitBranches.current && window.confirm(`Switch to ${branch}? Git will refuse if local changes would be overwritten.`)) void performGitOperation({ action: "switch", branch }); }}><option value="" disabled>Select branch</option>{visibleGitBranches.branches.map(branch => <option key={branch} value={branch}>{branch}</option>)}</select></label>}
-            <form className="rw-git-commit" onSubmit={event => { event.preventDefault(); if (gitCommitMessage.trim() !== "") void performGitOperation({ action: "commit", message: gitCommitMessage }); }}><input aria-label="Commit message" placeholder="Commit message" value={gitCommitMessage} onChange={event => setGitCommitMessage(event.target.value)} maxLength={500} /><button type="submit" disabled={visibleGitOperation !== undefined || !visibleGitStatus?.files.some(file => file.index !== "unmodified" && file.index !== "untracked") || gitCommitMessage.trim() === ""}>Commit staged</button></form>
+            {visibleGitOperationSuccess && <div className="rw-git-success" role="status">{visibleGitOperationSuccess}</div>}
+            {visibleGitBranches && <label className="rw-branch-picker">Local branch<select value={visibleGitBranches.current ?? ""} disabled={gitMutationBusy} onChange={event => { const branch = event.target.value; if (branch && branch !== visibleGitBranches.current && window.confirm(`Switch to ${branch}? Git will refuse if local changes would be overwritten.`)) void performGitOperation({ action: "switch", branch }); }}><option value="" disabled>Select branch</option>{visibleGitBranches.branches.map(branch => <option key={branch} value={branch}>{branch}</option>)}</select></label>}
+            <form className="rw-git-commit" onSubmit={event => { event.preventDefault(); if (gitCommitMessage.trim() !== "") void performGitOperation({ action: "commit", message: gitCommitMessage }); }}><input aria-label="Commit message" placeholder="Commit message" value={gitCommitMessage} onChange={event => setGitCommitMessage(event.target.value)} maxLength={500} /><button type="submit" disabled={gitMutationBusy || !gitCanCommit(visibleGitStatus) || gitCommitMessage.trim() === ""}>Commit staged</button></form>
             {gitLoading && <div className="rw-data-state">Loading Git status…</div>}
-            {visibleGitError && <div className="rw-data-error">{visibleGitError}<button onClick={() => setGitRefresh(value => value + 1)}>Retry</button></div>}
+            {visibleGitError && <div className="rw-data-error" role="alert">{visibleGitError}<button onClick={() => setGitRefresh(value => value + 1)}>Retry</button></div>}
             {!gitLoading && !visibleGitError && visibleGitStatus && <>
               <div className="rw-git-card"><span className="rw-git-label">BRANCH</span><strong>{visibleGitStatus.branch ?? "Detached HEAD"}</strong><small>{visibleGitStatus.upstream ? `${visibleGitStatus.upstream} · ${visibleGitStatus.ahead ?? 0} ahead · ${visibleGitStatus.behind ?? 0} behind` : "No upstream branch reported"}</small></div>
-              {!visibleGitStatus.isGitRepo ? <p>This workspace is not a Git repository.</p> : visibleGitStatus.files.length === 0 ? <p>Working tree clean.</p> : <section className="rw-git-changes"><strong>Changes ({visibleGitStatus.files.length})</strong>{visibleGitStatus.files.map(file => <div className="rw-git-change-row" key={file.path}><button className={gitSelectedPath === file.path ? "selected" : ""} onClick={() => { setGitSelectedPath(file.path); setGitDiffs(undefined); }}><span>{file.path}</span><small>{[file.index !== "unmodified" ? `staged ${file.index}` : "", file.workingTree !== "unmodified" ? file.workingTree : ""].filter(Boolean).join(" · ")}</small></button><button aria-label={`Stage ${file.path}`} disabled={visibleGitOperation !== undefined} onClick={() => void performGitOperation({ action: "stage", paths: [file.path] })}>Stage</button>{file.index !== "unmodified" && file.index !== "untracked" && <button aria-label={`Unstage ${file.path}`} disabled={visibleGitOperation !== undefined} onClick={() => void performGitOperation({ action: "unstage", paths: [file.path] })}>Unstage</button>}{file.workingTree !== "unmodified" && file.workingTree !== "untracked" && <button aria-label={`Discard changes to ${file.path}`} disabled={visibleGitOperation !== undefined} onClick={() => { if (window.confirm(`Discard tracked working-tree changes to ${file.path}?`)) void performGitOperation({ action: "discard", paths: [file.path] }); }}>Discard</button>}</div>)}</section>}
-              {gitSelectedPath && <section className="rw-git-diff"><strong>{gitSelectedPath}</strong>{gitDiffs?.path === gitSelectedPath && gitDiffs.scopeKey === selectedScopeKey ? [gitDiffs.staged, gitDiffs.unstaged].map((diff, index) => diff?.diff ? <pre key={index} aria-label={index === 0 ? "Staged diff" : "Unstaged diff"}>{diff.diff.split("\n").map((line, lineIndex) => <span className={line.startsWith("+") && !line.startsWith("+++") ? "added" : line.startsWith("-") && !line.startsWith("---") ? "removed" : ""} key={lineIndex}>{line}{"\n"}</span>)}</pre> : null) : <p>Loading selected diff…</p>}</section>}
+              {!visibleGitStatus.isGitRepo ? <p>This workspace is not a Git repository.</p> : visibleGitStatus.files.length === 0 ? <p>Working tree clean.</p> : <>
+                {renderGitChangeSection("Staged changes", gitChangeGroups(visibleGitStatus.files).staged, "staged", gitSelectedPath, gitMutationBusy, path => { setGitSelectedPath(path); setGitDiffs(undefined); }, file => void performGitOperation({ action: "unstage", paths: [file.path] }), undefined)}
+                {renderGitChangeSection("Unstaged changes", gitChangeGroups(visibleGitStatus.files).unstaged, "unstaged", gitSelectedPath, gitMutationBusy, path => { setGitSelectedPath(path); setGitDiffs(undefined); }, file => void performGitOperation({ action: "stage", paths: [file.path] }), file => setGitDiscardTarget({ path: file.path, scopeKey: selectedScopeKey }))}
+              </>}
+              {gitSelectedPath && <section className="rw-git-diff"><div className="rw-git-diff-heading"><strong title={gitSelectedPath}>{gitSelectedPath}</strong><div><button aria-label="Previous changed file" disabled={!visibleGitStatus.isGitRepo || visibleGitStatus.files.length < 2} onClick={() => moveGitSelection(visibleGitStatus.files, gitSelectedPath, -1)}>Previous</button><button aria-label="Next changed file" disabled={!visibleGitStatus.isGitRepo || visibleGitStatus.files.length < 2} onClick={() => moveGitSelection(visibleGitStatus.files, gitSelectedPath, 1)}>Next</button></div></div>{visibleGitDiffError ? <div className="rw-data-error" role="alert">Diff unavailable: {visibleGitDiffError.message}</div> : gitDiffs?.path === gitSelectedPath && gitDiffs.scopeKey === selectedScopeKey ? <>{[gitDiffs.staged, gitDiffs.unstaged].map((diff, index) => diff?.diff ? <pre key={index} aria-label={index === 0 ? "Staged diff" : "Unstaged diff"}>{diff.diff.split("\n").map((line, lineIndex) => <span className={line.startsWith("+") && !line.startsWith("+++") ? "added" : line.startsWith("-") && !line.startsWith("---") ? "removed" : ""} key={lineIndex}>{line}{"\n"}</span>)}</pre> : null)}{!gitDiffs.staged?.diff && !gitDiffs.unstaged?.diff && <p>No staged or unstaged diff for this file.</p>}</> : <p>Loading selected diff…</p>}</section>}
             </>}
             {!data.selectedWorkspace && <div className="rw-empty-state">Select a workspace to inspect Git status.</div>}
           </div>
@@ -933,5 +969,36 @@ export function ReactWorkspaceApp() {
     </div>
     <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
     <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
+    <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>
   </div>;
+}
+
+function gitMutationSuccess(mutation: GitMutation): string {
+  if (mutation.action === "stage" || mutation.action === "unstage" || mutation.action === "discard") return `Git ${mutation.action} completed for ${mutation.paths.length} file${mutation.paths.length === 1 ? "" : "s"}.`;
+  if (mutation.action === "commit") return "Commit created.";
+  if (mutation.action === "switch") return `Switched to ${mutation.branch}.`;
+  return `Git ${mutation.action} completed.`;
+}
+
+function renderGitChangeSection(
+  title: string,
+  files: readonly GitStatusResponse["files"][number][],
+  section: "staged" | "unstaged",
+  selectedPath: string | undefined,
+  disabled: boolean,
+  onSelect: (path: string) => void,
+  onChange: (file: GitStatusResponse["files"][number]) => void,
+  onDiscard: ((file: GitStatusResponse["files"][number]) => void) | undefined,
+) {
+  return <section className="rw-git-changes" aria-label={title}>
+    <strong>{title} ({files.length})</strong>
+    {files.length === 0 ? <p>No {section} changes.</p> : files.map(file => {
+      const label = gitChangeLabel(file, section);
+      return <div className="rw-git-change-row" key={file.path}>
+        <button className={selectedPath === file.path ? "selected" : ""} title={label} onClick={() => onSelect(file.path)}><span>{file.path}</span><small>{label}</small></button>
+        <button aria-label={`${section === "staged" ? "Unstage" : "Stage"} ${file.path}`} disabled={disabled} onClick={() => onChange(file)}>{section === "staged" ? "Unstage" : "Stage"}</button>
+        {section === "unstaged" && onDiscard !== undefined && file.workingTree !== "untracked" && file.workingTree !== "ignored" && <button aria-label={`Discard changes to ${file.path}`} disabled={disabled} onClick={() => onDiscard(file)}>Discard</button>}
+      </div>;
+    })}
+  </section>;
 }
