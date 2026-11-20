@@ -219,6 +219,8 @@ button { cursor: pointer; }
 .rw-git-diff .added{color:var(--rw-success)}
 .rw-git-diff .removed{color:var(--rw-danger)}
 .rw-git-limit{padding-top:9px;border-top:1px solid var(--rw-line);font-size:10px!important}
+.rw-git-success{padding:8px 10px;border:1px solid color-mix(in srgb,var(--rw-success) 35%,var(--rw-line));border-radius:7px;background:color-mix(in srgb,var(--rw-success) 9%,var(--rw-card));color:var(--rw-success);font-size:11px}
+.rw-git-diff-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}.rw-git-diff-heading>strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rw-git-diff-heading>div{display:flex;gap:4px;flex:none}.rw-git-diff-heading button{min-height:32px}.rw-git-change-row small{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rw-git-changes>p{margin:0;padding:6px 8px;color:var(--rw-muted);font-size:11px}
 .rw-model-row{flex-wrap:wrap;gap:8px 13px}
 .rw-model-picker select,.rw-thinking-picker select{max-width:170px}
 .rw-status{height:26px;background:#1d1e25}
