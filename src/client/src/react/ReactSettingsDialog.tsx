@@ -65,8 +65,8 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
 
   useEffect(() => {
     if (!open) return;
-    void data.loadSettings();
-  }, [open, data.loadSettings, data.state.selectedMachine?.id, data.selectedProject?.id]);
+    void data.loadSettings(data.settingsProjectId);
+  }, [open, data.loadSettings, data.state.selectedMachine?.id, data.settingsProjectId]);
 
   useEffect(() => setRenameDraft(data.state.selectedMachine?.name ?? ""), [data.state.selectedMachine?.id, data.state.selectedMachine?.name]);
 
