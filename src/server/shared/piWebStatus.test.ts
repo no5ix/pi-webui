@@ -360,6 +360,8 @@ describe("PI WEB status", () => {
       restartSessiond: "pi-web-docker restart-sessiond",
       status: "pi-web-docker status",
     });
+    expect(Object.keys(status.commands)).not.toContain("update");
+    expect(JSON.stringify(status)).not.toContain("pi-web-docker update");
     expect(JSON.stringify(status)).not.toContain("npm install -g");
     expect(JSON.stringify(status)).not.toContain("pi-web restart");
   });
@@ -380,6 +382,8 @@ describe("PI WEB status", () => {
       restartSessiond: "pi-web-docker --dev restart-sessiond",
       status: "pi-web-docker --dev status",
     });
+    expect(Object.keys(status.commands)).not.toContain("update");
+    expect(JSON.stringify(status)).not.toContain("pi-web-docker --dev update");
   });
 
   it("infers explicit Docker development commands from the generated dev root when mode is omitted", async () => {

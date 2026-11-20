@@ -493,8 +493,7 @@ function installationRestartStateOf(scope: ServiceRestartScope | undefined): Ins
 }
 
 /**
- * Whether this PI WEB may restart every installed service, or update with a command from its
- * environment, decided as the Updates page decides its buttons: from the web/API process's own
+ * Whether this PI WEB may restart every installed service, decided from the web/API process's own
  * service and the session daemon's report. `refusal` is the sentence a refused caller shows.
  */
 export async function installationRestartCheck(

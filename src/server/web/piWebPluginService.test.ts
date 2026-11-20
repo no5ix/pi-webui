@@ -14,9 +14,16 @@ const originalDockerRuntime = process.env["PI_WEB_DOCKER_RUNTIME"];
 const originalDockerMode = process.env["PI_WEB_DOCKER_MODE"];
 const originalDockerDevRepoRoot = process.env["PI_WEB_DOCKER_DEV_REPO_ROOT"];
 const originalDockerInstallDir = process.env["PI_WEB_DOCKER_INSTALL_DIR"];
+const originalConfigPath = process.env["PI_WEB_CONFIG"];
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "pi-web-plugin-service-test-"));
+  // A service built without a configProvider reads the host's own PI WEB config, and a developer
+  // machine has preferences of its own - a plugin disabled there disappears from a fixture list and
+  // reads as a discovery failure. Every test in this file answers from an empty config file.
+  const configPath = join(tempDir, "config.json");
+  await writeFile(configPath, "{}\n");
+  process.env["PI_WEB_CONFIG"] = configPath;
 });
 
 afterEach(async () => {
@@ -24,6 +31,7 @@ afterEach(async () => {
   restoreEnv("PI_WEB_DOCKER_MODE", originalDockerMode);
   restoreEnv("PI_WEB_DOCKER_DEV_REPO_ROOT", originalDockerDevRepoRoot);
   restoreEnv("PI_WEB_DOCKER_INSTALL_DIR", originalDockerInstallDir);
+  restoreEnv("PI_WEB_CONFIG", originalConfigPath);
   await rm(tempDir, { recursive: true, force: true });
 });
 
@@ -544,6 +552,16 @@ describe("PiWebPluginService", () => {
     expect(moduleUrl.pathname).toBe("/pi-web-plugins/host-facts/pi-web-plugin.js");
     expect(moduleUrl.searchParams.get("v")).toMatch(/^sha256:[a-f\d]{64}$/u);
     expect(moduleUrl.searchParams.get("dockerMode")).toBe("dev");
+
+    await writePlugin(join(tempDir, "plugins", "no-facts"), {
+      packageJson: { piWeb: { plugins: [{ id: "no-facts", browserRoot: ".", module: "pi-web-plugin.js" }] } },
+      files: { "pi-web-plugin.js": "export default {};" },
+    });
+
+    const undeclared = (await service.manifest()).plugins.find((plugin) => plugin.id === "no-facts");
+    const undeclaredUrl = new URL(undeclared?.module ?? "", "http://pi-web.test/pi-web-plugins/manifest.json");
+    expect([...undeclaredUrl.searchParams.keys()]).toEqual(["v"]);
+    expect(undeclaredUrl.searchParams.get("dockerMode")).toBeNull();
   });
 
   it("discovers Pi package plugins through an injected package provider", async () => {
