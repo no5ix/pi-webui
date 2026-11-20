@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatLine } from "../chatTypes";
-import { groupReactActivityMessages } from "./ReactWorkspaceApp";
+import { groupReactTranscriptMessages } from "./ReactWorkspaceApp";
 import { collectEditedFileDiffs, collectToolRecords, summarizeActivityGroup } from "./ActivityWorkbenchPanels";
 
 describe("React workspace activity panels", () => {
@@ -22,7 +22,7 @@ describe("React workspace activity panels", () => {
       { role: "tool", parts: [{ type: "toolResult", toolName: "read", text: "file contents", isError: false }] },
       { role: "assistant", parts: [{ type: "text", text: "The review is complete. Here is the report." }] },
     ];
-    const groups = groupReactActivityMessages(messages);
+    const groups = groupReactTranscriptMessages(messages);
     expect(groups).toHaveLength(2);
     expect(groups[0]).toMatchObject({ kind: "group", messages: messages.slice(0, 3) });
     expect(groups[1]).toMatchObject({ kind: "message", message: messages[3] });
@@ -31,7 +31,7 @@ describe("React workspace activity panels", () => {
   it("omits only the internal background-task notification sentinel", () => {
     const notification: ChatLine = { role: "system", parts: [{ type: "text", text: "background-task-notification" }] };
     const actualSystem: ChatLine = { role: "system", parts: [{ type: "text", text: "Authentication failed." }] };
-    const groups = groupReactActivityMessages([notification, actualSystem]);
+    const groups = groupReactTranscriptMessages([notification, actualSystem]);
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ kind: "message", message: actualSystem });
   });
