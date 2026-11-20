@@ -135,6 +135,12 @@ Consequences, in the order they must be handled:
    repo's own code no longer depends on Lit. `docs/plugins.md` must state the migration strategy for
    external plugins; the adapter must isolate a plugin's errors and clean up on unmount.
 
+The design is written down: `plugin-api-react.md` names the React render field for every family the
+registry stores (with the registry read each answers through), the host rules — one registry per
+machine, registration replaces, a slot renders once, disposal is total, failure is visible — the React
+`ui.render*` helpers, and the order the Lit path is removed in. The work is that page executed one
+family and one plugin at a time, starting with the plugin whose shape the other seven copy.
+
 ## Milestone plan
 
 1. **Plugin host in React** (highest priority, unblocks Lit removal).

@@ -63,3 +63,10 @@ One module, `src/client/src/react/usePluginRegistry.ts`, that:
   from the React Plugins settings page, and confirm on desktop 1440px and mobile 393x850 that its
   settings section, workspace panel and composer contribution appear and act, that the browser
   console stays clean, and that disabling removes it.
+
+## The contract that replaces this shape
+
+The React contribution vocabulary (one render field per family, with the registry read each answers
+through), the host rules — one registry per machine, registration replaces, a slot renders once,
+disposal is total, failure is visible — the React `ui.render*` helpers, and the order the Lit path is
+removed in, are specified in [plugin-api-react.md](plugin-api-react.md).
