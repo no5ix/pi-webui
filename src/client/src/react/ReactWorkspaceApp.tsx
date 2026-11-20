@@ -8,10 +8,10 @@ import { historyIndexStep, loadPromptHistory, recallPromptHistoryAttachments, re
 import { machineSessionKey } from "../machineKeys";
 import { MOBILE_NAVIGATION_MEDIA_QUERY } from "../breakpoints";
 import type { CompletionItem } from "../components/shared";
+import type { ChatLine } from "../chatTypes";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
-import { groupChatMessages } from "../chatGroups";
 import { ActivityRecordsPanel, collectEditedFileDiffs, collectToolRecords, summarizeActivityGroup } from "./ActivityWorkbenchPanels";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
@@ -323,7 +323,7 @@ export function ReactWorkspaceApp() {
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
   const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
   const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
-  const activityGroups = useMemo(() => groupChatMessages(data.messages), [data.messages]);
+  const activityGroups = useMemo(() => groupReactActivityMessages(data.messages), [data.messages]);
   const subagentRecords = useMemo(() => collectToolRecords(data.messages, /subagent/i), [data.messages]);
   const backgroundRecords = useMemo(() => collectToolRecords(data.messages, /background/i), [data.messages]);
   const backgroundBadgeCount = backgroundRecords.length || backgroundCount;
@@ -661,7 +661,7 @@ export function ReactWorkspaceApp() {
         <footer className="rw-status">
           <span>{data.sessionStatus ? data.sessionStatus.tokens.input.toLocaleString() + " in / " + data.sessionStatus.tokens.output.toLocaleString() + " out" : "No session metrics"}</span>
           {contextUsage?.percent !== null && contextUsage?.percent !== undefined && <span>ctx {Math.round(contextUsage.percent)}%</span>}
-          {data.sessionStatus?.gitBranch && <span><Icon name="git-branch"/> {data.sessionStatus.gitBranch}</span>}
+          {data.sessionStatus?.gitBranch && <span className="rw-status-branch"><Icon name="git-branch"/> {data.sessionStatus.gitBranch}</span>}
           {data.sessionStatus && <small>$ {data.sessionStatus.cost.toFixed(4)}</small>}
         </footer>
       </main>
@@ -744,6 +744,25 @@ export function ReactWorkspaceApp() {
     <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
     <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>
   </div>;
+}
+
+function groupReactActivityMessages(messages: readonly ChatLine[]) {
+  type Group = { kind: "group"; messages: ChatLine[]; startIndex: number; endIndex: number } | { kind: "message"; message: ChatLine; index: number };
+  const groups: Group[] = [];
+  let run: ChatLine[] = [];
+  let startIndex = 0;
+  const flush = () => { if (run.length) groups.push({ kind: "group", messages: run, startIndex, endIndex: startIndex + run.length - 1 }); run = []; };
+  messages.forEach((message, index) => {
+    const technical = message.parts.some(part => part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution" || part.type === "toolResult");
+    const activity = technical || message.role === "tool" || message.role === "bash";
+    const narration = message.role === "assistant" && run.length > 0 && message.parts.length > 0 && message.parts.every(part => part.type === "text");
+    const boundary = message.role === "user" || message.role === "system" || message.source === "compaction" || message.source === "branch_summary";
+    if (boundary) { flush(); groups.push({ kind: "message", message, index }); return; }
+    if (activity || narration) { if (!run.length) startIndex = index; run.push(message); return; }
+    flush(); groups.push({ kind: "message", message, index });
+  });
+  flush();
+  return groups;
 }
 
 function gitMutationSuccess(mutation: GitMutation): string {
