@@ -258,6 +258,54 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
    * built. A barrier that waits for a request that was never made never finishes, and the page then reads
    * as "loading" and "not read yet" at the same time, forever.
    */
+  const readSettingsResource = useCallback(<T,>(
+    scopeKey: string,
+    requestId: number,
+    start: () => Promise<T>,
+    land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"],
+    clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"],
+  ): Promise<void> => {
+    let request: Promise<T>;
+    try {
+      request = start();
+    } catch (failure) {
+      settleSettings(scopeKey, requestId, clear, failure);
+      return Promise.resolve();
+    }
+    return request.then(
+      value => { settleSettings(scopeKey, requestId, current => land(current, value), undefined); },
+      (failure: unknown) => { settleSettings(scopeKey, requestId, clear, failure); },
+    );
+  }, [settleSettings]);
+
+  /**
+   * Re-reads one list for the scope the page is showing, after a write answered for a narrower one.
+   *
+   * A global preference write answers with the machine's list, and that list has no project rows in it.
+   * The Skills and MCP pages display a project scope, so applying the write's answer erased a project's
+   * rows from a page whose own heading names that project, and the next toggle had nothing left to act
+   * on. The write's sentence is kept as the notice; the rows come from the page's own read.
+   */
+  const refreshSettingsList = useCallback(async (group: "skills" | "mcp") => {
+    const machineId = stateRef.current.selectedMachine?.id ?? "local";
+    const project = settingsProjectIdRef.current;
+    const scopeKey = settingsScopeKey({ machineId, projectId: project });
+    const requestId = ++settingsRequestIdRef.current;
+    settingsAnswersRef.current = beginSettingsRead(scopeKey, requestId);
+    setSettings(current => ({ ...current, scopeKey, loading: true }));
+    if (group === "skills") {
+      await readSettingsResource(scopeKey, requestId,
+        () => piSkillsApi.list(project, machineId),
+        (current, value) => ({ ...current, skills: value }),
+        current => ({ ...current, skills: undefined }));
+      return;
+    }
+    await readSettingsResource(scopeKey, requestId,
+      () => piMcpApi.list(project, machineId),
+      (current, value) => ({ ...current, mcp: value }),
+      current => ({ ...current, mcp: undefined }));
+  }, [readSettingsResource]);
+
   const loadSettings = useCallback(async (projectId?: string) => {
     const machineId = stateRef.current.selectedMachine?.id ?? "local";
     const project = projectId ?? settingsProjectIdRef.current;
@@ -269,23 +317,8 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     setSettings((current) => current.scopeKey === scopeKey
       ? { ...current, loading: true, error: undefined }
       : { loading: true, scopeKey });
-    const answer = <T,>(
-      start: () => Promise<T>,
-      land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"],
-      clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"],
-    ) => {
-      let request: Promise<T>;
-      try {
-        request = start();
-      } catch (failure) {
-        settleSettings(scopeKey, requestId, clear, failure);
-        return Promise.resolve();
-      }
-      return request.then(
-        value => { settleSettings(scopeKey, requestId, current => land(current, value), undefined); },
-        (failure: unknown) => { settleSettings(scopeKey, requestId, clear, failure); },
-      );
-    };
+    const answer = <T,>(start: () => Promise<T>, land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"], clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"]) =>
+      readSettingsResource(scopeKey, requestId, start, land, clear);
     await Promise.all([
       answer(() => configApi.config(machineId), (current, value) => ({ ...current, config: value }), current => ({ ...current, config: undefined })),
       answer(() => pluginsApi.plugins(machineId), (current, value) => ({ ...current, plugins: value }), current => ({ ...current, plugins: undefined })),
@@ -293,7 +326,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       answer(() => piSkillsApi.list(project, machineId), (current, value) => ({ ...current, skills: value }), current => ({ ...current, skills: undefined })),
       answer(() => piMcpApi.list(project, machineId), (current, value) => ({ ...current, mcp: value }), current => ({ ...current, mcp: undefined })),
     ]);
-  }, []);
+  }, [readSettingsResource]);
   const writeSettingsForScope = (scopeKey: string, update: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"]) => {
     if (scopeKey !== currentSettingsScopeKey()) return;
     setSettings(current => update(current));
@@ -550,9 +583,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       id: skill.id, name: skill.name, scope: skill.scope, enabled,
       ...(skill.scope === "project" && settingsProjectIdRef.current !== undefined ? { projectId: settingsProjectIdRef.current } : {}),
     }, current.selectedMachine?.id ?? "local");
-    writeSettingsForScope(scopeKey, value => ({ ...value, skills: response, notice: response.requiresReload ? "Skill saved. Reload running sessions to apply it." : "Skill preference saved." }));
+    await refreshSettingsList("skills");
+    writeSettingsForScope(scopeKey, value => ({ ...value, notice: response.requiresReload ? "Skill saved. Reload running sessions to apply it." : "Skill preference saved." }));
     return response;
-  }, []);
+  }, [refreshSettingsList]);
   /**
    * Turns a package's preference on or off in the scope that owns it.
    *
@@ -584,8 +618,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       ...(target.kind === "override" && settingsProjectIdRef.current !== undefined ? { projectId: settingsProjectIdRef.current } : {}),
       scope: server.scope,
     }, current.selectedMachine?.id ?? "local");
-    writeSettingsForScope(scopeKey, value => ({ ...value, mcp: response, notice: response.requiresReload ? "MCP configuration saved. Reload running sessions to apply it." : "MCP configuration saved." }));
-  }, []);
+    await refreshSettingsList("mcp");
+    writeSettingsForScope(scopeKey, value => ({ ...value, notice: response.requiresReload ? "MCP configuration saved. Reload running sessions to apply it." : "MCP configuration saved." }));
+  }, [refreshSettingsList]);
   const testMcp = useCallback(async (server: PiMcpServerInfo) => {
     const current = stateRef.current;
     const scopeKey = currentSettingsScopeKey();
@@ -602,8 +637,9 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       ...(target.kind === "override" && settingsProjectIdRef.current !== undefined ? { projectId: settingsProjectIdRef.current } : {}),
       scope: server.scope,
     }, current.selectedMachine?.id ?? "local");
-    writeSettingsForScope(scopeKey, value => ({ ...value, mcp: response, notice: response.requiresReload ? "MCP entry removed. Reload running sessions to apply it." : "MCP entry removed." }));
-  }, []);
+    await refreshSettingsList("mcp");
+    writeSettingsForScope(scopeKey, value => ({ ...value, notice: response.requiresReload ? "MCP entry removed. Reload running sessions to apply it." : "MCP entry removed." }));
+  }, [refreshSettingsList]);
   /**
    * Writes one server's config, and says what the answer did.
    *
@@ -616,14 +652,14 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const current = stateRef.current;
     const scopeKey = currentSettingsScopeKey();
     const response = await piMcpApi.save(save, current.selectedMachine?.id ?? "local");
+    await refreshSettingsList("mcp");
     writeSettingsForScope(scopeKey, value => ({
       ...value,
-      mcp: response,
       notice: response.added === true
         ? `MCP server "${response.name}" added. Start a session, or reload a running one, to connect it.`
         : `MCP server "${response.name}" saved. Reload a running session to apply it.`,
     }));
-  }, []);
+  }, [refreshSettingsList]);
 
   const selectMachine = useCallback((machine: Machine) => runtime.machines.selectMachine(machine), [runtime]);
   const addMachine = useCallback(async (input: { name: string; baseUrl: string; token?: string }) => {

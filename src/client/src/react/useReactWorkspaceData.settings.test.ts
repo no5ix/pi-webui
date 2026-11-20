@@ -26,6 +26,8 @@ const skillOf = (name: string) => ({
 interface Scenario {
   projectsByMachine: Record<string, unknown[]>;
   skillsByProject: Record<string, unknown[]>;
+  /** The list the server answers a skill write with: pi re-reads the scope the write touched. */
+  enabledSkillsAnswer: unknown[];
   failSkills: boolean;
   hangSkillsFor: (url: string) => boolean;
 }
@@ -39,6 +41,7 @@ interface Harness {
   readonly selectMachine: (machineId: string) => Promise<void>;
   readonly reload: () => Promise<void>;
   readonly resolveHangedSkills: () => Promise<void>;
+  readonly toggleSkill: (testId: string, on: boolean) => Promise<void>;
   readonly open: (value: boolean) => Promise<void>;
   readonly unmount: () => Promise<void>;
 }
@@ -67,6 +70,10 @@ async function settingsHarness(scenario: Scenario, open = true): Promise<Harness
     } else if (url.includes("/projects")) {
       body = scenario.projectsByMachine[machineId] ?? [];
     } else if (url.includes("/pi-skills")) {
+      if (url.includes("/pi-skills/set-enabled")) {
+        body = { skills: scenario.enabledSkillsAnswer, diagnostics: [], scopes: [], requiresReload: true };
+        return Promise.resolve(json(body));
+      }
       if (scenario.hangSkillsFor(url)) {
         const hung = { skills: scenario.skillsByProject[query.get("projectId") ?? ""] ?? [], diagnostics: [], scopes: [] };
         return new Promise<Response>(resolve => {
@@ -125,6 +132,16 @@ async function settingsHarness(scenario: Scenario, open = true): Promise<Harness
     data: () => {
       if (latest === undefined) throw new Error("the hook never rendered");
       return latest;
+    },
+    toggleSkill: async (testId, on) => {
+      const input = container.querySelector<HTMLInputElement>(`[data-test-id="${testId}"] .rw-settings-toggle input`);
+      if (input === null) throw new Error(`no toggle for ${testId}`);
+      if (input.disabled) throw new Error(`the toggle for ${testId} is disabled`);
+      await act(async () => {
+        input.click();
+        for (let index = 0; index < 8; index += 1) await Promise.resolve();
+      });
+      void on;
     },
     calls: fragment => requests.filter(call => call.includes(fragment)),
     text: () => container.textContent.replace(/\s+/g, " "),
@@ -187,6 +204,7 @@ function scenario(overrides: Partial<Scenario> = {}): Scenario {
   return {
     projectsByMachine: { local: [autoToc], lab: [saytype] },
     skillsByProject: { "": [{ ...skillOf("machine-wide") }], "prj-auto-toc": [skillOf("release-notes")], "prj-saytype": [skillOf("lab-only")] },
+    enabledSkillsAnswer: [],
     failSkills: false,
     hangSkillsFor: () => false,
     ...overrides,
@@ -317,6 +335,29 @@ describe("React Settings data", () => {
     await flush();
     expect(harness.calls("pi-skills").length).toBeGreaterThan(before);
     expect(harness.text()).not.toContain("Loading settings");
+    await harness.unmount();
+  });
+
+  it("keeps a project's skill rows when a global skill is written under that project scope", async () => {
+    const machineWide = { ...skillOf("machine-wide"), id: "sk1:g:machine-wide", scope: "global", origin: "agent", source: "local" };
+    const harness = await settingsHarness(scenario({
+      skillsByProject: { "": [machineWide], "prj-auto-toc": [machineWide, skillOf("release-notes")], "prj-saytype": [] },
+      enabledSkillsAnswer: [{ ...machineWide, enabled: false }],
+    }));
+    await harness.page("Skills");
+    await harness.selectSettingsProject(autoToc.id);
+    await flush();
+    expect(harness.text()).toContain("release-notes");
+
+    await harness.toggleSkill("react-skills-row-global-sk1:g:machine-wide", false);
+    await flush();
+
+    const rows = harness.data().settings.skills?.skills ?? [];
+    expect(rows.some(row => row.scope === "project" && row.name === "release-notes")).toBe(true);
+    expect(harness.text()).toContain("release-notes");
+    expect(harness.calls("pi-skills/set-enabled").length).toBe(1);
+    expect(harness.calls(`pi-skills?projectId=${autoToc.id}`).length).toBe(2);
+    expect(harness.text()).toContain("Skill saved");
     await harness.unmount();
   });
 });
