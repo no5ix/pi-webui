@@ -16,8 +16,9 @@ application (`src/client/src/main.ts`) is no longer an entry point.
 Workbench merged, suite green at `4aeb71d4` (**6154 passed / 5 skipped / 0 failed**; typecheck, lint,
 Knip exit 0; production build 0). Two commits land after that number — `ee66cc6c` (a scoped Settings
 write must answer with the scope the page shows) and `b923ea48` (the add-project test fake was one api
-method short) — each with its own targeted suite green (54 and 2). **The combined `pnpm run verify` and
-the full Vitest run have not been repeated at this HEAD; do that before quoting a suite number for it.**
+method short) — each with its own targeted suite green (54 and 2). **`pnpm run verify` at `4f3bac11`
+exits 0: 694 files, 6130 passed, 5 skipped, 0 failed** (typecheck, lint, Knip and the suite in one
+gate).
 Browser: 8/8 Settings sections pass at 1440x900; five findings are open and listed in
 **Browser pass of 2026-11-21**. Phase 5 is not verified; the plugin phases (3A/3B) are not started; the
 project/session, conversation/composer and Settings parity audits (Phase 2/4) have not been performed.
