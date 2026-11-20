@@ -8,6 +8,7 @@ import {
   piMcpGlobalRows,
   piMcpGlobalSectionTitle,
   piMcpMetaLines,
+  piMcpNotLoadedNote,
   piMcpMutationMessage,
   piMcpOverrideLine,
   piMcpProbeLabel,
@@ -240,5 +241,12 @@ describe("MCP scope answers", () => {
     expect(piMcpMutationMessage("remove", server({}))).toContain("until it reloads");
     expect(piMcpMutationMessage("enable", server({}), false)).toContain("is disabled");
     expect(piMcpMutationMessage("save", server({}))).toContain("is saved in");
+  });
+});
+
+describe("MCP list presence", () => {
+  it("names the unread list as unread, not as empty", () => {
+    expect(piMcpNotLoadedNote()).toContain("not been read");
+    expect(piMcpEmptyNote("global", "Site")).not.toContain("not been read");
   });
 });

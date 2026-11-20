@@ -25,6 +25,20 @@ export function SettingsNotice({ tone = "info", children }: { tone?: SettingsNot
   return <p className={`rw-settings-note rw-settings-note-${tone}`} role={noticeRoles[tone]}>{children}</p>;
 }
 
+/**
+ * A labelled settings control with the note that belongs to it.
+ *
+ * `wide` spans the MCP form grid. The note sits inside the label, not beside it, because the sentence
+ * explains this control and a screen reader reaches it while the control has focus.
+ */
+export function SettingsField({ label, children, note, wide = false }: { label: string; children: ReactNode; note?: ReactNode; wide?: boolean }) {
+  return <label className={wide ? "rw-settings-field rw-mcp-form-wide" : "rw-settings-field"}>
+    <span>{label}</span>
+    {children}
+    {note === undefined ? null : <small>{note}</small>}
+  </label>;
+}
+
 export function SettingsEmpty({ children }: { children: ReactNode }) {
   return <p className="rw-settings-empty" role="status">{children}</p>;
 }
@@ -196,13 +210,4 @@ export function NoticeList({ busy, notice, error }: NoticeListProps) {
     {busy === undefined ? null : <p className="rw-settings-notice is-info" role="status">{busy}…</p>}
     {successes.map((entry, index) => <p className="rw-settings-notice is-success" key={`notice-${index}`} role="status">{entry}</p>)}
   </div>;
-}
-
-/** A field the reader types into, with its explanation, in the shape every settings form uses. */
-export function SettingsField({ label, children, note }: { label: string; children: ReactNode; note?: ReactNode }) {
-  return <label className="rw-settings-field">
-    <span>{label}</span>
-    {children}
-    {note === undefined ? null : <small>{note}</small>}
-  </label>;
 }

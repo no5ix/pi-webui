@@ -24,8 +24,7 @@ import {
   piMcpTrustNote,
   piMcpSecurityLines,
 } from "./settings/piMcpSettingsState";
-import {
-  NoticeList,
+import { NoticeList,
   SettingsButton,
   SettingsCard,
   SettingsConfirmAction,
@@ -35,6 +34,7 @@ import {
   SettingsSection,
   SettingsToggle,
   type SettingsProjectScope,
+  SettingsField,
 } from "./settings/SettingsKit";
 
 /**
@@ -208,53 +208,45 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
       {problem !== undefined && <p className="rw-settings-notice" role="alert">{problem}</p>}
       <p className="rw-mcp-form-wide">This write goes to {form.projectScope ? (form.target === "override" ? "this project's override of the global server" : `this project's mcp.json`) : `${machineLabel}'s global mcp.json`}.</p>
       <div className="rw-mcp-form-grid">
-        <label>Name<input value={form.name} disabled={form.editing} onChange={event => setField("name", event.target.value)}/></label>
+        <SettingsField label="Name"><input value={form.name} disabled={form.editing} onChange={event => setField("name", event.target.value)}/></SettingsField>
         {form.target === "override"
           ? <p className="rw-mcp-form-wide">An override changes only what this project says about a global server: its enabled switch and its exposure. The command, URL, and secrets stay in the global file.</p>
           : <>
-        <label>Transport<select value={form.transport} onChange={event => setField("transport", event.target.value === "http" ? "http" : "stdio")}>
-          <option value="stdio">stdio (a command pi runs)</option>
-          <option value="http">streamable HTTP (a URL)</option>
-        </select></label>
-        <label>Write to<select value={`${form.target}:${form.projectScope}`} onChange={event => {
-          const option = writeOptions(form.editing).find(candidate => `${candidate.target}:${candidate.projectScope}` === event.target.value);
-          if (option !== undefined) setForm(current => (current === undefined ? current : { ...current, target: option.target, projectScope: option.projectScope }));
-        }}>
-          {writeOptions(form.editing).map(option => <option key={`${option.target}:${option.projectScope}`} value={`${option.target}:${option.projectScope}`}>{option.label}</option>)}
-        </select></label>
-        <label className="rw-mcp-form-wide">Description<input value={form.description} placeholder="What this server is for" onChange={event => setField("description", event.target.value)}/>
-          <small>pi's note about the server. It is written into the config file beside the rest of the definition.</small>
-        </label>
-        {form.transport === "stdio"
-          ? <>
-            <label>Command<input value={form.command} placeholder="npx" onChange={event => setField("command", event.target.value)}/></label>
-            <label>Arguments<input value={form.args} placeholder="-y @modelcontextprotocol/server-filesystem /srv/data" onChange={event => setField("args", event.target.value)}/>
-              <small>{form.editing ? "Leave this empty to keep the arguments the file has; typing replaces the whole list." : "Separated by spaces; quote an argument that contains one."}</small>
-            </label>
-            <label>Working directory<input value={form.cwd} placeholder="/srv/data" onChange={event => setField("cwd", event.target.value)}/></label>
-            <label className="rw-mcp-form-wide">Environment variables<textarea rows={3} value={form.env} placeholder="API_TOKEN=…" onChange={event => setField("env", event.target.value)}/>
-              <small>{form.editing && form.existingEnvNames.length > 0
-                ? `This server sets ${form.existingEnvNames.join(", ")}. Leave the field empty to keep those values; typing replaces the whole set.`
-                : "One NAME=value per line. Values go into pi's config file on this machine."}</small>
-            </label>
-          </>
-          : <>
-            <label className="rw-mcp-form-wide">URL<input value={form.url} placeholder="https://mcp.example.com/mcp" onChange={event => setField("url", event.target.value)}/></label>
-            <label className="rw-mcp-form-wide">Headers<textarea rows={3} value={form.headers} placeholder="Authorization: Bearer …" onChange={event => setField("headers", event.target.value)}/>
-              <small>{form.editing && form.existingHeaderNames.length > 0
-                ? `This server sends ${form.existingHeaderNames.join(", ")}. Leave the field empty to keep those values; typing replaces the whole set.`
-                : "One Name: value per line. Values go into pi's config file on this machine."}</small>
-            </label>
-          </>}
-        <label>Timeout (seconds)<input value={form.timeout} inputMode="numeric" placeholder="pi's default" onChange={event => setField("timeout", event.target.value)}/></label>
+            <SettingsField label="Transport"><select value={form.transport} onChange={event => setField("transport", event.target.value === "http" ? "http" : "stdio")}>
+              <option value="stdio">stdio (a command pi runs)</option>
+              <option value="http">streamable HTTP (a URL)</option>
+            </select></SettingsField>
+            <SettingsField label="Write to"><select value={`${form.target}:${form.projectScope}`} onChange={event => {
+              const option = writeOptions(form.editing).find(candidate => `${candidate.target}:${candidate.projectScope}` === event.target.value);
+              if (option !== undefined) setForm(current => (current === undefined ? current : { ...current, target: option.target, projectScope: option.projectScope }));
+            }}>
+              {writeOptions(form.editing).map(option => <option key={`${option.target}:${option.projectScope}`} value={`${option.target}:${option.projectScope}`}>{option.label}</option>)}
+            </select></SettingsField>
+            <SettingsField wide label="Description" note="pi's note about the server. It is written into the config file beside the rest of the definition."><input value={form.description} placeholder="What this server is for" onChange={event => setField("description", event.target.value)}/></SettingsField>
+            {form.transport === "stdio"
+              ? <>
+                <SettingsField label="Command"><input value={form.command} placeholder="npx" onChange={event => setField("command", event.target.value)}/></SettingsField>
+                <SettingsField label="Arguments" note={form.editing ? "Leave this empty to keep the arguments the file has; typing replaces the whole list." : "Separated by spaces; quote an argument that contains one."}><input value={form.args} placeholder="-y @modelcontextprotocol/server-filesystem /srv/data" onChange={event => setField("args", event.target.value)}/></SettingsField>
+                <SettingsField label="Working directory"><input value={form.cwd} placeholder="/srv/data" onChange={event => setField("cwd", event.target.value)}/></SettingsField>
+                <SettingsField wide label="Environment variables" note={form.editing && form.existingEnvNames.length > 0
+                  ? `This server sets ${form.existingEnvNames.join(", ")}. Leave the field empty to keep those values; typing replaces the whole set.`
+                  : "One NAME=value per line. Values go into pi's config file on this machine."}><textarea rows={3} value={form.env} placeholder="API_TOKEN=…" onChange={event => setField("env", event.target.value)}/></SettingsField>
+              </>
+              : <>
+                <SettingsField wide label="URL"><input value={form.url} placeholder="https://mcp.example.com/mcp" onChange={event => setField("url", event.target.value)}/></SettingsField>
+                <SettingsField wide label="Headers" note={form.editing && form.existingHeaderNames.length > 0
+                  ? `This server sends ${form.existingHeaderNames.join(", ")}. Leave the field empty to keep those values; typing replaces the whole set.`
+                  : "One Name: value per line. Values go into pi's config file on this machine."}><textarea rows={3} value={form.headers} placeholder="Authorization: Bearer …" onChange={event => setField("headers", event.target.value)}/></SettingsField>
+              </>}
+            <SettingsField label="Timeout (seconds)"><input value={form.timeout} inputMode="numeric" placeholder="pi's default" onChange={event => setField("timeout", event.target.value)}/></SettingsField>
         </>}
-        <label>Exposure<select value={form.exposure} onChange={event => setField("exposure", event.target.value === "" ? "" : event.target.value as McpFormState["exposure"])}>
+        <SettingsField label="Exposure"><select value={form.exposure} onChange={event => setField("exposure", event.target.value === "" ? "" : event.target.value as McpFormState["exposure"])}>
           <option value="">pi's default (codemode)</option>
           <option value="codemode">codemode</option>
           <option value="deferred">deferred</option>
           <option value="direct">direct</option>
           <option value="hidden">hidden</option>
-        </select></label>
+        </select></SettingsField>
         <label className="rw-setting-check"><input type="checkbox" checked={form.enabled} onChange={event => setField("enabled", event.target.checked)}/>Enabled</label>
       </div>
       <div className="rw-mcp-form-actions">

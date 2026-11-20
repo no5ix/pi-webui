@@ -150,6 +150,9 @@ button { cursor: pointer; }
 .rw-settings-field{display:flex;flex-direction:column;gap:5px;color:var(--rw-text-secondary);font-size:11px}
 .rw-settings-inline-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:7px}
 .rw-settings-inline-form .rw-settings-field{flex:1 1 220px;min-width:0}
+.rw-settings-field input,.rw-settings-field select,.rw-settings-field textarea{min-height:32px}
+.rw-settings-inline-form button{min-height:32px}
+.rw-settings-inline-form select{min-height:32px}
 .rw-settings-confirm{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
 .rw-settings-facts{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;color:var(--rw-muted);font-size:10px}
 .rw-settings-facts code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--rw-text-secondary);overflow-wrap:anywhere}
@@ -173,7 +176,7 @@ button { cursor: pointer; }
 .rw-button-primary{border-color:var(--rw-accent-line);background:var(--rw-selected);color:var(--rw-text)}
 .rw-button-secondary{background:var(--rw-input);color:var(--rw-text-secondary)}
 .rw-button-danger{border-color:#7d3a44;background:#2c1c21;color:#ffc2ca}
-@media(max-width:640px){.rw-settings-card{align-items:stretch}.rw-settings-card-actions{width:100%}.rw-settings-card-actions .rw-settings-toggle{min-height:44px;justify-content:flex-start}.rw-settings-card-actions .rw-settings-toggle span{font-size:12px}.rw-settings-card-actions button,.rw-settings-card-actions form{flex:1 1 auto}.rw-settings-card-actions form button{flex:1}.rw-settings-inline-form{align-items:stretch}.rw-settings-inline-form .rw-settings-field{flex:1 1 100%}.rw-settings-section-actions{width:100%}.rw-settings-section-actions button{flex:1 1 auto}}
+@media(max-width:640px){.rw-settings-card{align-items:stretch}.rw-settings-card-actions{width:100%}.rw-settings-card-actions .rw-settings-toggle{min-height:44px;justify-content:flex-start}.rw-settings-card-actions .rw-settings-toggle span{font-size:12px}.rw-settings-card-actions button,.rw-settings-card-actions form{flex:1 1 auto;min-height:32px}.rw-settings-card-actions form button{flex:1}.rw-settings-inline-form{align-items:stretch}.rw-settings-inline-form .rw-settings-field{flex:1 1 100%}.rw-settings-section-actions{width:100%}.rw-settings-section-actions button{flex:1 1 auto;min-height:32px}}
 .rw-model-picker,.rw-thinking-picker{display:inline-flex;align-items:center;gap:4px}
 .rw-model-picker select,.rw-thinking-picker select{max-width:140px;height:25px;background:var(--rw-input);color:var(--rw-text-secondary);border:1px solid var(--rw-line);border-radius:5px;font-size:10px}
 
@@ -424,7 +427,7 @@ button:disabled{cursor:not-allowed}
 .rw-mcp-form-actions button{min-height:36px;padding:0 14px;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-hover);color:var(--rw-text)}
 .rw-mcp-form-actions button[type=submit]{background:var(--rw-accent);color:white}
 .rw-mcp-form-actions button:disabled{opacity:.55}
-@media(max-width:640px){.rw-mcp-form-grid{grid-template-columns:minmax(0,1fr)}.rw-mcp-form input:not([type=checkbox]),.rw-mcp-form select{height:40px}.rw-mcp-form-actions button{min-height:44px;flex:1}}
+@media(max-width:640px){.rw-mcp-form-grid{grid-template-columns:minmax(0,1fr)}.rw-mcp-form input:not([type=checkbox]),.rw-mcp-form select{min-height:40px}.rw-mcp-form-actions button{min-height:44px;flex:1}}
 .rw-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
 .rw-settings-actions{display:flex;flex-wrap:wrap;gap:8px}
 .rw-setting-stack{display:flex;flex-direction:column;gap:7px}
@@ -470,3 +473,17 @@ button:disabled{cursor:not-allowed}
 .rw-plugin-dialog-fullscreen{width:100%;height:100%;max-height:none;border:0;border-radius:0;padding:24px}
 .rw-plugin-dialog-close{position:sticky;top:0;z-index:1;float:right;width:36px;height:36px;border:0;border-radius:7px;background:var(--rw-hover);color:var(--rw-text);font-size:22px}
 @media(max-width:760px){.rw-plugin-dialog-backdrop{padding:0}.rw-plugin-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border-radius:12px;padding:16px}.rw-plugin-dialog-fullscreen{width:100%;height:100%;max-height:none;border-radius:0;padding:16px}.rw-plugin-dialog-close{min-width:44px;min-height:44px}}
+
+@media (max-width: 640px) {
+  .rw-settings-nav button { min-height: 44px; }
+  .rw-settings-content .rw-settings-toggle { min-height: 44px; }
+  .rw-settings-content .rw-settings-card-actions .rw-settings-toggle { min-height: 44px; }
+  .rw-settings-content .rw-settings-card-actions button,
+  .rw-settings-content .rw-settings-card-actions .rw-settings-button,
+  .rw-settings-content .rw-settings-card-actions a { min-height: 44px; }
+  .rw-settings-content button,
+  .rw-settings-content .rw-settings-button { min-height: 44px; }
+  .rw-settings-content input:not([type=checkbox]),
+  .rw-settings-content select,
+  .rw-settings-content textarea { min-height: 44px; }
+}
