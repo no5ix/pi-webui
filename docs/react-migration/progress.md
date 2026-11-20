@@ -73,6 +73,30 @@ settings writer, two parity scouts) each hit the 30-minute cap with `changed tra
 because the tasks were whole-mission sized and the settings scout stalled when the tree moved under it.
 Keep delegated tasks small enough to finish in one bounded run, and commit their output as it arrives.
 
+## The React app is outside lint coverage
+
+`package.json:67` (`lint`) and `eslint.config.js:11` (`files`) match `*.ts` only, so **no `.tsx` file in
+this repository is linted** — every React component is unchecked by the project's own rules, and
+`eslint` says so with "File ignored because no matching configuration was supplied".
+
+Measured on 2026-11-20 by adding `src/**/*.tsx` to both: **222 errors**, of which **109** are removed by
+`eslint --fix` (mechanical: `no-confusing-void-expression` and friends) and **113** need hand fixes.
+By rule: 58 `@typescript-eslint/strict-boolean-expressions`, 13 `restrict-template-expressions`,
+8 `no-misused-promises`, 6 `consistent-type-assertions`, 6 `prefer-nullish-coalescing`,
+5 `no-unnecessary-condition`, 3 each `use-unknown-in-catch-callback-variable`, `no-unsafe-assignment`,
+`restrict-plus-operands`, `prefer-optional-chain`, 2 each `no-deprecated`, `no-unused-vars`.
+By file: 68 `ReactWorkspaceApp.tsx`, 10 `McpSettingsPanel.tsx`, 9 `NotificationsSettingsPanel.tsx`,
+7 `ReactSettingsDialog.tsx`, 7 `ReactTerminalPanel.tsx`, 5 `AddProjectDialog.tsx`,
+3 `ConversationMessage.tsx`, 2 `WorkspaceFileTree.tsx`, 1 each `SessionActionsMenu.tsx` and
+`WorkspaceCodeEditor.tsx`.
+
+The coverage change was reverted, not landed: adding the globs makes `pnpm run verify` fail until the
+113 are fixed, and turning the rules down for `.tsx` is not a decision to take inside a migration
+sweep. Land it as its own change — add the globs, run `--fix`, then clear the rest file by file, panels
+first and `ReactWorkspaceApp.tsx` last. The two lint failures the owner reported
+(`WorkspaceCodeEditor.test.ts`, `useWorkspaceFiles.test.ts`) are `.ts`, covered by the current config,
+and pass: `npx eslint` on them exits 0 on `ab309e84`.
+
 ## The plugin UI problem, in the terms that decide it
 
 The plugin contract is Lit-shaped. `SettingsSectionContribution.render` returns a Lit `TemplateResult`
