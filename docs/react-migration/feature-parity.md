@@ -80,3 +80,100 @@ This is the migration ledger for the browser application. Status describes behav
 - `pnpm run verify` over the MCP editor and ntfy milestone (`e57fc4c2`) passed with exit 0: 689 test files, 6056 tests passed, 5 skipped. `pnpm run build` exit 0, with the open ~940 kB main-chunk warning. The MCP and ntfy flows have not been driven in a live browser, and no ntfy delivery has been made against a real server.
 - 2026-08-22: the built-in Updates module is gone (row above). `pi-web-plugins/updates` is deleted, `src/server/web/updates/` is now `src/server/web/service/` (restart only), the release check, the `updateCommand` key, `PI_WEB_UPDATE_COMMAND`, `piWebApi.updateCheck`, `piWebStatusCache`, the General panel's Updates card and the fleet update controls are removed, and 33 files under `pi-web-plugins/` and 125 under `src/client/src` still import `lit`.
 - No authenticated provider prompt/stream, stop-generation, complete plugin contribution integration, project/session CRUD, or full desktop/mobile workspace workflows have been verified. This remains an incomplete migration checkpoint. The `PluginSurface` adapter and React registry bootstrap exist, but plugin contributions are not yet wired throughout the app; Lit remains necessary for the compatibility bridge and other first-party UI. See [progress.md](progress.md) for the file-level plan and the test conventions.
+
+---
+
+# Ledger — 2026-11-20 (React migration, Updates removal)
+
+The section above is the older checkpoint and is kept as history. This is the current one, and it is
+the row set the mission's Definition of Done is measured against. A row is **Verified** only with live
+browser evidence at desktop 1440px and mobile 393x850 against a real session daemon. **Unit tested**
+means the React unit suite covers it and no browser has seen it. **Partial** names the gap in the row.
+
+## The built-in Updates module — Removed
+
+- The popup that interrupted the browser session is `pi-web-plugins/updates/updates-plugin.js`: it
+  fetched `/api/updates` 2.5 s after boot, then every 15 min, and opened `showUpdatesDialog` on
+  `update-available`. The plugin is in the bundled `built-ins` manifest, so it loaded on every machine,
+  with no setting that disabled it. Its trigger is deleted, not hidden.
+- Deleted: `pi-web-plugins/updates/` (9 files), `pi-web-plugins/index.json` entry, the client's
+  `components/UpdatesView.ts`, `features/updates/updatesState.ts`, `features/updates/gitBranchPrompt.ts`,
+  the `piWebUpdates` API surface (`requestUpdateCheck`, `getUpdatesState`, `setUpdatesState`,
+  `getAutoUpdateState`, `setAutoUpdateState`, `subscribeUpdatesChanged`), the `updates-changed` event and
+  the `pi-web:updates-changed` wire, the `pi-web-updates-state` storage keys, and the General panel's
+  Updates card.
+- Server: the `/api/updates*` routes are unmounted, and `src/server/web/updates/` is now
+  `src/server/web/service/` — the service restart survives, the GitHub release check does not.
+  `releaseNotesPath()` was deleted with the check.
+- Settings: the update keys are stripped from persisted settings on read and are not written back.
+- Fleet: a remote machine can no longer report an update. `fleetMachineSummary` drops
+  `updateAvailable`/`updateCommand`, `FLEET_MACHINE_SUMMARY_SCHEMA_VERSION` is `4`, `FLEET_MACHINE_CAPABILITIES`
+  is `["projects", "sessions", "machines"]`, and the Machines table shows no update badge, button, status
+  cell, dialog, timer, subscription, install, or restart.
+- Removed dependency surface: the `updateCommand` setting key, `PI_WEB_UPDATE_COMMAND`,
+  `piWebApi.updateCheck`, `piWebStatusCache`, `UpdatesState`, `UpdateInfo`, `UpdatesChangedEvent`.
+- Kept, on purpose: `piWebInfo.restart` (the service restart, used by **About** and the machines
+  surface), `isGitRepository` and the repository/trust checks, `ProjectTrustChangedEvent` and the trust
+  event, `ProjectCreateResponse.trustWarning`, Git itself, and package management.
+- `pnpm run typecheck` and `pnpm run knip` exit 0 on the removal, and Knip reports no unused exports,
+  files, dependencies, or types.
+
+## Parity status — 2026-11-20
+
+| Area | Row | State | Evidence |
+| --- | --- | --- | --- |
+| Runtime | React is the running app (`index.html` → `src/client/src/main-react.ts`, `#root`) | Verified | live 8505: `GET /` 200, `GET /src/client/src/main-react.ts` 200 |
+| Runtime | Lit runtime for first-party UI | Partial — required | 125 files under `src/client/src`, 33 under `pi-web-plugins/` import `lit` |
+| Runtime | Two React roots, no interop | Partial — defect | `main-react.ts:37` (workspace) + `main.ts:21` (Lit overlay) on `document` |
+| Plugins | Registry, core + external load, dispose, failure in Settings | Unit tested | `usePluginRegistry.ts` (391 lines), `usePluginRegistry.test.ts`, `PluginSurface.test.ts` |
+| Plugins | Contribution families render in React | Not migrated | all 18 families are Lit (`TemplateResult` / `PluginSurface`); the React contract is spec (`plugin-api-react.md`) |
+| Plugins | Bundled plugin UI | Not migrated | `files`, `git`, `goal`, `info`, `machines`, `mermaid`, `terminal`, `workspaces` all Lit |
+| Settings | Modal shell, sidebar nav, Esc, body scroll lock, search, touch sizing | Unit tested | `ReactSettingsDialog.test.ts` 11 files / 43 tests pass |
+| Settings | General, Appearance, Notifications | Unit tested | sections render; `AppearanceSettings.tsx:111` writes no preference |
+| Settings | Pi Packages, MCP Servers, Pi Web Plugins, Machines, Skills | Partial | MCP server is a table + unauthenticated send test; Skills is `SettingsSkillsPanel.tsx` (42 lines) |
+| Settings | Keyboard section | Excluded by decision | not in the React nav |
+| Projects | Create, switch, close, rename, trust, folder navigation | Partial | unit tests pass (65 files / 262 tests); no live pass this session |
+| Sessions | Create, switch, rename, delete, history, restore | Partial | same suite; no live pass this session |
+| Conversation | Messages, streaming, tools, thinking, timestamps, attachments | Partial | unit level only; no real provider prompt this session |
+| Composer | Submit, stop, model and thinking-level pickers, status | Partial | unit level only |
+| Machines | Switching rebuilds the registry, settings, status | Unit tested | per-machine registry; no live pass this session |
+| Updates | Built-in update notification and UI | Removed | the section above + the 404 evidence below |
+| Lit removal | Dependencies, bridge, legacy components | Not migrated | `lit`/`lit-html` in `package.json`, `packages/pi-web-plugin-api/package.json`, 8 plugin manifests |
+| Verification | `WorkspaceCodeEditor.test.ts`, `useWorkspaceFiles.test.ts` lint | Resolved | `npx eslint <both files>` exit 0 |
+| Verification | Full `pnpm run verify` | Red, measured | 145 lint errors / 176 warnings in the React tree, once the gate reads it |
+
+## Verification record — 2026-11-20
+
+- `pnpm run typecheck` exit 0 (after the Updates removal, and after the settings search change).
+- `pnpm run knip` exit 0 after the Updates removal; 8 unused-export items in `src/shared/types.ts` after
+  the settings change, each a schema whose only consumer is an HTTP route (`ctx_execute` probe), so the
+  Knip row stays open and is not hidden with an ignore.
+- `pnpm run vitest` over the files touched: 65 files / 262 tests pass; the Settings suite 11 files /
+  43 tests pass.
+- `pnpm run build:plugins`: 30 manifests, zero `updates` manifest.
+- `npx eslint src/client/src/react/WorkspaceCodeEditor.test.ts src/client/src/react/useWorkspaceFiles.test.ts`
+  exit 0 — the two files the mission brief names are clean.
+- `npx eslint src/client/src/react --no-warn-ignored`: 145 errors, 176 warnings, 78 files; 119 errors are
+  `react-hooks/refs`, 35 are `react-x/no-array-index-key`, 11 are `react-hooks/preserve-memo-validation`
+  warnings; 216 errors clear with `--fix`. `pnpm run lint` is exit 1 because the React tree is now inside
+  the gate (`eslint.config.mjs`).
+- Live 8505 stack (`scripts/stack-8505.sh up`, isolated data dir): `GET /` 200, `/index.html` 200,
+  `/src/client/src/main-react.ts` 200, `/api/machines/local/projects` 200. **404** for `/api/updates`,
+  `/api/updates/state`, `/pi-web-plugins/updates/updates-plugin.js`,
+  `/pi-web-plugins/updates/updates-api.js`, `/src/client/src/components/UpdatesView.js`,
+  `/src/client/src/features/updates/updatesState.js`, `/src/server/web/routes/updates.js`.
+  `/src/app.ts` answers 200 only because Vite serves any module under `/src/**` by URL; the page never
+  requests it. `/pi-web-plugins/index.json` answered 404 on this stack (no built plugin manifest in
+  reach), so the external-plugin load is **not** covered here.
+
+## What this section does not claim
+
+- No browser driver, no screenshots, no desktop 1440px or mobile 393x850 pass, no real provider prompt,
+  stream, or stop-generation run. Live evidence on 2026-11-20 is HTTP-shaped.
+- No plugin has a React render path: the React contract is a specification
+  (`plugin-api-react.md`), and the registry, the plugin API, and all eight bundled plugins are Lit.
+- Settings is not complete: of the eight required sections, one (`Appearance`) writes no preference, and
+  `MCP Servers` and `Skills` are close to placeholders.
+- `pnpm run verify` does not pass. The lint number above is the recorded reason; the fix is a separate
+  milestone and the gate stays red until it is done.
+- The Lit runtime stays required; nothing in the Lit removal has been cut.
