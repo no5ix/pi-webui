@@ -13,7 +13,7 @@ import { groupChatMessages, summarizeReactActivity } from "../chatGroups";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
-import { ActivityRecordsPanel, collectEditedFileDiffs, collectToolRecords, summarizeActivityGroup } from "./ActivityWorkbenchPanels";
+import { ActivityRecordsPanel, collectEditedFileDiffs, collectToolRecords } from "./ActivityWorkbenchPanels";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
