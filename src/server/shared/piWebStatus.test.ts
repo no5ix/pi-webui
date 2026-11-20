@@ -355,7 +355,6 @@ describe("PI WEB status", () => {
 
     expect(status.components.web.installation).toEqual({ kind: "docker", path: "/srv/pi-web-docker", dockerMode: "runtime" });
     expect(status.commands).toEqual({
-      update: "pi-web-docker update",
       restart: "pi-web-docker restart",
       restartWeb: "pi-web-docker restart-web",
       restartSessiond: "pi-web-docker restart-sessiond",
@@ -376,7 +375,6 @@ describe("PI WEB status", () => {
     const status = await getPiWebStatus(daemon);
 
     expect(status.commands).toEqual({
-      update: "pi-web-docker --dev update",
       restart: "pi-web-docker --dev restart",
       restartWeb: "pi-web-docker --dev restart-web",
       restartSessiond: "pi-web-docker --dev restart-sessiond",

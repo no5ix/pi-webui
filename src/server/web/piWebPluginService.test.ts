@@ -189,15 +189,15 @@ describe("PiWebPluginService", () => {
   });
 
   it("includes machine-specific preferences in plugin manifests", async () => {
-    await writePlugin(join(tempDir, "plugins", "updates"), {
-      packageJson: { piWeb: { plugins: [{ id: "updates", browserRoot: ".", module: "pi-web-plugin.js", machineSpecific: true }] } },
+    await writePlugin(join(tempDir, "plugins", "machine-scoped"), {
+      packageJson: { piWeb: { plugins: [{ id: "machine-scoped", browserRoot: ".", module: "pi-web-plugin.js", machineSpecific: true }] } },
       files: { "pi-web-plugin.js": "export default {};" },
     });
 
-    const service = new PiWebPluginService({ roots: [{ path: join(tempDir, "plugins"), source: "test", scope: "local" }], packageProvider: false });
+    const service = new PiWebPluginService({ roots: [{ path: join(tempDir, "plugins"), source: "test", scope: "local" }], packageProvider: false, configProvider: () => ({}) });
 
-    await expect(service.manifest()).resolves.toMatchObject({ plugins: [{ id: "updates", machineSpecific: true }] });
-    await expect(service.plugins()).resolves.toMatchObject({ plugins: [{ id: "updates", machineSpecific: true, enabled: true }] });
+    await expect(service.manifest()).resolves.toMatchObject({ plugins: [{ id: "machine-scoped", machineSpecific: true }] });
+    await expect(service.plugins()).resolves.toMatchObject({ plugins: [{ id: "machine-scoped", machineSpecific: true, enabled: true }] });
   });
 
   it("keeps server-only entries out of browser manifests and assets while reporting their desired state", async () => {
@@ -531,17 +531,17 @@ describe("PiWebPluginService", () => {
   it("tells a plugin the host facts it declared, and no others", async () => {
     process.env["PI_WEB_DOCKER_RUNTIME"] = "1";
     process.env["PI_WEB_DOCKER_MODE"] = "dev";
-    await writePlugin(join(tempDir, "plugins", "updates"), {
-      packageJson: { piWeb: { plugins: [{ id: "updates", browserRoot: ".", module: "pi-web-plugin.js", machineSpecific: true, hostFacts: ["dockerMode"] }] } },
+    await writePlugin(join(tempDir, "plugins", "host-facts"), {
+      packageJson: { piWeb: { plugins: [{ id: "host-facts", browserRoot: ".", module: "pi-web-plugin.js", machineSpecific: true, hostFacts: ["dockerMode"] }] } },
       files: { "pi-web-plugin.js": "export default {};" },
     });
 
-    const service = new PiWebPluginService({ roots: [{ path: join(tempDir, "plugins"), source: "test", scope: "local" }], packageProvider: false });
+    const service = new PiWebPluginService({ roots: [{ path: join(tempDir, "plugins"), source: "test", scope: "local" }], packageProvider: false, configProvider: () => ({}) });
 
     const manifest = await service.manifest();
-    const updates = manifest.plugins.find((plugin) => plugin.id === "updates");
-    const moduleUrl = new URL(updates?.module ?? "", "http://pi-web.test/pi-web-plugins/manifest.json");
-    expect(moduleUrl.pathname).toBe("/pi-web-plugins/updates/pi-web-plugin.js");
+    const hostFacts = manifest.plugins.find((plugin) => plugin.id === "host-facts");
+    const moduleUrl = new URL(hostFacts?.module ?? "", "http://pi-web.test/pi-web-plugins/manifest.json");
+    expect(moduleUrl.pathname).toBe("/pi-web-plugins/host-facts/pi-web-plugin.js");
     expect(moduleUrl.searchParams.get("v")).toMatch(/^sha256:[a-f\d]{64}$/u);
     expect(moduleUrl.searchParams.get("dockerMode")).toBe("dev");
   });

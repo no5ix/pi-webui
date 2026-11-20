@@ -64,10 +64,13 @@ describe("POST /api/pi-web/fleet/run", () => {
   it("targets a subset by id or by name", async () => {
     app = await buildApp();
 
-    const body = (await app.inject({ method: "POST", url: "/api/pi-web/fleet/run", payload: { operation: "update", machineIds: ["pi-host"] } }))
+    const byName = (await app.inject({ method: "POST", url: "/api/pi-web/fleet/run", payload: { operation: "restart", machineIds: ["pi-host"] } }))
       .json<PiWebFleetRunResponse>();
+    expect(byName.outcomes).toEqual([{ machineId: "remote-a", name: "pi-host", started: true }]);
 
-    expect(body.outcomes).toEqual([{ machineId: "remote-a", name: "pi-host", started: true }]);
+    const byId = (await app.inject({ method: "POST", url: "/api/pi-web/fleet/run", payload: { operation: "restart", machineIds: ["remote-a"] } }))
+      .json<PiWebFleetRunResponse>();
+    expect(byId.outcomes).toEqual([{ machineId: "remote-a", name: "pi-host", started: true }]);
   });
 
   it("reports a failed target next to the ones that started", async () => {
@@ -94,6 +97,7 @@ describe("POST /api/pi-web/fleet/run", () => {
     app = await buildApp();
 
     expect((await app.inject({ method: "POST", url: "/api/pi-web/fleet/run", payload: { operation: "reboot" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/pi-web/fleet/run", payload: { operation: "update" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/api/pi-web/fleet/run", payload: { operation: "restart", machineIds: ["nope"] } })).statusCode).toBe(404);
   });
 
