@@ -100,6 +100,8 @@ button { cursor: pointer; }
 .rw-settings-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:0}
 .rw-settings-nav{display:flex;flex-direction:column;gap:3px;min-height:0;overflow:auto;padding:14px 10px;border-right:1px solid var(--rw-line);background:var(--rw-bg)}
 .rw-settings-nav button{min-height:38px;padding:0 11px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--rw-text-secondary);text-align:left;font-size:12px}
+.rw-settings-search{margin:0 1px 8px;padding:0 9px;min-height:34px;border:1px solid var(--rw-line);border-radius:7px;background:var(--rw-input);color:var(--rw-text);font-size:12px}
+.rw-settings-empty{margin:6px 2px;color:var(--rw-muted);font-size:12px;line-height:1.4}
 .rw-settings-nav button:hover,.rw-settings-nav button.active{border-color:var(--rw-accent-line);background:var(--rw-selected);color:var(--rw-text)}
 .rw-settings-content{min-height:0;overflow:auto;padding:20px 24px;overscroll-behavior:contain}
 .rw-settings-page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
@@ -379,7 +381,7 @@ button:disabled{cursor:not-allowed}
 .rw-notifications{display:flex;flex-direction:column;gap:10px}
 .rw-notifications h4{margin:6px 0 0;font-size:12px}
 .rw-setting-row label.rw-setting-check{flex:0 0 auto}
-@media (pointer:coarse){.rw-settings-actions button{min-height:44px}.rw-setting-check input{width:20px;height:20px}}
+@media (pointer:coarse){.rw-settings-actions button{min-height:44px}.rw-setting-check input{width:20px;height:20px}.rw-settings-nav button{min-height:44px}.rw-settings-search{min-height:44px}.rw-settings-content button{min-height:44px}.rw-settings-content input:not([type=checkbox]),.rw-settings-content select{min-height:44px}}
 
 @media(max-width:760px){
 .rw-files-toolbar{height:52px;gap:4px;padding:0 8px}

@@ -11,6 +11,23 @@ import type { ReactWorkspaceData } from "./useReactWorkspaceData";
 const pages = ["General", "Appearance", "Notifications", "Pi Packages", "MCP Servers", "Pi Web Plugins", "Machines", "Skills"] as const;
 type Page = typeof pages[number];
 
+const settingsIndex: Record<Page, readonly string[]> = {
+  General: ["host", "port", "environment facts", "session prompts", "pi built-in extensions", "config"],
+  Appearance: ["theme", "dark", "light", "system", "appearance"],
+  Notifications: ["notification", "ntfy", "topic", "server", "test", "delivery", "sound"],
+  "Pi Packages": ["package", "install", "update", "remove", "source", "scope", "registry", "enabled"],
+  "MCP Servers": ["mcp", "server", "command", "url", "headers", "test", "project", "user", "tool"],
+  "Pi Web Plugins": ["plugin", "extension", "enable", "disable", "restart", "failure", "manifest", "load"],
+  Machines: ["machine", "add", "rename", "remove", "token", "base url", "select", "local", "remote"],
+  Skills: ["skill", "enable", "scope", "origin", "validation", "package"],
+};
+
+function pagesMatching(query: string): readonly Page[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return pages;
+  return pages.filter(page => page.toLowerCase().includes(needle) || settingsIndex[page].some(term => term.includes(needle)));
+}
+
 type SettingsData = Pick<ReactWorkspaceData,
   "selectedProject" | "settings" | "loadSettings" | "saveSettings" | "setPluginEnabled" | "installPackage" | "updatePackage" | "removePackage" | "setSkillEnabled" | "setMcpEnabled" | "testMcp" | "removeMcp" | "saveMcp" | "selectMachine" | "addMachine" | "renameMachine" | "removeMachine"
 > & { readonly state: Pick<ReactWorkspaceData["state"], "selectedMachine" | "machines" | "error"> };
@@ -25,6 +42,7 @@ export interface ReactSettingsDialogProps {
 export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }: ReactSettingsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [page, setPage] = useState<Page>("General");
+  const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [packageSource, setPackageSource] = useState("");
@@ -39,6 +57,7 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
     if (dialog === null) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
+    if (!open) setQuery("");
   }, [open]);
 
   useEffect(() => {
@@ -81,7 +100,9 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
       </header>
       <div className="rw-settings-layout">
         <nav className="rw-settings-nav" aria-label="Settings pages">
-          {pages.map(item => <button type="button" key={item} className={page === item ? "active" : ""} aria-current={page === item ? "page" : undefined} onClick={() => setPage(item)}>{item}</button>)}
+          <input className="rw-settings-search" type="search" aria-label="Search settings" placeholder="Search settings" value={query} onChange={event => setQuery(event.target.value)}/>
+          {pagesMatching(query).map(item => <button type="button" key={item} className={page === item ? "active" : ""} aria-current={page === item ? "page" : undefined} onClick={() => setPage(item)}>{item}</button>)}
+          {pagesMatching(query).length === 0 && <p className="rw-settings-empty" role="status">No settings match “{query.trim()}”.</p>}
         </nav>
         <div className="rw-settings-content">
           <header className="rw-settings-page-heading"><h3>{page}</h3><button type="button" onClick={() => void data.loadSettings()} disabled={data.settings.loading}>Reload</button></header>

@@ -74,4 +74,23 @@ describe("React Settings dialog", () => {
     await act(async () => { close?.click(); await Promise.resolve(); });
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("searches the settings pages by label and reports a query that matches nothing", async () => {
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    const search = container.querySelector<HTMLInputElement>(".rw-settings-search");
+    expect(search).not.toBeNull();
+    const nav = () => [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].map(button => button.textContent);
+    await act(async () => { writeSearchValue(search, "plugin"); search?.dispatchEvent(new Event("input", { bubbles: true })); await Promise.resolve(); });
+    expect(nav()).toEqual(["Pi Web Plugins"]);
+    await act(async () => { writeSearchValue(search, "nothing-matches"); search?.dispatchEvent(new Event("input", { bubbles: true })); await Promise.resolve(); });
+    expect(nav()).toEqual([]);
+    expect(container.querySelector(".rw-settings-empty")?.textContent).toContain("nothing-matches");
+    await act(async () => { writeSearchValue(search, ""); search?.dispatchEvent(new Event("input", { bubbles: true })); await Promise.resolve(); });
+    expect(nav()).toHaveLength(8);
+  });
 });
+
+function writeSearchValue(input: HTMLInputElement | null, value: string): void {
+  if (input === null) return;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+}
