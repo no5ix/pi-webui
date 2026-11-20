@@ -494,3 +494,17 @@ button:disabled{cursor:not-allowed}
 .rw-shell-output pre { max-height: 320px; overflow: auto; margin: 0; padding: 10px; border-top: 1px solid var(--rw-line); white-space: pre; }
 .rw-session-row > span:nth-child(2) { flex: 1 1 0; min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-session-row > small { flex: 0 0 auto; white-space: nowrap; }
+
+
+/* One aggregate disclosure represents a consecutive run of assistant/tool activity. */
+.rw-activity-group { width: 100%; margin: 0 0 14px; border: 1px solid var(--rw-line); border-radius: 10px; background: var(--rw-card); overflow: hidden; }
+.rw-activity-group > summary { min-height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 13px; cursor: pointer; list-style: none; }
+.rw-activity-group > summary::-webkit-details-marker { display: none; }
+.rw-activity-group > summary svg { width: 16px; height: 16px; flex: none; color: var(--rw-muted); }
+.rw-activity-group > summary strong { min-width: 0; flex: 1 1 auto; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rw-activity-group > summary small { flex: 0 0 auto; color: var(--rw-muted); font-size: 10px; white-space: nowrap; }
+.rw-activity-group-content { padding: 10px 12px 2px; border-top: 1px solid var(--rw-line); }
+.rw-activity-group-content > .rw-message { width: 100%; }
+.rw-chat-dock { position: relative; z-index: 4; isolation: isolate; }
+.rw-jump-bottom { position: static; width: max-content; max-width: 100%; justify-self: end; margin: 0 0 2px auto; }
+.rw-transcript { padding-bottom: 18px; }
