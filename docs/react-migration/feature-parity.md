@@ -167,6 +167,23 @@ means the React unit suite covers it and no browser has seen it. **Partial** nam
   `react-hooks/refs`, 35 are `react-x/no-array-index-key`, 11 are `react-hooks/preserve-memo-validation`
   warnings; 216 errors clear with `--fix`. `pnpm run lint` is exit 1 because the React tree is now inside
   the gate (`eslint.config.mjs`).
+- Full `pnpm vitest run` on HEAD `fd5b553b`: **685 test files, 6013 passed, 5 skipped, 6 files / 8 tests
+  failed** (47.4 s). These are the removal's own test debt, and the next milestone is to settle them:
+  - `src/buildContents.test.ts > matches the committed browser and server plugin API declaration
+    baseline` — the baseline snapshot of the plugin API declarations still contains the removed update
+    types. The baseline is generated output and has to be regenerated.
+  - `src/server/shared/piWebStatus.test.ts` × 2 (Docker runtime, Docker dev runtime) — the status
+    suggestion object no longer carries `update`, and these assertions still expect it.
+  - `src/server/web/piWebPluginService.test.ts` × 2 (machine-specific preferences in plugin manifests;
+    host facts a plugin declared) — manifest host facts included the removed update fields.
+  - `src/server/web/service/fleetRoutes.test.ts > POST /api/pi-web/fleet/run > targets a subset by id or
+    by name` — the fleet run surface no longer accepts the update/install kinds it used to dispatch.
+  - `src/client/src/components/settings/SettingsGeneralPanel.test.ts > uses factual scope copy for
+    gateway and selected-machine settings` — the copy assertion includes the deleted Updates card.
+  - `src/server/shared/plugins/packageInstalledPlugin.test.ts > is discovered from node_modules rather
+    than from a repository directory` — cause not yet triaged; the other five are named by the removal.
+  Per this repository's rule, a test that pinned removed behavior is updated or deleted with the change
+  that removes it; that was not done in `ab309e84`, and `verify` has not been green since.
 - Live 8505 stack (`scripts/stack-8505.sh up`, isolated data dir): `GET /` 200, `/index.html` 200,
   `/src/client/src/main-react.ts` 200, `/api/machines/local/projects` 200. **404** for `/api/updates`,
   `/api/updates/state`, `/pi-web-plugins/updates/updates-plugin.js`,
