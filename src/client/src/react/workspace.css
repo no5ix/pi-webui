@@ -470,3 +470,43 @@ button:disabled{cursor:not-allowed}
 .rw-plugin-dialog-fullscreen{width:100%;height:100%;max-height:none;border:0;border-radius:0;padding:24px}
 .rw-plugin-dialog-close{position:sticky;top:0;z-index:1;float:right;width:36px;height:36px;border:0;border-radius:7px;background:var(--rw-hover);color:var(--rw-text);font-size:22px}
 @media(max-width:760px){.rw-plugin-dialog-backdrop{padding:0}.rw-plugin-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border-radius:12px;padding:16px}.rw-plugin-dialog-fullscreen{width:100%;height:100%;max-height:none;border-radius:0;padding:16px}.rw-plugin-dialog-close{min-width:44px;min-height:44px}}
+
+
+/* Seven icon-only workbench destinations and session activity shortcuts. */
+.rw-workbench-tabs { gap: 5px; }
+.rw-workbench-tabs > button:not(.rw-workbench-collapse) { width: 38px; min-width: 38px; height: 38px; padding: 0; }
+.rw-workbench-tabs > button:not(.rw-workbench-collapse) svg { width: 17px; height: 17px; }
+.rw-header-actions { align-items: center; gap: 7px; }
+.rw-header-actions .rw-activity-shortcut { position: relative; width: 34px; height: 34px; padding: 5px; overflow: visible; }
+.rw-header-actions .rw-activity-shortcut svg { width: 17px; height: 17px; }
+.rw-activity-shortcut span { position: absolute; top: -4px; right: -5px; min-width: 15px; height: 15px; padding: 0 3px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--rw-header); border-radius: 99px; background: var(--rw-accent); color: white; font-size: 9px; line-height: 1; font-weight: 700; }
+.rw-activity-shortcut:disabled { opacity: .4; cursor: not-allowed; }
+.rw-activity-group { display: block; width: 100%; margin: 0 0 14px; border: 1px solid var(--rw-line); border-radius: 10px; background: var(--rw-card); overflow: hidden; }
+.rw-activity-group > summary { min-height: 43px; display: flex; align-items: center; gap: 9px; padding: 0 12px; cursor: pointer; list-style: none; }
+.rw-activity-group > summary::-webkit-details-marker { display: none; }
+.rw-activity-group > summary svg { width: 16px; height: 16px; flex: none; color: var(--rw-muted); }
+.rw-activity-group > summary strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.rw-activity-group > summary small { flex: none; color: var(--rw-muted); font-size: 10px; }
+.rw-activity-group-content { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-top: 1px solid var(--rw-line); }
+.rw-activity-group-content > .rw-message { width: 100%; min-width: 0; margin: 0; padding: 0; }
+.rw-activity-group-content .rw-message-body { width: 100%; min-width: 0; }
+.rw-activity-records { min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.rw-activity-record { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 10px; padding: 11px; border: 1px solid var(--rw-line); border-radius: 9px; background: var(--rw-card); }
+.rw-activity-record>div { min-width: 0; display: grid; gap: 3px; }
+.rw-activity-record>div strong { font-size: 12px; }
+.rw-activity-record>div span,.rw-activity-record>small { min-width: 0; color: var(--rw-muted); font-size: 11px; overflow-wrap: anywhere; }
+.rw-activity-record em { justify-self: start; font-size: 10px; font-style: normal; color: var(--rw-muted); }
+.rw-activity-record em.success { color: var(--rw-success); }
+.rw-activity-record em.error { color: var(--rw-danger); }
+.rw-activity-record em.running { color: var(--rw-accent); }
+.rw-activity-record>svg { display: none; }
+.rw-edited-files-panel { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto; }
+.rw-edited-files-list { display: flex; flex-direction: column; padding: 8px; gap: 3px; }
+.rw-edited-files-list button { min-height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--rw-text); text-align: left; }
+.rw-edited-files-list button.selected,.rw-edited-files-list button:hover { background: var(--rw-hover); }
+.rw-edited-files-list button svg { width: 15px; height: 15px; flex: none; color: var(--rw-muted); }
+.rw-edited-files-list button span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.rw-edited-files-list button small { color: var(--rw-muted); font-size: 10px; }
+.rw-session-diff { min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--rw-line); }
+.rw-session-diff>strong { font-size: 12px; overflow-wrap: anywhere; }
+.rw-session-diff pre { max-height: 45vh; overflow: auto; margin: 0; padding: 10px; border: 1px solid var(--rw-line); border-radius: 7px; background: #14151a; color: var(--rw-text-secondary); font: 10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space: pre; }
