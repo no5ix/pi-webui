@@ -101,15 +101,46 @@ adapter, then render the workspace panels of the `files` plugin through it, with
 
 ## Exact next action
 
-The largest unstarted feature is the plugin UI contract: the public browser API is `src/plugin-api.ts`
-(1342 lines) and its contributions return Lit `TemplateResult` values, so a React host must render them
-through `lit/html`'s `render()` into a container it owns. Start with a `react/PluginSurface.tsx` that
-mounts one contribution, isolates a throwing plugin, and cleans up on unmount; test it in
-`src/client/src/react/PluginSurface.test.ts` (happy-dom, `createElement` style — Vitest collects
-`src/**/*.test.ts` only, so React DOM tests must be `.test.ts` files, not `.tsx`), then wire the
-settings plugin sections, workspace panels, conversation renderers and composer actions in that order.
-Lit cannot be removed before that surface exists, because 121 files under `src/client/src` import `lit`
-and the bundled plugins render through it.
+HEAD is `70cbe110` and the working tree is clean. Measured at this commit: 120 files under
+`src/client/src` import `lit`, and there is no `react/PluginSurface.tsx`, no
+`react/PiPackagesSettingsPanel.tsx`, and no composer completion work - those were described by an
+earlier session's notes, and they are not in this branch. Do not trust a summary over `git log` and
+`ls`; re-measure at the start of every session.
+
+The largest unstarted feature is the plugin UI contract, and it blocks the Lit removal. The public
+browser API is `src/plugin-api.ts` (1342 lines) and its contributions return Lit `TemplateResult`
+values (`content: TemplateResult` at :310, `render(context)` at :355, :473, :515, :707, :735), so React
+must render them through `lit/html`'s `render()` into a container it owns. The registry side is already
+framework-neutral and ready to be read by React: `PluginRegistry.getSettingsSections(selectedMachineId)`
+(`src/client/src/plugins/registry.ts:336`) returns `QualifiedSettingsSectionContribution[]` sorted by
+`order` then `title` and filtered by `isContributionActive`, and `applyPluginSettings` (:407),
+`pluginSettings` (:447), `findMessageRenderer`, `findToolRenderer` and `pluginName` are the matching
+reads. The steps, in order:
+
+1. **Done at `e57fc4c2`+this commit:** `src/client/src/react/PluginSurface.tsx` exists and is tested
+   (`PluginSurface.test.ts`, 5 tests): it renders a plugin's `TemplateResult` through lit-html, replaces
+   it on change, clears the container on unmount, names a plugin whose template production throws, and
+   keeps the surrounding surface when a plugin's own binding throws. The measured behavior that shaped
+   it: lit-html swallows an exception raised inside a binding's own function and reports nothing, so the
+   isolation that works is the catch around *producing* the template (`pluginSurfaceResult`), and that
+   is where a host must catch.
+2. **Next:** bootstrap `PluginRegistry` for React. It is constructed only inside the Lit app today
+   (`src/client/src/components/PiWebApp.ts:7009`), so the React entry has no registry to read
+   `getSettingsSections(selectedMachineId)` (`src/client/src/plugins/registry.ts:336`),
+   `findMessageRenderer`, `findToolRenderer` or composer contributions from. Build that bootstrap as its
+   own module (fetch the plugin list, load each browser module, scope by machine, keep the plugin's own
+   settings through `applyPluginSettings`:407 / `pluginSettings`:447), expose it to React through a hook,
+   and render each contribution through `PluginSurface`.
+3. Wire the React settings dialog's Pi Web Plugins page to `getSettingsSections` through
+   `PluginSurface`, with `applyPluginSettings`/`pluginSettings` as the settings reads and writes, and a
+   plugin's own section isolated from the other plugins' failures.
+4. Then the workspace panels, conversation renderers (`findMessageRenderer`/`findToolRenderer`) and
+   composer actions, each with a bundled plugin driven for real, desktop and 393x850.
+5. Only then start removing Lit (entry `src/client/src/main.ts`, custom elements, decorators,
+   templates, Lit-only styles, Lit harness tests once React equivalents exist, the `lit` dependency,
+   the lockfile). `lit/html` is expected to remain in `package.json` for the plugin host; the plugin API
+   contract itself is Lit-typed, so a documented compatibility adapter is required before the UI
+   dependency can be dropped.
 
 ## Test conventions this project uses
 
