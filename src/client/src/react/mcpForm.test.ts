@@ -171,4 +171,14 @@ describe("MCP form prefill", () => {
     expect(mcpDraftFromForm(form({ target: "override", projectScope: true, command: "npx", url: "https://a.example.com", transport: "http", timeout: "30", exposure: "hidden" }))).toEqual({ enabled: true, exposure: "hidden" });
     expect(mcpFormProblem(form({ target: "override", projectScope: true, command: "", transport: "stdio" }))).toBeUndefined();
   });
+
+  it("carries a description into a definition, and leaves the key out when the field is blank", () => {
+    expect(mcpDraftFromForm(form({ command: "node", description: "  Reads the issue tracker  " }))).toMatchObject({ description: "Reads the issue tracker" });
+    expect(mcpDraftFromForm(form({ command: "node", description: "   " })).description).toBeUndefined();
+  });
+
+  it("prefills the description the file already has, so an edit does not drop it", () => {
+    expect(mcpFormFromServer(server({ description: "Fixture stdio server" }), globalTarget)).toMatchObject({ description: "Fixture stdio server" });
+    expect(mcpSaveRequestFromForm(mcpFormFromServer(server({ description: "Fixture stdio server" }), globalTarget), undefined)).toMatchObject({ config: { description: "Fixture stdio server" } });
+  });
 });

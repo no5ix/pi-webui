@@ -6,7 +6,7 @@ targets, not the destination.
 
 This page is the design those changes are written against. It names the plugin-facing contract, the
 rules the host enforces, and the order the removal happens in. It does not describe what is already
-true: `progress.md` and `feature-parity.md` record that.
+true: `progress.md` records that.
 
 ## Why the contract is being replaced rather than bridged
 

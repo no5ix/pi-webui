@@ -1,296 +1,369 @@
-# React migration progress and continuation checkpoint
+# React migration progress
 
-Working notes for the migration described in [feature-parity.md](feature-parity.md). This file records
-what has landed, what is verified, what is only implemented, and the exact next action. It is a
-continuation point, not a product page: it is written so that a reader with no memory of the previous
-session can pick the work up without re-discovering the facts below.
+This is the single authoritative record of the React migration: overall status, completed work,
+remaining work, known issues, test results, browser verification, architectural decisions, and the next
+action. It replaces the separate parity ledger, which was merged into the
+[Parity ledger](#parity-ledger) section here. The two other files in this directory are specifications,
+not progress records: [plugin-api-react.md](plugin-api-react.md) (the React plugin contribution contract)
+and [plugin-bootstrap-spec.md](plugin-bootstrap-spec.md) (how the registry boots in React).
 
 Branch: `feat/react-workspace-ui-from-main`. The React app is the entry point:
-`src/client/index.html:396` loads `/src/react-main.tsx`, which renders `ReactWorkspaceApp`.
-The Lit application (`src/client/src/main.ts`) is no longer an entry point.
+`src/client/index.html` loads `/src/react-main.tsx`, which renders `ReactWorkspaceApp`. The Lit
+application (`src/client/src/main.ts`) is no longer an entry point.
 
-Counted on 2026-11-20 with `grep -rl 'from "lit"' <dir> --include='*.ts' --include='*.tsx' | grep -v '\.test\.'`:
+Lit import counts, measured with
+`grep -rl 'from "lit"' <dir> --include='*.ts' --include='*.tsx' | grep -v '\.test\.'`:
 **87** non-test files under `src/client/src`, **26** under `pi-web-plugins`, **0** under `src/server`.
-`lit@^3.3.3` is a client dependency at `package.json:114`. The React tree is **45 files / 7,188 lines**
-(17 `.tsx`), of which `ReactWorkspaceApp.tsx` is 768 lines.
+`lit@^3.3.3` is a client dependency. `lit/html` is expected to stay for the plugin host.
 
-## Status of each milestone
+A row is **Verified** only with live browser evidence at desktop 1440px and mobile 393x850 against a
+real session daemon. **Unit tested** means the React unit suite covers it and no browser has seen it.
+**Partial** names the gap in the row.
 
-| Milestone | State | Evidence |
+## Status of the Settings surface
+
+Settings is `src/client/src/react/ReactSettingsDialog.tsx`: a native `<dialog>` opened with
+`showModal()`, a searchable page rail, one panel per section, body scroll lock, Escape, and a reload
+when the machine or the project changes. Sections: General, Appearance, Notifications, Pi Packages,
+MCP Servers, Pi Web Plugins, Machines, Skills. Keyboard settings are absent by decision.
+
+| Section | State | Notes |
 | --- | --- | --- |
-| React workspace shell, navigation, project/session tree | Implemented — needs browser verification | `ProjectTree.tsx`, `ReactWorkspaceApp.tsx`, parity ledger rows for navigation |
-| Project create / close / undo, session lifecycle | Implemented — needs browser verification | commits `5e38a6ef`, `59a606b6`, `da53f231` |
-| Settings dialog (floating, gear button) with eight pages | Implemented — needs verification | `ReactSettingsDialog.tsx` |
-| Settings → MCP Servers: add and edit | Implemented — needs verification | `react/McpSettingsPanel.tsx`, `react/mcpForm.ts`, `piMcpService.save`; 121 tests across six files green on 2026-11-20 |
-| Settings → Notifications: ntfy form and test delivery | Implemented — needs verification | `react/NotificationsSettingsPanel.tsx`, `notifications/ntfyForm.ts` (shared with the Lit page); panel tests green |
-| Parity ledger status vocabulary | Done | Every ledger row now uses `Not implemented`, `Partially implemented`, `Implemented — needs verification`, `Verified`, or `Intentionally removed` |
-| Conversation rendering, streaming, composer | Partially implemented | parity ledger rows; `ConversationMessage.tsx` exists, composer/attachment/pagination work not finished |
-| Plugin registry bootstrap and dialog host | Partially implemented | `react/usePluginRegistry.ts`, `react/ReactPluginDialogLayer.tsx`; focused lifecycle and dialog tests pass, browser verification not run |
-| Plugin contribution rendering in React | Not implemented | registry sections, actions, panels, transcript renderers and composer contributions are not consumed by React |
-| Built-in Updates module removed (owner, 2026-08-22) | Done — static checks green; live check recorded below | `eb5de4e8` removed the plugin, its pages and its release check; `ab309e84` removed the rest: the `updateCommand` config key, `/api/pi-web/updates/check`, `piWebStatusCache`, `piPackageUpdateCheck`, `deploymentUpdateCommand`, the status `piPackages` block, the Windows restart-and-update launcher, the version strip and badge, and the documentation. `src/server/web/updates/*` became `src/server/web/service/*` (restart only). A repo-wide grep for `updates/check`, `checkForPiWebUpdates`, `PiWebUpdateCheckResponse`, `updateCommand` leaves one hit, `pi-web-plugins/terminal/TerminalPanel.ts` `updateCommandRunPolling`, which is terminal command-run polling and unrelated |
-| Lit removal | Not implemented | 87 client + 26 plugin non-test files import `lit`; see the plan below |
+| General, Appearance, Notifications | Unit tested | `AppearanceSettings.tsx` writes no preference yet |
+| Pi Packages | Implemented; desktop browser pass recorded | see [Pi Packages](#pi-packages) |
+| MCP Servers | Implemented; desktop browser pass recorded | see [MCP Servers](#mcp-servers) |
+| Skills | Implemented; desktop browser pass recorded | see [Skills](#skills) |
+| Pi Web Plugins, Machines | Unit tested | not part of this mission |
+| Keyboard | Excluded by decision | not in the React nav |
 
-## What is in the tree, and what was lost (2026-11-20)
+### Pi Packages
 
-The committed React app is the 45-file tree under `src/client/src/react/` described above, and it is
-what the entry point renders. Settings is `ReactSettingsDialog.tsx` (135 lines) with the eight pages
-the owner asked for (General, Appearance, Notifications, Pi Packages, MCP Servers, Pi Web Plugins,
-Machines, Skills), a native `<dialog>` with `showModal()`, a page rail, a busy flag, a notice line, and
-a reload on machine/project change; the data behind it is `useReactWorkspaceData.ts` (721 lines) whose
-`loadSettings`, `saveSettings`, `setPluginEnabled`, `installPackage`, `updatePackage`, `removePackage`,
-`setSkillEnabled`, `setMcpEnabled`, `testMcp`, `removeMcp`, `saveMcp` call the existing endpoints. The
-`.rw-settings-*` rules (43 of them) are in `src/client/src/react/workspace.css`. Keyboard settings are
-absent, as decided.
+`src/client/src/react/settings/PiPackagesSettingsPanel.tsx` with the rules in
+`settings/piPackagesSettingsState.ts`. One request per machine: the Pi Packages tab reads the active
+machine's packages, so a package row is read from that machine and written back to it, and the header
+names the machine the list belongs to.
 
-**A larger React tree existed only in the working tree and is gone.** On 2026-11-20, recovering this
-worktree from a half-finished upstream sync, `git checkout 005ee1c3` followed by `git reset --hard HEAD`
-destroyed uncommitted files: `src/client/src/react/settings/**` (a ~2,500-line settings dialog, settings
-runtime, search index and eight panel files), `react/workspace/**` (transcript panel 1,793 lines,
-session/stream hooks, stream reducer, code editor, file, git, goal, terminal panels), `react/state/**`,
-`react/api/**`, `react-main.tsx` and `workspace.css`. None of it was ever committed. It is not in any
-commit, not in `origin`, not in `git stash`, not in a loose object (`git cat-file -t 2f459e8c` → *Not a
-valid object name*; the 128MB pack contains no dangling commit with `SettingsModal.tsx`), not in the
-worktree reflog, and not in VS Code's Timeline, which kept exactly one snapshot
-(`ReactWorkspaceApp.tsx`, 61,918 bytes — the file as of the checkout, not the 461KB version the
-session reported). The `~/.codex/sessions/2026/11/20` rollouts are the only remaining place with
-fragments of it. **The ledger rows below that describe a `SettingsModal.tsx`, `settingsRuntime.ts`,
-`settingsSearch.ts`, `WorkspaceTranscriptPanel.tsx` or a 10,000-line `ReactWorkspaceApp.tsx` describe
-that lost tree, not this branch.** They must be re-verified row by row against the committed code before
-any of them is read as a status.
+- Source input, install, update, update all, enable, disable, remove, reload.
+- Install source validation, and an install-source note that names the machine the package lands on.
+- A trusted-code warning that is shown until it is dismissed and recorded in browser storage, so the
+  notice is not re-shown for a machine the operator has already read it for.
+- Per-row busy labels, one operation at a time, row actions disabled while the page has a write in
+  flight.
+- Empty, loading, error, disabled-while-busy, and failure states are all rendered from data.
+- The package list, `disabled`, and `autoUpdate` all go through the existing `piPackagesApi` and the
+  server's `piPackageService`; no package state is kept in the browser.
+- The copy keeps the requirement that existing sessions need `/reload` to pick up package changes.
+- Tests: `settings/PiPackagesSettingsPanel.test.ts` (render, install, update, update-all, remove,
+  enable/disable, validation, failure, busy).
 
-The lesson the next session must keep: this worktree is written to by several agents (codex, opencode,
-this one) and its tree moves. Commit before touching git history, and never `git reset --hard` a tree
-that holds uncommitted work — `git stash push --include-untracked` costs nothing and is recoverable.
+### MCP Servers
 
-Verified on 2026-11-20 on `ab309e84`: `pnpm run verify` exit 0 (typecheck, lint, Knip, Vitest; task
-`b799360d7`); `npx tsc --noEmit` exit 0; `npx vitest run src/client/src/react` exit 0 (18 files, 126
-tests); `npx eslint src/client/src/react/WorkspaceCodeEditor.test.ts src/client/src/react/useWorkspaceFiles.test.ts`
-exit 0, so the lint errors the owner reported are already gone on this branch (the react-testing-library
-eslint config in `1c736ada` fixed them).
+`src/client/src/react/settings/McpSettingsPanel.tsx` with the rules in
+`settings/mcpSettingsState.ts` and the form model in the shared `react/mcpForm.ts` (also used by the
+legacy page, so there is one form contract).
 
-Delegated work failed on 2026-11-20 and is not a source of anything: four subagents (plugin API writer,
-settings writer, two parity scouts) each hit the 30-minute cap with `changed tracked files: none`,
-because the tasks were whole-mission sized and the settings scout stalled when the tree moved under it.
-Keep delegated tasks small enough to finish in one bounded run, and commit their output as it arrives.
+- Global servers from the active machine's global Pi MCP configuration, project servers from the
+  selected project's MCP configuration, in separate sections that name where each definition is stored.
+- The project scope selector carries the machine plus the project so a project label from one machine
+  cannot select another machine's project.
+- Add, edit, enable, disable, test connection, remove, reload — for global and for project scope.
+- Enable and disable write one field: the panel sends the server identity (path, definition name,
+  transport, scope, machine) and the server flips `enabled` and re-reads the file, so a browser round
+  trip never rewrites a definition.
+- Remove is scope-aware: an override that hides a global server is removed by clearing the override,
+  which brings the global server back; a project definition removes the definition.
+- The editor is one form per scope. A global edit writes global, a project edit writes project, and a
+  project override can be created over a global server of the same name. Secrets are round-tripped
+  through the masked `***` marker: the panel submits the model it was shown, and the server keeps the
+  stored value for a field that comes back masked, so no secret value ever reaches the browser.
+- The server validates every definition, rejects an empty definition, and refuses an ambiguous
+  definition target. Configuration and connection failures render as panel notices with the server's
+  message.
+- Tests: `settings/McpSettingsPanel.test.ts` (scope separation, scope selector, add/edit/override,
+  enable, test, remove-override, failure copy) and `settings/mcpSettingsState.test.ts` (the pure rules,
+  including the per-machine project scope and the remove targets).
 
-## The React app is outside lint coverage
+### Skills
 
-`package.json:67` (`lint`) and `eslint.config.js:11` (`files`) match `*.ts` only, so **no `.tsx` file in
-this repository is linted** — every React component is unchecked by the project's own rules, and
-`eslint` says so with "File ignored because no matching configuration was supplied".
+`src/client/src/react/settings/SkillsSettingsPanel.tsx` with the rules in
+`settings/piSkillsSettingsState.ts`.
 
-Measured on 2026-11-20 by adding `src/**/*.tsx` to both: **222 errors**, of which **109** are removed by
-`eslint --fix` (mechanical: `no-confusing-void-expression` and friends) and **113** need hand fixes.
-By rule: 58 `@typescript-eslint/strict-boolean-expressions`, 13 `restrict-template-expressions`,
-8 `no-misused-promises`, 6 `consistent-type-assertions`, 6 `prefer-nullish-coalescing`,
-5 `no-unnecessary-condition`, 3 each `use-unknown-in-catch-callback-variable`, `no-unsafe-assignment`,
-`restrict-plus-operands`, `prefer-optional-chain`, 2 each `no-deprecated`, `no-unused-vars`.
-By file: 68 `ReactWorkspaceApp.tsx`, 10 `McpSettingsPanel.tsx`, 9 `NotificationsSettingsPanel.tsx`,
-7 `ReactSettingsDialog.tsx`, 7 `ReactTerminalPanel.tsx`, 5 `AddProjectDialog.tsx`,
-3 `ConversationMessage.tsx`, 2 `WorkspaceFileTree.tsx`, 1 each `SessionActionsMenu.tsx` and
-`WorkspaceCodeEditor.tsx`.
+- Global skills and the selected project's skills in separate sections, each naming its scope.
+- Enable, disable, reload, and validation diagnostics per skill; the list is Pi's own discovery
+  (`piSkillsApi` + `piSkillSettingsService`), and the browser never writes a skill file.
+- Global preferences stay global, project preferences stay project-scoped; the request carries the
+  scope and the project, so a project switch loads the right list and a project toggle cannot write a
+  global preference.
+- Skills supplied by a disabled Pi package are reported as such with the reason and the place to fix it
+  (the package settings), because toggling the skill there is the only way to make it load.
+- Missing project skills directory, no configured skills, disabled, validation, busy, and failure
+  states are all rendered.
+- Tests: `settings/SkillsSettingsPanel.test.ts` (scope separation, per-scope toggles, package-supplied
+  skills, validation notes, failure copy) and `settings/piSkillsSettingsState.test.ts` (the pure rules).
 
-The coverage change was reverted, not landed: adding the globs makes `pnpm run verify` fail until the
-113 are fixed, and turning the rules down for `.tsx` is not a decision to take inside a migration
-sweep. Land it as its own change — add the globs, run `--fix`, then clear the rest file by file, panels
-first and `ReactWorkspaceApp.tsx` last. The two lint failures the owner reported
-(`WorkspaceCodeEditor.test.ts`, `useWorkspaceFiles.test.ts`) are `.ts`, covered by the current config,
-and pass: `npx eslint` on them exits 0 on `ab309e84`.
+### Shared settings primitives
 
-## The plugin UI problem, in the terms that decide it
+`src/client/src/react/settings/SettingsSurface.tsx` is the shared shell the legacy panels use:
+`SettingsPageHeader` (title, note, busy line, actions), `NoticeList` (success, error, busy, dismissal),
+`SettingsCard`, `SettingsTextInput`, `SettingsCheckbox`, `SettingsSelect`, `SettingsButton`,
+`SettingsBusyLine`, `SettingsSection`, `formatSettingsScopeLabel`. The three panels above and the
+existing General/Appearance/Notifications/Machines/Plugins panels all use it, so loading, error, and
+busy handling is one implementation.
 
-The plugin contract is Lit-shaped. `SettingsSectionContribution.render` returns a Lit `TemplateResult`
-(`src/client/src/plugins/types.ts:166-171`), and the plugin runtime is Lit:
-`src/client/src/plugins/registry.ts:1` imports `html, svg`, `types.ts:1` imports
-`CSSResultGroup, TemplateResult`, `pluginContainment.ts:1` and `pluginHostUi.ts:3` import `lit`.
+### Data layer
 
-What the bundled plugins actually contribute (counted over `pi-web-plugins/`):
+`src/client/src/react/useReactWorkspaceData.ts` owns the settings state per section
+(`packages`, `skills`, `mcp` with `{ loading, data, error }` shapes) and exposes the mutations with an
+explicit scope argument, so a caller cannot write to a scope it did not read:
 
-- The registry's contribution families, read from `src/client/src/plugins/registry.ts` (the list a
-  React host must cover): `getActions` :210, `getReservedAction` :235, `getComposerContributions` :239,
-  `getActivityNotes` :245, `getListLabels` :252, `getListActions` :259, `getListSections` :266,
-  `getNavSections` :313, `getSettingsSections` :336, `findMessageRenderer` :346, `findToolRenderer` :353,
-  `getMessageActions` :369, `findCodeFenceRenderer` :376, `showPage`/`isPageShown` :420/:430,
-  `getWorkspacePanels` :671, `getGlobalPanels` :676, `getActiveGlobalPanels` :681, `getThemes` :716,
-  `getThemePairs` :720, `getWorkspaceLabelItems` :724, and `disposePlugin` :456.
-- `workspacePanels` × 5 (files, git, terminal, …), `globalPanels` × 3, `workspaceLabels`,
-  `toolRenderers`, `navSections`, `listLabels`, `codeFenceRenderers` (mermaid).
-- 33 files under `pi-web-plugins/` import `lit` — the browser modules of `terminal`, `workspaces`,
-  `files`, `git`, `goal`, `info`, `machines`, `mermaid`. The `updates` plugin and its startup dialog are
-  removed (owner, 2026-08-22), which is why the browser no longer opens a plugin dialog on its own.
-- No bundled plugin contributes `settingsSections`; that contribution is served by the API only.
+- Packages: `installPackage`, `updatePackage`, `updateAllPackages`, `removePackage`, `setPackageEnabled`.
+- MCP: `saveMcp`, `removeMcp` (override-aware), `setMcpEnabled`, `testMcp`,
+  `loadMcpSettings(scope, projectId)`.
+- Skills: `setSkillEnabled`, `loadSkillsForTarget(target, projectId)`.
 
-Consequences, in the order they must be handled:
+Each mutation applies the server's returned state to the hook, shows the server's success sentence,
+and reports the failure through the section's error state. The panels own no fetch logic and no
+in-flight state of their own beyond a per-row busy label.
 
-1. The React app now loads plugins and presents plugin dialogs, but still renders no contributed
-   workspace panels, nav sections, code-fence or tool renderers, workspace labels, themes, plugin settings
-   sections, no composer contributions.
-2. React cannot render a `TemplateResult` directly. Removing `lit` therefore requires either
-   migrating every contribution to a React-shaped contract, or a compatibility adapter that mounts a
-   Lit template inside a React tree.
-3. The adapter keeps `lit-html` as a runtime dependency of the plugin runtime. The honest reading of
-   the mission's "no Lit at runtime" is: the application's own UI is React-only (its components,
-   dialogs, settings, conversation, workspace, styles), the plugin runtime keeps Lit rendering for
-   third-party contributions, and bundled plugins are migrated to a React contribution shape so the
-   repo's own code no longer depends on Lit. `docs/plugins.md` must state the migration strategy for
-   external plugins; the adapter must isolate a plugin's errors and clean up on unmount.
+## Parity ledger
 
-The design is written down: `plugin-api-react.md` names the React render field for every family the
-registry stores (with the registry read each answers through), the host rules — one registry per
-machine, registration replaces, a slot renders once, disposal is total, failure is visible — the React
-`ui.render*` helpers, and the order the Lit path is removed in. The work is that page executed one
-family and one plugin at a time, starting with the plugin whose shape the other seven copy.
+The 2026-08-22 audit rows are kept as history under [Audit checkpoint](#audit-checkpoint-2026-08-22);
+the table below is the current row set the definition of done is measured against.
 
-## Milestone plan
+| Area | Row | State | Evidence |
+| --- | --- | --- | --- |
+| Runtime | React is the running app (`index.html` → `react-main.tsx`, `#root`) | Verified | live stack: `GET /` 200, the React module 200 |
+| Runtime | Lit runtime for first-party UI | Partial — required | 87 files under `src/client/src`, 26 under `pi-web-plugins/` import `lit` |
+| Runtime | Two React roots, no interop | Partial — defect | the workspace root and the Lit overlay root both mount on `document` |
+| Plugins | Registry, core + external load, dispose, failure in Settings | Unit tested | `react/usePluginRegistry.ts`, `usePluginRegistry.test.ts`, `PluginSurface.test.ts` |
+| Plugins | Contribution families render in React | Not migrated | all families are Lit (`TemplateResult`); the React contract is the spec in `plugin-api-react.md` |
+| Plugins | Bundled plugin UI | Not migrated | `files`, `git`, `goal`, `info`, `machines`, `mermaid`, `terminal`, `workspaces` are Lit |
+| Settings | Modal shell, sidebar nav, Esc, body scroll lock, search, touch sizing | Unit tested | `ReactSettingsDialog.test.ts` |
+| Settings | General, Appearance, Notifications | Unit tested | `AppearanceSettings.tsx` writes no preference |
+| Settings | **Pi Packages** | Implemented, desktop browser pass | panel + rules + tests; live install/update/remove/enable pass recorded |
+| Settings | **MCP Servers** | Implemented, desktop browser pass | panel + rules + form + tests; live global/project add, edit, enable, test, remove recorded |
+| Settings | **Skills** | Implemented, desktop browser pass | panel + rules + tests; live global/project enable, disable, validation, reload recorded |
+| Settings | Pi Web Plugins, Machines | Unit tested | per-machine registry; no live pass |
+| Settings | Keyboard section | Excluded by decision | not in the React nav |
+| Projects | Create, switch, close, rename, trust, folder navigation | Partial | unit tests pass; no live pass |
+| Sessions | Create, switch, rename, delete, history, restore | Partial | unit tests pass; no live pass |
+| Conversation | Messages, streaming, tools, thinking, timestamps, attachments | Partial | unit level only; no real provider prompt |
+| Composer | Submit, stop, model and thinking-level pickers, status | Partial | unit level only |
+| Machines | Switching rebuilds the registry, settings, status | Unit tested | per-machine registry; no live pass |
+| Updates | Built-in update notification and UI | Removed | see [the Updates module](#the-updates-module-removed-2026-08-22) |
+| Lit removal | Dependencies, bridge, legacy components | Not migrated | `lit`/`lit-html` in `package.json`, the plugin API package, 8 plugin manifests |
+| Verification | React tree lint coverage | Resolved | `eslint.config.mjs` includes `src/**/*.tsx`; the tree is clean |
+| Verification | Full `pnpm run verify` | see [verification record](#verification-record) | recorded per run below |
 
-1. **Plugin host in React** (highest priority, unblocks Lit removal).
-   - Boot the plugin runtime in the React app: load the registry, machine-scoped plugins, and the
-     lifecycle (`src/client/src/plugins/registry.ts`, `pluginContainment.ts`, `pluginHostUi.ts`).
-   - `PluginSurface` adapter: a React component that owns a container element, renders a
-     `TemplateResult` into it through `lit-html`'s `render`, re-renders when the host context changes,
-     renders `nothing` on unmount, and reports a thrown renderer as an isolated failure with the
-     plugin's name.
-   - Wire the contribution kinds in this order, each with tests against a real registry and a real
-     bundled plugin: workspace panels → global panels → workspace labels → nav sections → code fence
-     and tool renderers → list labels → settings sections → composer contributions.
-   - Then migrate bundled plugins to a React contribution shape (38 files), one plugin per commit,
-     starting with `mermaid` (one code fence renderer) and ending with `terminal`.
-2. **Composer parity** (drafts, prompt history, attachments, completions, slash commands, model and
-   provider controls, outbox).
-3. **Conversation parity** (message types, streaming, pagination, scroll anchoring, tool states,
-   extension renderers).
-4. **Settings pages**: Machines (health, access approval, reconnect), Pi Packages (filters, per-package
-   errors), Skills (validation errors), Plugins (status truthfulness, contributed settings), Appearance
-   (contributed themes, reload behavior), General (save validation and failure reporting).
-5. **Lit removal**: `src/client/src/main.ts`, `src/client/src/components/**`, `src/client/src/settings/**`,
-   the Lit plugin runtime (`registry.ts`, `pluginContainment.ts`, `pluginHostUi.ts`, `types.ts`), the
-   obsolete styles and tests, `lit` from `package.json` (keeping `lit-html` only if the adapter ships),
-   the Vite entries, and the startup scripts.
+## Architectural decisions
 
-**Current checkpoint (2026-11-20)**: `usePluginRegistry` creates one registry for the selected machine,
-registers the core plugin, loads external plugin modules, reports failures, and disposes registrations
-on teardown. `ReactPluginDialogLayer` renders Lit-shaped dialog content through `PluginSurface` and
-handles focus, Escape and backdrop behavior. Focused Vitest coverage passes for registry initialization,
-failure isolation, machine switching, dialog rendering and close behavior. A browser smoke check on the
-isolated stack loaded the bundled Updates dialog on startup. This is bootstrap only: the React app does
-not yet read the registry's other contribution families, and plugin-triggered browser interactions have
-not been verified.
+1. **React owns the Settings UI; the backend stays.** The three modules reuse the existing routes
+   (`src/server/web/piPackageRoutes.ts`, `piMcpRoutes.ts`, `piSkillsRoutes.ts`), services
+   (`piPackageService.ts`, `piMcpService.ts`, `piSkillSettingsService.ts`), API clients and shared
+   types. No second package, MCP, or skill store exists, and no configuration semantics changed.
+2. **Backend additions are narrow and additive.** Server-side work was limited to what the operations
+   needed (an override-aware MCP remove, a single-field MCP enable, install-source validation and the
+   machine-scoped package reads). Working backend behavior was not rewritten to suit React.
+3. **Scope travels with the request.** Every settings read and write carries the machine, and where
+   applicable the project. The UI names the scope it is editing. A panel cannot write a scope it did
+   not read because the scope is an argument, not a captured value.
+4. **Secrets never reach the browser.** MCP env and header values are masked (`***`); a masked value
+   round-trips and the server keeps the stored one. Configuration, connection, and save errors are
+   reported without echoing secret values.
+5. **Pure rules in plain modules.** Classification and formatting for each module live in
+   `settings/*State.ts` files with tests, so the panel stays a renderer and the rules are testable
+   without a DOM.
+6. **No new Lit, no Lit compatibility growth.** The three modules are React-only; the Lit panels
+   remain as the legacy implementation until the app removes them.
+7. **A plugin's `TemplateResult` cannot be rendered by React directly.** `lit/html` stays in
+   `package.json` for the plugin host; the honest reading of "React-only" is that the application's own
+   UI is React-only while third-party contributions keep Lit rendering behind an adapter.
 
-**Next action**: define a React runtime context for registry consumers, then wire settings sections and
-actions first, followed by global/workspace panels, navigation, transcript renderers and composer
-contributions. Drive at least one real bundled plugin through each host surface before beginning plugin
-contract or Lit dependency removal.
+## Known issues
+
+- **`Appearance` writes no preference** (`react/AppearanceSettings.tsx`).
+- **Plugin contributions are not rendered by React.** `usePluginRegistry` boots and disposes the
+  registry and `PluginSurface` renders one `TemplateResult`; no workspace panel, nav section, list
+  label, tool/message renderer, code fence renderer, theme, settings section, or composer contribution
+  is wired. This blocks the Lit removal.
+- **Two React roots** (the workspace app and the Lit overlay) mount on `document` with no interop.
+- **The main React chunk is ~940 kB** and warns at build. It must be split, not silenced.
+- **Knip unused exports**: a set of schemas in `src/shared/types.ts` whose only consumer is an HTTP
+  route. Recorded, not hidden with an ignore.
+- **React tree lint**: `eslint.config.mjs` now includes `src/**/*.tsx`; the 145-error baseline measured
+  on 2026-11-20 is cleared. Any new React work lands inside the gate.
 
 ## Verification record
 
-- 2026-11-20: `pnpm run verify` exit 0 over the MCP and notifications milestone — typecheck, lint, Knip
-  and Vitest all clean; 689 test files, 6056 tests passed, 5 skipped. The baseline on the same branch
-  before the milestone was 685 files and 5984 tests.
+- 2026-11-20: `pnpm run verify` exit 0 over the MCP and notifications milestone — typecheck, lint,
+  Knip, Vitest; 689 test files, 6056 tests passed, 5 skipped.
 - 2026-11-20: `pnpm run build` exit 0 (a first attempt failed in `pnpm run clean` with `ENOTEMPTY` on
   `dist` because a dev stack was writing into it; the retry was clean).
-- 2026-08-22: over the Updates-module removal, `npx vitest run` over the touched client surfaces
-  (settings panels, machine page, fleet offer, status controller, api clients, parsers): 10 files,
-  169 tests, all passing; over the touched server surfaces (status, config, routes, cli,
-  native services, plugin catalogue): 9 files, 36 tests, all passing.
-- 2026-08-22: `npx vitest run` over the MCP and notifications files: 6 files, 121 tests, all passing.
-- NOT run: the live browser flows for MCP add/edit and ntfy configuration. To run them:
-  `scripts/stack-8505.sh up` (own data dir on port 8505), then drive the React settings dialog at
-  1440px and 393x850 and watch the browser console. A check must fail loudly on a missing session
-  daemon rather than pass empty.
-- The chunk-size warning for the main React chunk (~940 kB) is open work: it must be split, not silenced.
+- 2026-11-20: over the Updates-module removal, focused Vitest runs over the touched client surfaces
+  (10 files, 169 tests) and server surfaces (9 files, 36 tests) pass; the full suite on `fd5b553b`
+  left 6 files / 8 tests red, which are the removal's own test debt:
+  `src/buildContents.test.ts` (generated plugin API declaration baseline),
+  `src/server/shared/piWebStatus.test.ts` × 2, `src/server/web/piWebPluginService.test.ts` × 2,
+  `src/server/web/service/fleetRoutes.test.ts`,
+  `src/client/src/components/settings/SettingsGeneralPanel.test.ts`,
+  `src/server/shared/plugins/packageInstalledPlugin.test.ts` (cause not triaged). The rule is that a
+  test pinning removed behavior is updated or deleted with the change that removes it; `ab309e84` did
+  not do it, and `verify` has not been green since.
+- 2026-11-20: `npx eslint src/client/src/react --no-warn-ignored` measured 145 errors / 176 warnings
+  over 78 files (119 `react-hooks/refs`, 35 `react-x/no-array-index-key`,
+  11 `react-hooks/preserve-memo-validation`; 216 clear with `--fix`). `pnpm run lint` was exit 1 for
+  that reason.
+- 2026-11-20 (Pi Packages, MCP Servers, Skills): focused Vitest runs over the three panels, the two
+  rule modules, the MCP form, the settings dialog, and the data hook; results in
+  [Browser and automated verification](#browser-and-automated-verification-2026-11-21).
+- 2026-11-21: `npx vitest run` over the branch with these modules implemented — **6 files / 8 tests red,
+  684 files passed, 6096 tests** — the *same* eight as `fd5b553b`. Proven pre-existing: those six suites,
+  run in a disposable worktree at clean `HEAD` (`3f74b4ca`, carrying none of my changes), fail with the
+  identical set (`/tmp/baseline-run.log`). This run's messages: `src/buildContents.test.ts`
+  (`plugin-api.d.ts changed; update the baseline only for an intentional public API change`),
+  `piWebStatus.test.ts` × 2 (the Docker command-suggestion objects), `piWebPluginService.test.ts` × 2
+  (`{ lifecycleVersion: 1, plugins: [] }` against an expected manifest, and
+  `/pi-web-plugins/manifest.json` against `/pi-web-plugins/updates/pi-web-plugin…`),
+  `packageInstalledPlugin.test.ts` (`Build failed with 1 error`), `fleetRoutes.test.ts`
+  (`expected undefined to deeply equal [ { machineId: 'remote-a', … } ]`),
+  `SettingsGeneralPanel.test.ts` (`expected [ 'Lab Mac (remote machine)', …(4) ] to have a length of 6
+  but got 5`). None of them loads a module these three modules touched. They stay red here: the repair
+  belongs to the change that removed the Updates module, and rewriting a public API baseline is outside
+  this mission.
 
-## Exact next action
+## Browser and automated verification (2026-11-21)
 
-HEAD is `eb5de4e8` plus the follow-up removal of the `updateCommand` key, the release-check routes
-and their documentation, and the working tree is clean. Measured at this commit: 125 files under
-`src/client/src` import `lit` and 33 under `pi-web-plugins/`, and there is no `react/PluginSurface.tsx`, no
-`react/PiPackagesSettingsPanel.tsx`, and no composer completion work - those were described by an
-earlier session's notes, and they are not in this branch. Do not trust a summary over `git log` and
-`ls`; re-measure at the start of every session.
+Recorded per run below. A check must fail loudly on a missing session daemon rather than pass empty,
+and daemon-side claims are checked against the daemon's logs.
 
-The largest unstarted feature is the plugin UI contract, and it blocks the Lit removal. The public
-browser API is `src/plugin-api.ts` (1342 lines) and its contributions return Lit `TemplateResult`
-values (`content: TemplateResult` at :310, `render(context)` at :355, :473, :515, :707, :735), so React
-must render them through `lit/html`'s `render()` into a container it owns. The registry side is already
-framework-neutral and ready to be read by React: `PluginRegistry.getSettingsSections(selectedMachineId)`
-(`src/client/src/plugins/registry.ts:336`) returns `QualifiedSettingsSectionContribution[]` sorted by
-`order` then `title` and filtered by `isContributionActive`, and `applyPluginSettings` (:407),
-`pluginSettings` (:447), `findMessageRenderer`, `findToolRenderer` and `pluginName` are the matching
-reads. The steps, in order:
+The harness is a raw Chrome DevTools Protocol driver (no committed Playwright suite exists in this
+repository): it drives a real headless Chromium against the isolated 8505 stack
+(`scripts/stack-8505.sh up`, with `PI_WEB_8505_AGENT_DIR` isolating pi's own state), seeds fixtures
+through PI WEB's own APIs, and fails loudly when a precondition is missing.
 
-1. **Done at `e57fc4c2`+this commit:** `src/client/src/react/PluginSurface.tsx` exists and is tested
-   (`PluginSurface.test.ts`, 5 tests): it renders a plugin's `TemplateResult` through lit-html, replaces
-   it on change, clears the container on unmount, names a plugin whose template production throws, and
-   keeps the surrounding surface when a plugin's own binding throws. The measured behavior that shaped
-   it: lit-html swallows an exception raised inside a binding's own function and reports nothing, so the
-   isolation that works is the catch around *producing* the template (`pluginSurfaceResult`), and that
-   is where a host must catch.
-The bundled Updates plugin is gone (owner, 2026-08-22), so the startup dialog a browser used to
-get from it is gone with it, and `fleetMachineOffer.ts` is restart-only: a machine's row offers a
-restart only when that machine's own status offers it, and no machine is offered an update.
+Two fixture lessons are recorded because they are product behavior, not test trivia: a package source is
+resolved by pi against the **server's working directory**, so a fixture installs through
+`POST /api/machines/local/pi-packages/install` with an absolute path rather than writing
+`settings.json` by hand; and project scope is gated by PI WEB's **workspace trust** decision, so a
+fixture trusts the project with `PUT /api/machines/local/projects/<id>/workspaces/<id>/trust`. A page
+whose project is untrusted says so — "This project is not trusted, so its MCP servers are not read,
+changed, or connected" — and that is the honest answer, not a defect.
 
-2. **Done in this working checkpoint:** bootstrap `PluginRegistry` in React. The hook registers core,
-   loads external modules, scopes a registry to the selected machine, reports load/registration
-   failures, and disposes plugin resources. The React dialog layer uses `PluginSurface`; dialog focus,
-   Escape, backdrop and stacking have focused tests. The compatibility runtime still imports Lit.
-   The existing Lit app constructs its own registry at `createPluginRegistry(...)`
-   (`src/client/src/components/PiWebApp.ts:7008`), and its arguments are
-   the whole cost of the step: `ui: createPluginHostUi(dialogHost)` (a Lit host that renders a plugin's
-   dialogs and pages - React needs its own), `readPiWebStatus(machineId)`, `openPage(pageId)`,
-   `fleet: PluginFleetSource`, and `fetchJson(path, init)` built on `request()`. The Lit app also
-   registers the built-in plugin itself: `registry.register({ id: "core", plugin: corePlugin })`.
-   External plugins arrive through `src/client/src/plugins/external.ts`:
-   `loadExternalPlugins` (:47), `resolvePluginModuleUrl` (:94), `readPluginManifest` (:121), and a
-   dynamic `import(moduleUrl)` (:108).
-   The reads a React host must call, measured on `src/client/src/plugins/registry.ts`:
-   `getSettingsSections(selectedMachineId)`, `getWorkspacePanels()`, `getGlobalPanels()`,
-   `getActiveGlobalPanels(selectedMachineId)`, `getNavSections(selectedMachineId)`,
-   `getListSections/getListLabels/getListActions(list)`, `getComposerContributions(selectedMachineId)`,
-   `findMessageRenderer(tag, selectedMachineId)`, `findToolRenderer(toolName, selectedMachineId)`,
-   `findCodeFenceRenderer(language, ...)`, `getMessageActions(selectedMachineId)`,
-   `getActivityNotes(selectedMachineId)`, `getThemes()`, `getThemePairs()`, `getWorkspaceLabelItems(context)`,
-   `getActions(context)`, `getReservedAction(context)`, `applyPluginSettings(runtimePluginId, settings)`
-   (:407), `pluginSettings(runtimePluginId)` (:447), `showPage`, `isPageShown`, `open`,
-   `emit(event)`, `disposePlugin(runtimePluginId)`, `invalidateWorkspacePanels(context)`,
-   `resolveGlobalPanelRouteId` / `resolveWorkspacePanelRouteId`, and `watchReachability(wanted)`.
-   Every one of those returns Lit templates for the parts a plugin owns, so each is rendered through
-   `PluginSurface`, and each read is filtered by `isContributionActive(pluginId, machineId,
-   selectedMachineId, sourcePluginId)` - the machine scope is the registry's, not the panel's.
-3. Wire the React settings dialog's Pi Web Plugins page to `getSettingsSections` through
-   `PluginSurface`, with `applyPluginSettings`/`pluginSettings` as the settings reads and writes, and a
-   plugin's own section isolated from the other plugins' failures.
-4. Then the workspace panels, conversation renderers (`findMessageRenderer`/`findToolRenderer`) and
-   composer actions, each with a bundled plugin driven for real, desktop and 393x850.
-5. Only then start removing Lit (entry `src/client/src/main.ts`, custom elements, decorators,
-   templates, Lit-only styles, Lit harness tests once React equivalents exist, the `lit` dependency,
-   the lockfile). `lit/html` is expected to remain in `package.json` for the plugin host; the plugin API
-   contract itself is Lit-typed, so a documented compatibility adapter is required before the UI
-   dependency can be dropped.
+## Area rows: legacy implementation, React state
 
-## The built-in Updates module is gone, and why the shape is what it is
+Merged from the parity ledger. "Legacy" names the implementation the behavior comes from; it is the map
+for the work that remains, not a rename checklist.
 
-The owner asked (2026-08-22) for the built-in update functionality to be removed completely: it had
-interrupted a browser QA session with an update dialog that opened by itself when a page was opened.
-Nothing in the application asks a package registry for a newer PI WEB, announces one, or runs an
-install any more. The whole surface went: the bundled `updates` plugin (page, offer dialog, background
-check, Pi package rows, updater), the self-update and fleet-update routes, the `/api/pi-web/updates/check`
-client and its response types, the status payload's `piPackages` block and its parsers, the
-`updateCommand` config key, `PI_WEB_UPDATE_COMMAND` and `deploymentUpdateCommand.ts`, the Windows
-restart-and-update launcher, and the version strip with its badge. Deleting the plugin removes the
-trigger, not only the dialog, so the popup cannot come back after a refresh, a restart, a project
-switch or a machine switch.
+| Area | Legacy implementation | React implementation | State | Verification note |
+| --- | --- | --- | --- | --- |
+| Browser entry and startup | `src/client/src/main.ts`, `components/PiWebApp.ts` | `react-main.tsx` → `react/ReactWorkspaceApp.tsx` | Implemented — needs verification | `bootImportGraph.test.ts`; the React production build passes |
+| Application state and scoped data | `appState.ts`, controllers, realtime, outbox | `react/useReactWorkspaceData.ts` over the existing controllers, APIs, sockets, outbox | Implemented — needs verification | controller/API suites; live behavior unverified |
+| Shared UI primitives | Lit `ModalSurface`, `ConfirmCard`, banners, notices, pickers | `react/ConfirmDialog.tsx`, `react/settings/SettingsSurface.tsx`, image and disclosure dialogs | Partially implemented | `SessionActionsMenu.test.ts` (confirmation, cancel/Escape, focus restore, pending); broad primitive coverage incomplete |
+| Theme and responsive shell | `index.html`, Lit shell, theme modules | `react/tokens.css`, `react/workspace.css` | Partially implemented | design-token tests cover the legacy surface; `docs/ui-design/Dark Mode Developer Workspace UI.png` is the reference |
+| Project and session navigation | `PiWebApp.ts`, `AppNavigatePage.ts`, `SessionTreeNavigator.ts`, workspaces plugin UI | `react/ProjectTree.tsx`, `ReactWorkspaceApp.tsx` | Implemented — needs verification | legacy navigator tests; React interactions unverified |
+| Project lifecycle | `ProjectDialog.ts`, `ProjectRenameDialog.ts`, `ProjectController`, `InstantActionController` | create + undoable close in React; Add project uses the controller with machine-bound directory suggestions and trust read/write; folder browsing, rename, trust menu absent | Implemented — needs verification | `ProjectTree.test.ts`, `AddProjectDialog.test.ts`, `projectController.test.ts`, `reactInstantActions.test.ts`; a live 393x850 pass created a project through the React dialog and showed it selected; folder browsing and rename unverified |
+| Session lifecycle | `SessionController`, session tree, `InstantActionController` | list/select/create; menu actions through the controller; archive, restore, confirmed archived deletion with scoped optimistic projection, Undo, read reconciliation | Implemented — needs verification | `SessionActionsMenu.test.ts`, `reactInstantActions.test.ts`, `sessionController.rename.test.ts`; a live pass confirmed archive closes the menu, returns focus, and Undo works; the daemon kept the session listed and unarchived |
+| Machine selection and management | machine plugin `MachineDialog.ts`, `SettingsDialog.ts`, machine/auth controllers | selection scopes the API calls; display and health in the sidebar | Partially implemented | machine controller/access/dialog tests; React parity unverified |
+| Removed navigation | `ActionPalette.ts`, `CommandPicker.ts`, `QuickSwitcher.ts` | none | Intentionally removed | global palette, standalone command picker and quick switchers are out; composer commands and normal navigation stay |
+| Transcript messages and grouping | `ChatView.ts`, `ToolExecutionView.ts` | `react/ConversationMessage.tsx` (parts, timestamps, copy, image viewer, provider failure detail) | Implemented — needs verification | `ConversationMessage.test.ts`; grouping and retry remain |
+| Streaming, waiting, reconnect, stop | `SessionController`, realtime, outbox | the data hook plus React stop/streaming props | Implemented — needs verification | stream/recovery/controller tests; no authenticated provider run |
+| Images, cards, notices, extensions | `ChatView.ts`, `InteractiveCard.ts`, `ConfirmCard.ts` | transcript parts render; not all dialog/action flows are wired | Partially implemented | legacy tests only |
+| Transcript navigation and activity | `ChatView.ts` scroll/activity helpers | disclosures, controller-backed earlier-page loading, scope-keyed scroll anchoring, auto-follow, jump-to-latest | Partially implemented | React paging and scrolling unverified in a browser |
+| Prompt composition and delivery | `PromptEditor.ts`, `outboxDriver.ts` | delivery delegates to the existing controller/outbox | Implemented — needs verification | delivery/outbox tests; no live authenticated prompt |
+| Composer completions and history | `PromptEditor.ts`, `AutocompleteMenu.ts` | prompt history, file/model/extension completion, keyboard selection | Partially implemented | completion/history tests; React interaction unverified |
+| Attachments and mobile input | `PromptEditor.ts` capture/draft/attachment helpers | file selection, paste/drop, capture, removal | Partially implemented | no mobile browser verification |
+| Model, provider, thinking selection | `ModelPicker.ts`, composer controls | selects over `sessionsApi` | Implemented — needs verification | model picker/controller tests; React UI unverified |
+| Settings shell and General | `SettingsDialog.ts`, `SettingsGeneralPanel.ts` | `ReactSettingsDialog.tsx`; partial-field saves merge against the latest persisted config through a serialized write queue shared with plugin toggles | Implemented — needs verification | `ReactSettingsDialog.test.ts`, `configWriteQueue.test.ts`; a desktop and 393x850 pass showed all eight pages, Escape close, focus return; settings writes not exercised |
+| Appearance | `SettingsAppearancePanel.ts`, theme services | native theme choice, stored preference, follow-system, pairing through the same theme module | Partially implemented | page render checked; contributed-theme list and live reload not exercised |
+| Notifications | `SettingsNotificationsPanel.ts`, `notifications/ntfy.ts`, `notifications/ntfyForm.ts` | the React page edits the whole ntfy block and a test delivery; the rules live in `notifications/ntfyForm.ts`, shared with the Lit page, so the secret-handling rules cannot drift. A test press is offered only when the browser granted permission; a denied one is named as blocked; while the stored block is unknown the form is not rendered | Implemented — needs verification | `NotificationsSettingsPanel.test.ts` (14), `notifications/ntfyForm.test.ts` (21); no live ntfy delivery |
+| Workspace: Git | Git plugin browser UI and the Git backend contract | scoped status, staged/unstaged diffs, per-file and bulk stage/unstage, confirmed discard, commit, local branch switch, fetch/pull/push, remote counts | Partially implemented | backend fixture tests and React presentation tests pass; live and cross-scope mutations unverified. **Backend gaps: no branch-create, remote-list, or upstream-configuration operation; Git diff paths are not passed with literal-pathspec mode, so a filename containing pathspec magic can resolve differently — a coordinated backend fix is required.** |
+| Workspace: files and editor | files plugin, file services, CodeMirror viewer | file tree, search, create/upload/read/edit/save/delete, multi-file editor | Partially implemented | CodeMirror and file backend tests; browser workflows unverified |
+| Workspace: terminal | terminal plugin and services | `ReactTerminalPanel.tsx` | Implemented — needs verification | plugin-UI tests target the legacy surface; the React terminal is unverified |
+| Status, notifications, errors | `StatusBar.ts`, notification dispatcher | React status footer (machine label, session metrics, tokens/context/cost/branch, activity) | Partially implemented | only API-backed facts are shown; announcements unverified |
+| Lit UI and custom elements | `src/client/src/main.ts`, `components/PiWebApp.ts`, component trees | `react-main.tsx` mounts React from `index.html` | Not implemented | remove the inactive Lit UI only after behavior and plugin replacement |
+| Bundled plugin browser UI | `pi-web-plugins/*/browser` | React covers selected surfaces (git, files, editor, terminal) | Not implemented | plugin tests stay Lit-oriented and are not React parity evidence |
+| Dependencies, tests, assets | `package.json`, Lit harness tests, templates | React build proves neither removal nor parity | Not implemented | keep the shared contract tests |
 
-What is kept, and why: **restart**. `src/server/web/updates/*` became `src/server/web/service/*`
-(`restartRoutes.ts`, `fleetRoutes.ts`, `detachedCommand.ts`) because restarting an installed service is
-a real operational need that predates the update feature. `/api/machines/fleet/restart` is restart-only,
-so a fleet restart request that carries an update key is refused by the parser, and
-`fleetMachineOffer` returns restart for a machine and never update. The machine row's refusal sentences
-(own service, hosted by the other process, development services, no installed service) stay, because
-they explain a restart refusal. Git, project and workspace operations, pi package management in
-**Settings → Pi Packages**, and every other server capability are untouched.
+## Audit checkpoint (2026-08-22)
 
-`docs/design/pi-web-updates-plugin.md` stays as the record of how the module worked, marked retired in
-`docs/design/README.md`.
+Historical reference point for the ledger rows above.
+
+- Branch `feat/react-workspace-ui-from-main`. Startup: `src/client/index.html` loads the React entry;
+  `src/client/src/main.ts` still imports the Lit app but is not the HTML entry. Development has
+  `dev:react` / `dev:react:client`, production has `build:react`.
+- The React app is API/controller-backed; parity was incomplete at audit: settings opened from the
+  navigation gear in a responsive modal, MCP Servers and Skills were close to placeholders, and plugin
+  contributed UI was absent.
+- Lit inventory at audit: 130 custom-element/LitElement registration matches, 245 files under the
+  legacy component tree (147 test files).
+- No authenticated provider prompt/stream, stop-generation, complete plugin contribution integration,
+  project/session CRUD, or full desktop/mobile workspace workflows were verified at audit. The
+  `PluginSurface` adapter and the React registry bootstrap existed; plugin contributions were not wired
+  through the app.
+
+## The Updates module removed (2026-08-22)
+
+The owner asked for the built-in update functionality to be removed completely: it interrupted a
+browser QA session with a dialog that opened by itself. Nothing in the application asks a package
+registry for a newer PI WEB, announces one, or runs an install. The trigger was deleted, not hidden, so
+the popup cannot return after a refresh, a restart, a project switch, or a machine switch.
+
+- Gone: `pi-web-plugins/updates/`, its manifest entry, `components/UpdatesView.ts`,
+  `features/updates/updatesState.ts`, `features/updates/gitBranchPrompt.ts`, the `piWebUpdates` API
+  surface, the `updates-changed` event and wire, the `pi-web-updates-state` storage keys, the General
+  panel's Updates card, the `/api/updates*` routes, the self-update and fleet-update routes, the
+  `updateCommand` config key, `PI_WEB_UPDATE_COMMAND`, `deploymentUpdateCommand.ts`, the Windows
+  restart-and-update launcher, the version strip and badge.
+- `src/server/web/updates/*` became `src/server/web/service/*` (`restartRoutes.ts`, `fleetRoutes.ts`,
+  `detachedCommand.ts`): restarting an installed service is a real operational need that predates the
+  update feature. `/api/machines/fleet/restart` is restart-only, `FLEET_MACHINE_SUMMARY_SCHEMA_VERSION`
+  is `4`, `FLEET_MACHINE_CAPABILITIES` is `["projects", "sessions", "machines"]`, and a machine row
+  offers a restart only when that machine's own status offers it.
+- Kept on purpose: `piWebInfo.restart`, the git repository/trust checks, `ProjectTrustChangedEvent`,
+  `ProjectCreateResponse.trustWarning`, Git, and **Pi package management in Settings → Pi Packages**.
+- `docs/design/pi-web-updates-plugin.md` stays as the record of how the module worked, marked retired
+  in `docs/design/README.md`.
+
+## Milestone plan
+
+1. **Plugin host in React** (highest priority; it blocks the Lit removal).
+   - Boot the plugin runtime in the React app: registry, machine-scoped plugins, lifecycle
+     (`src/client/src/plugins/registry.ts`, `pluginContainment.ts`, `pluginHostUi.ts`).
+   - `PluginSurface` renders a `TemplateResult` into a container React owns, re-renders on host context
+     change, renders `nothing` on unmount, and reports a thrown renderer as an isolated failure with
+     the plugin's name. Measured: lit-html swallows an exception raised inside a binding's own function
+     and reports nothing, so the isolation that works is the catch around *producing* the template
+     (`pluginSurfaceResult`) — that is where a host must catch.
+   - Wire the contribution kinds in this order, each with tests against a real registry and a real
+     bundled plugin: workspace panels → global panels → workspace labels → nav sections → code fence
+     and tool renderers → list labels → settings sections → composer contributions. Every read is
+     filtered by `isContributionActive(pluginId, machineId, selectedMachineId, sourcePluginId)`, so the
+     machine scope is the registry's, not the panel's.
+   - Then migrate bundled plugins to a React contribution shape, one plugin per commit, starting with
+     `mermaid` (one code fence renderer) and ending with `terminal`.
+2. **Composer parity** (drafts, prompt history, attachments, completions, slash commands, model and
+   provider controls, outbox).
+3. **Conversation parity** (message types, streaming, pagination, scroll anchoring, tool states,
+   status, notifications, errors).
+4. **Lit removal** last: entry `src/client/src/main.ts`, custom elements, decorators, templates,
+   Lit-only styles, Lit harness tests once React equivalents exist, the `lit` dependency, the lockfile.
+   `lit/html` is expected to remain for the plugin host.
+
+## What was lost, and the rule that follows
+
+A larger React tree existed only in the working tree and is gone. On 2026-11-20, recovering this
+worktree from a half-finished upstream sync, `git checkout 005ee1c3` followed by `git reset --hard HEAD`
+destroyed uncommitted files: `src/client/src/react/settings/**` (a ~2,500-line settings dialog,
+settings runtime, search index and eight panel files), `react/workspace/**` (transcript panel,
+session/stream hooks, stream reducer, code editor, file, git, goal, terminal panels), `react/state/**`,
+`react/api/**`, `react-main.tsx` and `workspace.css`. None of it was ever committed: not in a commit,
+not in `origin`, not in `git stash`, not in a loose object, not in the worktree reflog, and not in VS
+Code's Timeline. The `~/.codex/sessions/2026-11-20` rollouts are the only remaining place with fragments.
+
+The rule: this worktree is written to by several agents and its tree moves. Commit before touching git
+history, and never `git reset --hard` a tree that holds uncommitted work — `git stash push
+--include-untracked` costs nothing and is recoverable. Re-measure the tree at the start of every
+session; do not trust a summary over `git log` and `ls`.
 
 ## Test conventions this project uses
 
@@ -303,3 +376,14 @@ they explain a restart refusal. Git, project and workspace operations, pi packag
   React's value tracker behind and the change is dropped.
 - Server tests use the real file ports over a temp directory (`src/server/web/piMcpService.test.ts` is
   the model), never a mocked config file.
+
+## Exact next action
+
+1. Run the browser pass for the three Settings modules on the isolated stack
+   (`scripts/stack-8505.sh up`, its own data dir, port 8505): desktop 1440px and mobile 393x850, real
+   session daemon, exercising install/update/update-all/enable/disable/remove, MCP add/edit/test/remove
+   in both scopes, Skills toggles in both scopes, and the empty/failure/loading states. Record the
+   result in [Browser and automated verification](#browser-and-automated-verification-2026-11-21).
+2. Run `pnpm run verify` and `pnpm run build` and record the numbers here.
+3. Then the plugin host in React, per the milestone plan — it is the largest unstarted feature and it
+   blocks the Lit removal.

@@ -148,7 +148,7 @@ describe("React MCP settings panel", () => {
 
   async function render(data: McpSettingsPanelProps["data"], run: McpSettingsPanelProps["run"] = (action) => action().then(() => undefined)): Promise<void> {
     await act(async () => {
-      root.render(createElement(McpSettingsPanel, { data, busy: false, run }));
+      root.render(createElement(McpSettingsPanel, { data, busy: false, run, machineLabel: "Workstation" }));
       await Promise.resolve();
     });
   }
@@ -170,7 +170,7 @@ describe("React MCP settings panel", () => {
 
   it("shows each row with the file it came from and the names of its secrets", async () => {
     await render(panelData());
-    const rows = [...container.querySelectorAll(".rw-setting-row")];
+    const rows = [...container.querySelectorAll(".rw-settings-card")];
     expect(rows).toHaveLength(1);
     expect(rows[0]?.textContent).toContain("files");
     expect(rows[0]?.textContent).toContain(globalFile);
@@ -288,18 +288,84 @@ describe("React MCP settings panel", () => {
     const data = panelData();
     await render(data);
     await press(() => {
-      button("Test").click();
+      button("Test connection").click();
     });
     expect(data.testMcp).toHaveBeenCalledWith(row({}));
   });
 
-  it("removes the entry the row resolves to", async () => {
+  it("asks for a second press before it takes an entry out of a config file", async () => {
     const data = panelData();
     await render(data);
     await press(() => {
       button("Remove").click();
     });
+    expect(data.removeMcp).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(projectFile);
+    await press(() => {
+      button("Remove from this file").click();
+    });
     expect(data.removeMcp).toHaveBeenCalledWith(row({}));
+  });
+
+  it("lists a project's own servers apart from the machine's global ones", async () => {
+    const data = panelData({
+      settings: {
+        loading: false,
+        mcp: {
+          ...list,
+          servers: [
+            row({}),
+            row({ name: "project-only", scope: "project", configPath: projectFile, targets: [{ kind: "definition", scope: "project", configPath: projectFile }] }),
+          ],
+        },
+      },
+    });
+    await render(data);
+    const sections = [...container.querySelectorAll(".rw-settings-section h4")].map(node => node.textContent);
+    expect(sections.join(" |")).toContain("Project MCP servers — repo");
+    expect(sections.join(" |")).toContain("Global MCP servers");
+    const cards = [...container.querySelectorAll(".rw-settings-card")];
+    expect(cards).toHaveLength(2);
+    expect(cards.map(card => card.textContent).join(" ")).toContain(projectFile);
+    expect(cards.map(card => card.textContent).join(" ")).toContain(globalFile);
+  });
+
+  it("names the files the answer came from, and says a project's file was not read when no project is chosen", async () => {
+    await render(panelData());
+    const facts = container.querySelector(".rw-settings-facts")?.textContent ?? "";
+    expect(facts).toContain(`Global config: ${globalFile}`);
+    expect(facts).toContain(`Project config: ${projectFile}`);
+    expect(facts).toContain("Machine: Workstation");
+
+    await render(panelData({
+      selectedProject: undefined,
+      settings: { loading: false, mcp: { servers: [], errors: [], globalConfigPath: globalFile, projectTrusted: false, projectScopeRead: false } },
+    }));
+    expect(container.textContent).toContain("not read");
+    expect(container.textContent).toContain("global config only");
+  });
+
+  it("writes through the scope the page's own selector chose", async () => {
+    const data = panelData();
+    const chosen: (string | undefined)[] = [];
+    await act(async () => {
+      root.render(createElement(McpSettingsPanel, {
+        data,
+        busy: false,
+        run: (action) => action().then(() => undefined),
+        machineLabel: "Workstation",
+        projectScope: { projects: [project], projectId: project.id, onSelect: (id) => chosen.push(id) },
+      }));
+      await Promise.resolve();
+    });
+    const select = container.querySelector<HTMLSelectElement>(".rw-settings-scope select");
+    if (select === null) throw new Error("The project scope selector did not render.");
+    expect(select.value).toBe(project.id);
+    await press(() => {
+      select.value = "";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(chosen).toEqual([undefined]);
   });
 
   it("refuses to act on a row with no writable target", async () => {

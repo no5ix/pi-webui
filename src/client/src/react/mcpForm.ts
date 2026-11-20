@@ -16,6 +16,8 @@ import type { PiMcpExposure, PiMcpSaveRequest, PiMcpServerDraft, PiMcpServerInfo
 export interface McpFormState {
   name: string;
   transport: "stdio" | "http";
+  /** pi shows this beside the server in its own listings; it is free text, never a secret. */
+  description: string;
   command: string;
   /** Space or newline separated, as a shell would read it. */
   args: string;
@@ -48,6 +50,7 @@ export function emptyMcpForm(): McpFormState {
   return {
     name: "",
     transport: "stdio",
+    description: "",
     command: "",
     args: "",
     cwd: "",
@@ -82,6 +85,7 @@ export function mcpFormFromServer(server: PiMcpServerInfo, target: PiMcpWriteTar
   return {
     name: server.name,
     transport: server.transport,
+    description: server.description ?? "",
     command: server.command ?? "",
     args: "",
     cwd: server.cwd ?? "",
@@ -157,6 +161,8 @@ export function mcpDraftFromForm(form: McpFormState): PiMcpServerDraft {
     return override;
   }
   const draft: PiMcpServerDraft = { enabled: form.enabled };
+  const description = form.description.trim();
+  if (description !== "") draft.description = description;
   if (form.transport === "stdio") {
     draft.type = "stdio";
     draft.command = form.command.trim();

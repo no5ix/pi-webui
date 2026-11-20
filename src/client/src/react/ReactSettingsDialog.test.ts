@@ -4,21 +4,29 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import type { ReactSettingsDialogProps } from "./ReactSettingsDialog";
+import type { PiPackageMutationResponse, PiSkillSetEnabledResponse } from "../api";
 
 let container: HTMLDivElement;
 let root: Root;
+
+const packageMutation: PiPackageMutationResponse = { packages: [], action: "install" };
+const skillMutation: PiSkillSetEnabledResponse = { skills: [], diagnostics: [], scopes: [], requiresReload: false };
 
 const data: ReactSettingsDialogProps["data"] = {
   state: { selectedMachine: undefined, machines: [], error: "" },
   selectedProject: undefined,
   settings: { loading: false },
+  projects: [],
+  settingsProjectId: undefined,
+  setSettingsProject: vi.fn(() => Promise.resolve(undefined)),
   loadSettings: vi.fn(() => Promise.resolve()),
   saveSettings: vi.fn(() => Promise.resolve()),
   setPluginEnabled: vi.fn(() => Promise.resolve()),
-  installPackage: vi.fn(() => Promise.resolve()),
-  updatePackage: vi.fn(() => Promise.resolve()),
-  removePackage: vi.fn(() => Promise.resolve()),
-  setSkillEnabled: vi.fn(() => Promise.resolve()),
+  installPackage: vi.fn(() => Promise.resolve(packageMutation)),
+  updatePackage: vi.fn(() => Promise.resolve(packageMutation)),
+  removePackage: vi.fn(() => Promise.resolve(packageMutation)),
+  setPackageEnabled: vi.fn(() => Promise.resolve(packageMutation)),
+  setSkillEnabled: vi.fn(() => Promise.resolve(skillMutation)),
   setMcpEnabled: vi.fn(() => Promise.resolve()),
   testMcp: vi.fn(() => Promise.resolve()),
   removeMcp: vi.fn(() => Promise.resolve()),

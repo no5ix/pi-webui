@@ -6,6 +6,9 @@ import type { QualifiedContributionId } from "../plugins/types";
 import type { PaintScope } from "../themePaint";
 import { McpSettingsPanel } from "./McpSettingsPanel";
 import { NotificationsSettingsPanel } from "./NotificationsSettingsPanel";
+import { PackagesSettingsPanel } from "./settings/PiPackagesSettingsPanel";
+import { SkillsSettingsPanel } from "./settings/SkillsSettingsPanel";
+import type { SettingsProjectScope } from "./settings/SettingsKit";
 import type { ReactWorkspaceData } from "./useReactWorkspaceData";
 
 const pages = ["General", "Appearance", "Notifications", "Pi Packages", "MCP Servers", "Pi Web Plugins", "Machines", "Skills"] as const;
@@ -29,7 +32,8 @@ function pagesMatching(query: string): readonly Page[] {
 }
 
 type SettingsData = Pick<ReactWorkspaceData,
-  "selectedProject" | "settings" | "loadSettings" | "saveSettings" | "setPluginEnabled" | "installPackage" | "updatePackage" | "removePackage" | "setSkillEnabled" | "setMcpEnabled" | "testMcp" | "removeMcp" | "saveMcp" | "selectMachine" | "addMachine" | "renameMachine" | "removeMachine"
+  "selectedProject" | "settings" | "loadSettings" | "saveSettings" | "setPluginEnabled" | "installPackage" | "updatePackage" | "removePackage" | "setPackageEnabled" | "setSkillEnabled" | "setMcpEnabled" | "testMcp" | "removeMcp" | "saveMcp" | "selectMachine" | "addMachine" | "renameMachine" | "removeMachine"
+  | "projects" | "settingsProjectId" | "setSettingsProject"
 > & { readonly state: Pick<ReactWorkspaceData["state"], "selectedMachine" | "machines" | "error"> };
 
 export interface ReactSettingsDialogProps {
@@ -45,7 +49,6 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const [packageSource, setPackageSource] = useState("");
   const [themePreference, setThemePreference] = useState(() => readStoredThemePreference() ?? { themeId: CORE_BUILTIN_DARK_THEME_ID, auto: false });
   const [machineName, setMachineName] = useState("");
   const [machineUrl, setMachineUrl] = useState("");
@@ -88,7 +91,12 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
   };
 
   const machineId = data.state.selectedMachine?.id ?? "local";
-  const statusMessage = notice ?? data.settings.notice ?? data.settings.error;
+  const machineLabel = data.state.selectedMachine?.name ?? "Local machine";
+  const projects = data.projects.map(entry => entry.project);
+  const settingsProject = projects.find(project => project.id === data.settingsProjectId);
+  const projectScope: SettingsProjectScope = { projects, projectId: data.settingsProjectId, onSelect: data.setSettingsProject };
+  const pagesThatOwnNotices: readonly Page[] = ["Pi Packages", "MCP Servers", "Skills"];
+  const statusMessage = notice ?? (pagesThatOwnNotices.includes(page) ? undefined : data.settings.notice) ?? data.settings.error;
   const machines = data.state.machines;
   const selectedMachine: Machine | undefined = data.state.selectedMachine;
 
@@ -128,11 +136,27 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             <p>Theme changes are saved in this browser and applied immediately.</p>
           </section>}
           {page === "Notifications" && <NotificationsSettingsPanel busy={busy} run={run} />}
-          {page === "Pi Packages" && <section>
-            <form onSubmit={event => { event.preventDefault(); void run(async () => { await data.installPackage(packageSource); setPackageSource(""); }); }}><input aria-label="Package source" placeholder="Package source (URL or registry)" value={packageSource} onChange={event => setPackageSource(event.target.value)}/><button disabled={!packageSource.trim() || busy}>Install</button><button type="button" onClick={() => void run(() => data.updatePackage())} disabled={busy}>Update all</button></form>
-            {data.settings.packages?.packages.map(pkg => <div className="rw-setting-row" key={pkg.source}><span><b>{pkg.source}</b><small>{pkg.scope} · {pkg.enabled ? "enabled" : "disabled"}</small></span><button type="button" onClick={() => void run(() => data.removePackage(pkg.source, pkg.scope))} disabled={busy}>Remove</button></div>)}
-          </section>}
-          {page === "MCP Servers" && <McpSettingsPanel data={data} busy={busy} run={run} />}
+          {page === "Pi Packages" && <PackagesSettingsPanel
+            packages={data.settings.packages}
+            busy={data.settings.loading}
+            machineLabel={machineLabel}
+            projectName={settingsProject?.name ?? ""}
+            busyMessage={busy ? "Working on a setting…" : undefined}
+            onReload={() => void data.loadSettings(data.settingsProjectId)}
+            install={data.installPackage}
+            update={data.updatePackage}
+            remove={data.removePackage}
+            setEnabled={data.setPackageEnabled}
+          />}
+          {page === "MCP Servers" && <McpSettingsPanel
+            data={{ ...data, selectedProject: settingsProject ?? data.selectedProject }}
+            busy={busy}
+            run={run}
+            machineLabel={machineLabel}
+            projectScope={projectScope}
+            notice={data.settings.notice}
+            error={data.settings.error}
+          />}
           {page === "Pi Web Plugins" && <section>
             {pluginFailures.map((failure, index) => <p key={`${failure}-${index}`} className="rw-setting-error" role="status">Plugin failed to load: {failure}</p>)}
             {data.settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}
@@ -145,10 +169,16 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             {selectedMachine && <form onSubmit={event => { event.preventDefault(); void run(() => data.renameMachine(selectedMachine, renameDraft.trim())); }}><label>Machine name<input value={renameDraft} onChange={event => setRenameDraft(event.target.value)}/></label><button disabled={busy || !renameDraft.trim()}>Rename selected machine</button><button type="button" disabled={busy || selectedMachine.kind === "local"} onClick={() => { if (window.confirm(`Remove ${selectedMachine.name}?`)) void run(() => data.removeMachine(selectedMachine)); }}>Remove selected machine</button></form>}
             <form onSubmit={event => { event.preventDefault(); void run(async () => { await data.addMachine({ name: machineName, baseUrl: machineUrl, ...(machineToken ? { token: machineToken } : {}) }); setMachineName(""); setMachineUrl(""); setMachineToken(""); }); }}><h4>Add machine</h4><label>Name<input value={machineName} onChange={event => setMachineName(event.target.value)}/></label><label>Base URL<input type="url" value={machineUrl} onChange={event => setMachineUrl(event.target.value)}/></label><label>Access token<input type="password" autoComplete="new-password" value={machineToken} onChange={event => setMachineToken(event.target.value)}/></label><button disabled={busy || !machineName.trim() || !machineUrl.trim()}>Add machine</button></form>
           </section>}
-          {page === "Skills" && <section>
-            {data.settings.skills?.skills.map(skill => <label className="rw-setting-check" key={skill.id}><input type="checkbox" checked={skill.enabled} disabled={busy || skill.ownerPackageDisabled === true} onChange={event => void run(() => data.setSkillEnabled(skill, event.target.checked))}/><span><b>{skill.name}</b><small>{skill.scope} · {skill.origin} · {skill.validation}{skill.validationMessage ? ` · ${skill.validationMessage}` : ""}</small></span></label>)}
-            {!data.settings.skills?.skills.length && !data.settings.loading && <p>No skills were returned for this scope.</p>}
-          </section>}
+          {page === "Skills" && <SkillsSettingsPanel
+            skills={data.settings.skills}
+            busy={data.settings.loading}
+            projectScope={projectScope}
+            projectName={settingsProject?.name ?? ""}
+            machineLabel={machineLabel}
+            busyMessage={busy ? "Working on a setting…" : undefined}
+            onReload={() => void data.loadSettings(data.settingsProjectId)}
+            setEnabled={data.setSkillEnabled}
+          />}
         </div>
       </div>
     </div>
