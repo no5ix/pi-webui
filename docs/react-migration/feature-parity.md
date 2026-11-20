@@ -151,6 +151,16 @@ means the React unit suite covers it and no browser has seen it. **Partial** nam
 - `pnpm run vitest` over the files touched: 65 files / 262 tests pass; the Settings suite 11 files /
   43 tests pass.
 - `pnpm run build:plugins`: 30 manifests, zero `updates` manifest.
+- A `pnpm run verify` run captured mid-removal (2026-11-20 15:29, task `b8b9097c8`) exits **1**: typecheck
+  passes and lint reports 3 errors — `PI_WEB_STATUS_FRESH_MS` unused, `PiWebInstallationInfo` unused,
+  `npmVersionResponse` unused. All three are settled on HEAD: `npx eslint "src/server/**/*.ts"` is clean,
+  the first two names no longer exist, and `PiWebInstallationInfo` is used at
+  `src/server/shared/piWebStatus.ts:248,272`. The wrapper that launched the run exits 0 after echoing the
+  suite's status, so a `verify` task's task-level exit code is not the suite's exit code — read
+  `VERIFY_EXIT` in the output.
+- `npx eslint "src/server/**/*.ts" --no-warn-ignored` on HEAD: no output, exit 0. The red `verify` is the
+  React tree's 145 errors, not the server tree.
+
 - `npx eslint src/client/src/react/WorkspaceCodeEditor.test.ts src/client/src/react/useWorkspaceFiles.test.ts`
   exit 0 — the two files the mission brief names are clean.
 - `npx eslint src/client/src/react --no-warn-ignored`: 145 errors, 176 warnings, 78 files; 119 errors are
