@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { capturePromptAttachments, type CapturedAttachment } from "../promptAttachmentCapture";
 import { readBlobAsBase64 } from "../sentImages";
 import { filesApi, requestPluginBackend, sessionsApi } from "../api";
@@ -629,7 +629,7 @@ export function ReactWorkspaceApp() {
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
           {(() => {
-            const rendered: React.ReactNode[] = [];
+            const rendered: ReactNode[] = [];
             let activity: ChatLine[] = [];
             let activityStart = 0;
             const flushActivity = () => {
