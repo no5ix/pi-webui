@@ -3,14 +3,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileSuggestion, WorkspaceTrustResponse } from "../api";
+import type { ProjectFolderListing } from "../../../shared/pluginApiTypes";
 import { AddProjectDialog } from "./AddProjectDialog";
 
 const api = vi.hoisted(() => ({
   projectTrust: vi.fn<(path: string, machineId: string) => Promise<WorkspaceTrustResponse>>(),
   projectDirectories: vi.fn<(query: string, machineId: string, init?: RequestInit) => Promise<FileSuggestion[]>>(),
+  projectFolder: vi.fn<(folder: { path: string }, machineId: string, init?: RequestInit) => Promise<ProjectFolderListing>>(),
 }));
 
-vi.mock("../api", () => ({ projectsApi: { projectDirectories: api.projectDirectories }, trustApi: { projectTrust: api.projectTrust } }));
+vi.mock("../api", () => ({ projectsApi: { projectDirectories: api.projectDirectories, projectFolder: api.projectFolder }, trustApi: { projectTrust: api.projectTrust } }));
 
 let container: HTMLDivElement;
 let root: Root;
@@ -23,6 +25,13 @@ describe("React add project dialog", () => {
     vi.spyOn(HTMLDialogElement.prototype, "close").mockImplementation(function (this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event("close")); });
     api.projectTrust.mockResolvedValue({ path: "/work/project", decision: null, trusted: true, defaultTrust: "always" });
     api.projectDirectories.mockResolvedValue([{ path: "/work/projects", kind: "tracked" }]);
+    api.projectFolder.mockResolvedValue({
+      path: "/work",
+      parent: "/",
+      crumbs: [{ name: "work", path: "/work" }],
+      separator: "/",
+      contents: { kind: "complete", folders: [{ name: "project", path: "/work/project" }] },
+    });
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
