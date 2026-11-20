@@ -6,7 +6,7 @@
 // lives in pi-web-plugin.ts.
 
 import type { TemplateResult } from "lit";
-import type { HtmlTemplateTag, MachineKind, PiWebComponentStatus, PiWebInstallationInfo, PiWebReleaseStatus, PiWebStatusResponse, PluginHostUi, PluginListModel, PluginListRow, PluginListTone, PluginMachine, PluginRuntimeContext, Workspace, WorkspacePanelContext } from "@gang-of-beads/pi-web/plugin-api";
+import type { HtmlTemplateTag, MachineKind, PiWebComponentStatus, PiWebInstallationInfo, PiWebStatusResponse, PluginHostUi, PluginListModel, PluginListRow, PluginListTone, PluginMachine, PluginRuntimeContext, Workspace, WorkspacePanelContext } from "@gang-of-beads/pi-web/plugin-api";
 
 export type ComponentHealth = "current" | "restart needed" | "unavailable";
 
@@ -36,17 +36,6 @@ export function installationLabel(installation: PiWebInstallationInfo | undefine
 
 export function machineKindLabel(kind: MachineKind): string {
   return kind === "local" ? "local machine" : "remote machine";
-}
-
-export function releaseSummary(release: PiWebReleaseStatus): string {
-  if (release.updateAvailable) {
-    return release.latestVersion === undefined || release.latestVersion === ""
-      ? "Update available"
-      : `Update available: ${release.latestVersion}`;
-  }
-  if (release.error !== undefined && release.error !== "") return `Update check failed: ${release.error}`;
-  if (release.skipped === true) return "Update check skipped";
-  return "Up to date";
 }
 
 /** One-line component summary used by the panel rows and the clipboard diagnostics. */
@@ -92,8 +81,6 @@ export function diagnosticsSummary({ status, machine, workspace }: DiagnosticsIn
     lines.push(`Package: ${status.packageName}`);
     lines.push(`${status.components.web.label}: ${componentDetails(status.components.web)}`);
     lines.push(`${status.components.sessiond.label}: ${componentDetails(status.components.sessiond)}`);
-    const checked = status.release.checkedAt === undefined || status.release.skipped === true ? "" : ` (checked ${status.release.checkedAt})`;
-    lines.push(`Release: ${releaseSummary(status.release)}${checked}`);
     lines.push(`Status generated: ${status.generatedAt}`);
   }
   if (machine !== undefined) lines.push(`Machine: ${machine.name} (${machineKindLabel(machine.kind)})`);
@@ -128,13 +115,11 @@ function piWebRows(status: PiWebStatusResponse | undefined): PluginListRow[] {
   if (status === undefined) return [{ id: "status", title: "Status", value: "not available yet", detail: "It refreshes automatically in the background." }];
   const web = status.components.web;
   const installed = web.installedVersion === undefined || web.installedVersion === web.runtimeVersion ? undefined : `installed ${formatVersion(web.installedVersion)}`;
-  const checked = status.release.checkedAt === undefined || status.release.skipped === true ? undefined : `checked ${status.release.checkedAt}`;
   return [
     { id: "version", title: "Version", value: formatVersion(web.runtimeVersion), ...optionalDetail(installed) },
     { id: "pi", title: "Pi", value: formatVersion(web.piVersion), ...optionalDetail(piVersionDriftNote(web, status.components.sessiond)) },
     { id: "package", title: "Package", value: status.packageName },
     { id: "installation", title: "Installation", value: installationLabel(web.installation), ...optionalDetail(web.installation?.path) },
-    { id: "release", title: "Release", value: releaseSummary(status.release), ...optionalDetail(checked) },
   ];
 }
 
@@ -142,7 +127,7 @@ function statusNotes(status: PiWebStatusResponse | undefined): string[] {
   if (status === undefined) return [];
   const count = status.messages.length;
   return [
-    ...(count === 0 ? [] : [`${String(count)} status ${count === 1 ? "message" : "messages"} - open the Updates page for details.`]),
+    ...(count === 0 ? [] : [`${String(count)} status ${count === 1 ? "message" : "messages"} - review the machine status in Settings.`]),
     `Status generated ${status.generatedAt}`,
   ];
 }

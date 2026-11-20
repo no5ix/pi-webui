@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PiWebComponentStatus, PiWebReleaseStatus, PiWebStatusResponse, PluginMachine, Workspace } from "@gang-of-beads/pi-web/plugin-api";
-import { componentDetails, componentHealth, diagnosticsSummary, formatVersion, installationLabel, machineKindLabel, piVersionDriftNote, releaseSummary, workspaceFlags } from "./infoInternals.js";
+import type { PiWebComponentStatus, PiWebStatusResponse, PluginMachine, Workspace } from "@gang-of-beads/pi-web/plugin-api";
+import { componentDetails, componentHealth, diagnosticsSummary, formatVersion, installationLabel, machineKindLabel, piVersionDriftNote, workspaceFlags } from "./infoInternals.js";
 
 describe("componentHealth", () => {
   it("reports current when the component is available and not stale", () => {
@@ -13,25 +13,6 @@ describe("componentHealth", () => {
 
   it("reports unavailable when the component cannot be reached", () => {
     expect(componentHealth(componentStatus({ available: false, stale: true }))).toBe("unavailable");
-  });
-});
-
-describe("releaseSummary", () => {
-  it("names the latest version when an update is available", () => {
-    expect(releaseSummary(release({ updateAvailable: true, latestVersion: "1.2.3" }))).toBe("Update available: 1.2.3");
-  });
-
-  it("still reports an update when the latest version is unknown", () => {
-    expect(releaseSummary(release({ updateAvailable: true }))).toBe("Update available");
-  });
-
-  it("surfaces a failed release check", () => {
-    expect(releaseSummary(release({ error: "registry unreachable" }))).toBe("Update check failed: registry unreachable");
-  });
-
-  it("reports skipped checks distinctly from an up-to-date install", () => {
-    expect(releaseSummary(release({ skipped: true }))).toBe("Update check skipped");
-    expect(releaseSummary(release())).toBe("Up to date");
   });
 });
 
@@ -76,7 +57,6 @@ describe("diagnosticsSummary", () => {
       "Package: @gang-of-beads/pi-web",
       "Web/UI: running 1.0.0 · installed 1.0.1 · pi 0.84.1 · restart needed · global npm package · /usr/lib/node_modules",
       "Session daemon: running 1.0.0 · installed 1.0.0 · pi 0.84.1 · current · local checkout · /srv/dev/pi-web",
-      "Release: Update available: 1.1.0 (checked 2025-01-02T03:04:05Z)",
       "Status generated: 2025-01-02T03:04:06Z",
       "Machine: devbox (local machine)",
       "Workspace: pi-web — /srv/dev/pi-web (provider: git, main workspace)",
@@ -146,15 +126,6 @@ function componentStatusWithoutPi(patch: Partial<PiWebComponentStatus> = {}): Pi
   return component;
 }
 
-function release(patch: Partial<PiWebReleaseStatus> = {}): PiWebReleaseStatus {
-  return {
-    packageName: "@gang-of-beads/pi-web",
-    updateAvailable: false,
-    checkedAt: "2025-01-02T03:04:05Z",
-    ...patch,
-  };
-}
-
 function statusResponse(): PiWebStatusResponse {
   return {
     packageName: "@gang-of-beads/pi-web",
@@ -163,7 +134,6 @@ function statusResponse(): PiWebStatusResponse {
       web: componentStatus({ installedVersion: "1.0.1", stale: true }),
       sessiond: componentStatus({ component: "sessiond", label: "Session daemon", installation: { kind: "local", path: "/srv/dev/pi-web" } }),
     },
-    release: release({ updateAvailable: true, latestVersion: "1.1.0" }),
     commands: {},
     messages: [],
   };

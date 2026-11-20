@@ -342,17 +342,13 @@ export interface PiWebVersionResponse {
 }
 
 export interface PiWebStatusResponse extends PiWebVersionResponse {
-  release: PiWebReleaseStatus;
   commands: {
-    update?: string;
     restart?: string;
     restartWeb?: string;
     restartSessiond?: string;
     status?: string;
   };
   messages: PiWebStatusMessage[];
-  /** The machine's user-scope pi packages and their newest versions; absent from a PI WEB that does not report them, which says nothing about updates. */
-  piPackages?: PiPackageUpdates;
 }
 
 /** How a pi package source names its code: a registry package, a repository, or a path on the machine. */
