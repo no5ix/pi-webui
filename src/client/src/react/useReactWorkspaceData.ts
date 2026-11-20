@@ -131,6 +131,8 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [settings, setSettings] = useState<ReactWorkspaceData["settings"]>({ loading: false });
   const [settingsProjectId, setSettingsProjectId] = useState<string | undefined>(undefined);
   const settingsProjectIdRef = useRef<string | undefined>(undefined);
+  const settingsAnswersRef = useRef<{ scopeKey: string; requestId: number; pending: number }>({ scopeKey: "", requestId: 0, pending: 0 });
+  const settingsRequestIdRef = useRef(0);
   const currentSettingsScopeKey = () => JSON.stringify([stateRef.current.selectedMachine?.id ?? "local", settingsProjectIdRef.current]);
   const settingsSaveQueueRef = useRef(createConfigWriteQueue(
     (machineId: string) => configApi.config(machineId).then(response => response.config),
@@ -272,6 +274,14 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
 
   useEffect(() => {
     if (state.machinesLoad !== "loaded") return;
+    // Keep Settings data scoped to the selected machine even when the dialog is closed.
+    // Opening Settings triggers another refresh; this effect prevents a new machine from inheriting
+    // the prior machine's data or displaying a permanent "not read yet" state.
+    void loadSettings(settingsProjectIdRef.current);
+  }, [state.machinesLoad, state.selectedMachine?.id, loadSettings]);
+
+  useEffect(() => {
+    if (state.machinesLoad !== "loaded") return;
     const machineId = state.selectedMachine?.id ?? "local";
     let active = true;
     const release = runtime.boards.watch(machineId);
@@ -378,9 +388,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
    * dropped, and the page keeps saying "not read yet" for that resource instead of showing it under a
    * heading naming another project. The scope's page stops loading when the last resource has answered.
    */
-  const settleSettings = useCallback((scopeKey: string, apply: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"], failure: unknown) => {
+  const settleSettings = useCallback((scopeKey: string, requestId: number, apply: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"], failure: unknown) => {
     const answers = settingsAnswersRef.current;
-    if (scopeKey !== currentSettingsScopeKey() || answers.scopeKey !== scopeKey) return;
+    // Ignore every result from an earlier load, including a superseded request for the same scope.
+    if (scopeKey !== currentSettingsScopeKey() || answers.scopeKey !== scopeKey || answers.requestId !== requestId) return;
     answers.pending = Math.max(0, answers.pending - 1);
     const error = failure === undefined ? undefined : errorText(failure);
     setSettings(current => ({
@@ -405,17 +416,18 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const machineId = stateRef.current.selectedMachine?.id ?? "local";
     const project = projectId ?? settingsProjectIdRef.current;
     const scopeKey = JSON.stringify([machineId, project]);
+    const requestId = ++settingsRequestIdRef.current;
     setSettings((current) => current.scopeKey === scopeKey
       ? { ...current, loading: true, error: undefined }
       : { loading: true, scopeKey });
-    settingsAnswersRef.current = { scopeKey, pending: 5 };
+    settingsAnswersRef.current = { scopeKey, requestId, pending: 5 };
     const answer = <T>(
       request: Promise<T>,
       land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"],
       clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"],
     ) => request.then(
-      value => settleSettings(scopeKey, current => land(current, value), undefined),
-      failure => settleSettings(scopeKey, clear, failure),
+      value => settleSettings(scopeKey, requestId, current => land(current, value), undefined),
+      failure => settleSettings(scopeKey, requestId, clear, failure),
     );
     await Promise.all([
       answer(configApi.config(machineId), (current, value) => ({ ...current, config: value }), current => ({ ...current, config: undefined })),
@@ -424,7 +436,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       answer(piSkillsApi.list(project, machineId), (current, value) => ({ ...current, skills: value }), current => ({ ...current, skills: undefined })),
       answer(piMcpApi.list(project, machineId), (current, value) => ({ ...current, mcp: value }), current => ({ ...current, mcp: undefined })),
     ]);
-  }, [settleSettings]);
+  }, []);
   const writeSettingsForScope = (scopeKey: string, update: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"]) => {
     const latest = stateRef.current;
     if (scopeKey !== JSON.stringify([latest.selectedMachine?.id ?? "local", settingsProjectIdRef.current])) return;
