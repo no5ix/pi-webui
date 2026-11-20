@@ -11,6 +11,17 @@ Branch: `feat/react-workspace-ui-from-main`. The React app is the entry point:
 `src/client/index.html` loads `/src/react-main.tsx`, which renders `ReactWorkspaceApp`. The Lit
 application (`src/client/src/main.ts`) is no longer an entry point.
 
+### Checkpoint 2026-11-21 04:40
+
+Workbench merged, suite green at `4aeb71d4` (**6154 passed / 5 skipped / 0 failed**; typecheck, lint,
+Knip exit 0; production build 0). Two commits land after that number — `ee66cc6c` (a scoped Settings
+write must answer with the scope the page shows) and `b923ea48` (the add-project test fake was one api
+method short) — each with its own targeted suite green (54 and 2). **The combined `pnpm run verify` and
+the full Vitest run have not been repeated at this HEAD; do that before quoting a suite number for it.**
+Browser: 8/8 Settings sections pass at 1440x900; five findings are open and listed in
+**Browser pass of 2026-11-21**. Phase 5 is not verified; the plugin phases (3A/3B) are not started; the
+project/session, conversation/composer and Settings parity audits (Phase 2/4) have not been performed.
+
 Lit import counts, measured with
 `grep -rl 'from "lit"' <dir> --include='*.ts' --include='*.tsx' | grep -v '\.test\.'`:
 **87** non-test files under `src/client/src`, **26** under `pi-web-plugins`, **0** under `src/server`.
@@ -525,7 +536,54 @@ the transcript where the React app already has the message), then `workspacePane
 after the runtime context exists. Wiring `settingsSections` first buys a contract test and no live
 behavior.
 
+## Browser pass of 2026-11-21: what is evidenced, and what is not
+
+Stack: `scripts/stack-8505.sh` on port 8505 with its own data/config/sessiond, fixtures at
+`/tmp/piweb-br` (local machine trusted, one project, global + project MCP servers, global + project
+skills, a file-based Pi package source, auth state). Driver `/tmp/piweb-br/cdp20.mjs` (raw Chrome
+DevTools Protocol; Chrome 157 headless). Screenshots `/tmp/piweb-br/shots20/`.
+
+**Passed, at 1440x900:** all eight Settings sections open, settle and render their own content —
+General, Appearance, Notifications, Pi Packages, MCP Servers, Pi Web Plugins, Machines, Skills (8/8) —
+with no stuck loader and the titlebar naming the machine. The fixture preconditions held: the package
+list reached the fixture package, the MCP page showed the global and project scopes, the Skills page
+showed the global and project rows, and the global skill toggled. The machine list, the add-machine
+form, a machine switch and the new machine's pages behaved.
+
+**Failed and not triaged** — open findings, with what each check asserted:
+
+- **Theme control (Appearance).** Choosing the two theme options left `data-theme` empty on
+  `documentElement` and the `--rw-*` tokens identical (`--rw-bg=#191a20` in both), so no surface change
+  was seen. The React page calls `applyNativeThemeById` (`react/ReactSettingsDialog.tsx:139-146`), the
+  same applier the Lit app uses (`components/PiWebApp.ts:6056`). Not root-caused: where the applier
+  paints versus where the probe read, and whether the option ids reach the applier, both need a targeted
+  probe. Treated as a real Settings-parity finding until disproved.
+- **Opening Settings after a page reload** returned no content for the requested section inside the
+  probe's window (`Reload retrieves fresh data | MCP Servers`; General in the earlier pass).
+- **MCP removal.** The confirmation step, the `mcp.json` write and the post-removal file check failed
+  (`removal asks for confirmation | disk-only`, and the file still named the server). First thing to
+  check: whether the confirm step is a native `confirm()`, which DOM clicks cannot drive.
+- **The close control** stayed mounted under the driver's `[data-test-id="settings-close"]`; the real
+  control is per-section (`#general-close`), so this is a harness artifact — and it means **close is not
+  browser-verified**.
+- **Skills, MCP and Packages legs did not complete**: the pass was killed at 11m in the mobile sweep,
+  after the failures above. `dist/` predates `ee66cc6c`, so the scoped-write fix has **no browser
+  evidence** — the DOM unit test is the only evidence it has.
+- **Harness artifacts, fixed:** the topbar precondition (`.rw-header-actions`; `.rw-sidebar-toggle` is
+  0-wide with the sidebar open), the packages trust needle (the page says "Install only packages you
+  trust"; "trusted code" is add-project's wording), and the churn leg expecting a `local` project while
+  the machine was `lab`.
+
+`/tmp/piweb-br/probe-theme.mjs` is the theme probe; it needs a page target already on the `8505` origin,
+so launch Chrome at the app URL. `/tmp/piweb-br/verify-fix.sh` rebuilds, restacks, reseeds and re-runs
+the Skills and MCP legs — the only way to mark Phase 5 verified.
+
 ## Milestone plan
+
+> The order below predates the 2026-11-21 measurements. The measured prerequisites and the recommended
+> first families (`getThemes`, then `mermaid`'s `codeFenceRenderers`, panels only after the
+> `PluginRuntimeContext` exists) are in **Plugin host in React: the measured prerequisites**; read that
+> first, and the open browser findings above come before any of this.
 
 1. **Plugin host in React** (highest priority; it blocks the Lit removal).
    - Boot the plugin runtime in the React app: registry, machine-scoped plugins, lifecycle
