@@ -517,3 +517,37 @@ button:disabled{cursor:not-allowed}
 .rw-chat-dock { position: relative; z-index: 4; isolation: isolate; }
 .rw-jump-bottom { position: static; width: max-content; max-width: 100%; justify-self: end; margin: 0 0 2px auto; }
 .rw-transcript { padding-bottom: 18px; }
+
+
+/* Final workspace transcript overrides: every assistant/tool run shares one full-width card. */
+.rw-activity-group { display: block; width: 100%; min-width: 0; }
+.rw-activity-group-content { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rw-activity-group-content > .rw-message { display: block; width: 100%; min-width: 0; margin: 0; padding: 0; }
+.rw-activity-group-content .rw-message-meta { min-height: 24px; width: 100%; display: flex; align-items: center; justify-content: space-between; }
+.rw-activity-group-content .rw-message-body { width: 100%; min-width: 0; }
+.rw-activity-group-content .rw-tool-execution,
+.rw-activity-group-content .rw-tool-result,
+.rw-activity-group-content .rw-tool-call,
+.rw-activity-group-content .rw-shell-output,
+.rw-activity-group-content .rw-thinking,
+.rw-activity-group-content .rw-skill-part,
+.rw-activity-group-content .rw-custom-part { display: block; width: 100%; min-width: 0; }
+.rw-tool-execution > summary,
+.rw-tool-result > summary,
+.rw-tool-call > summary { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; width: 100%; min-width: 0; }
+.rw-tool-execution > summary strong,
+.rw-tool-result > summary strong,
+.rw-tool-call > summary strong { flex: 0 0 auto; white-space: nowrap; }
+.rw-tool-execution > summary span,
+.rw-tool-result > summary span,
+.rw-tool-call > summary span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-tool-execution > summary small,
+.rw-tool-result > summary small,
+.rw-tool-call > summary small { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
+.rw-tool-execution > summary svg,
+.rw-tool-result > summary svg,
+.rw-tool-call > summary svg { flex: 0 0 15px; }
+.rw-chat-dock { display: flex; flex-direction: column; align-items: stretch; z-index: 10; isolation: isolate; background: var(--rw-bg); }
+.rw-jump-bottom { align-self: flex-end; width: max-content; position: static; margin: 0 0 3px; box-shadow: none; }
+.rw-composer { position: relative; z-index: 1; width: 100%; }
+.rw-transcript { position: relative; z-index: 0; }
