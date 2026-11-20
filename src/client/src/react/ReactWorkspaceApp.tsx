@@ -627,9 +627,9 @@ export function ReactWorkspaceApp() {
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
           {data.messages.map((message, index) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
-          {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
+          {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
           {(queuedCount > 0 || backgroundCount > 0) && <div className="rw-live-summary">
             {queuedCount > 0 && <span><Icon name="list-ordered"/> {queuedCount} queued</span>}
             {backgroundCount > 0 && <span><Icon name="layers"/> {backgroundCount} background runs</span>}
