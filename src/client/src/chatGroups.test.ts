@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupChatMessages, summarizeChatGroup, tryAppendGroupChatMessage } from "./chatGroups";
+import { groupChatMessages, summarizeChatGroup, summarizeReactActivity, tryAppendGroupChatMessage } from "./chatGroups";
 import type { ChatLine } from "./components/shared";
 
 const text = (role: ChatLine["role"], value: string): ChatLine => ({ role, parts: [{ type: "text", text: value }] });
@@ -176,5 +176,18 @@ describe("tryAppendGroupChatMessage", () => {
     expect(tryAppendGroupChatMessage(oldMessages, oldGroups, prepended)).toBeUndefined();
     // Empty previous list.
     expect(tryAppendGroupChatMessage([], [], [text("user", "first")])).toBeUndefined();
+  });
+});
+
+
+describe("summarizeReactActivity", () => {
+  it("counts thinking blocks and tool calls across the grouped messages", () => {
+    const messages: ChatLine[] = [
+      { role: "assistant", parts: [{ type: "thinking", text: "plan" }, { type: "toolCall", toolName: "read", summary: "file" }] },
+      { role: "assistant", parts: [{ type: "thinking", text: "next" }, { type: "toolExecution", toolName: "bash", summary: "run", status: "success" }] },
+      { role: "tool", parts: [{ type: "toolResult", toolName: "read", text: "ok", isError: false }] },
+      text("bash", "ok"),
+    ];
+    expect(summarizeReactActivity(messages)).toBe("2 thinkings, 2 tool calls, 1 tool result, 1 bash command");
   });
 });
