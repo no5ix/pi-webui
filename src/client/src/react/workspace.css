@@ -510,3 +510,24 @@ button:disabled{cursor:not-allowed}
 .rw-session-diff { min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--rw-line); }
 .rw-session-diff>strong { font-size: 12px; overflow-wrap: anywhere; }
 .rw-session-diff pre { max-height: 45vh; overflow: auto; margin: 0; padding: 10px; border: 1px solid var(--rw-line); border-radius: 7px; background: #14151a; color: var(--rw-text-secondary); font: 10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space: pre; }
+
+/* Compact branch indicator and animated project disclosure. */
+.rw-status-branch{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-status-branch svg{width:11px!important;height:11px!important;min-width:11px;max-width:11px;flex:none;stroke-width:1.5}
+.rw-session-rows{display:grid;grid-template-rows:0fr;transition:grid-template-rows 180ms ease,opacity 150ms ease;opacity:0;overflow:hidden}
+.rw-session-rows.expanded{grid-template-rows:1fr;opacity:1}
+.rw-session-rows-inner{min-height:0;overflow:hidden;display:grid;align-content:start}
+.rw-project-toggle svg{transition:transform 180ms ease}
+@media(prefers-reduced-motion:reduce){.rw-session-rows,.rw-project-toggle svg{transition:none}}
+.rw-folder-browser{border:1px solid var(--rw-line);border-radius:9px;overflow:hidden;display:flex;flex-direction:column;min-height:230px;max-height:42vh;background:var(--rw-window)}
+.rw-folder-browser-toolbar{display:flex;align-items:center;gap:7px;padding:8px;border-bottom:1px solid var(--rw-line)}
+.rw-folder-browser-toolbar strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.rw-folder-browser-toolbar button,.rw-folder-crumbs button,.rw-folder-choose{border:1px solid var(--rw-line);border-radius:6px;background:var(--rw-card);color:var(--rw-text);min-width:30px;height:29px}
+.rw-folder-crumbs{display:flex;gap:4px;overflow:auto;padding:7px;border-bottom:1px solid var(--rw-line)}
+.rw-folder-crumbs button{white-space:nowrap;padding:0 7px;font-size:10px}
+.rw-folder-list{min-height:90px;overflow:auto;flex:1;padding:5px}
+.rw-folder-list>button{width:100%;height:30px;display:flex;align-items:center;gap:8px;padding:0 7px;border:0;border-radius:5px;background:transparent;color:var(--rw-text);text-align:left;font-size:11px}
+.rw-folder-list>button:hover{background:var(--rw-hover)}
+.rw-folder-list>button span{color:var(--rw-muted)}
+.rw-folder-list p{padding:8px;color:var(--rw-muted);font-size:11px}
+.rw-folder-choose{align-self:flex-end;margin:7px;padding:0 12px}
