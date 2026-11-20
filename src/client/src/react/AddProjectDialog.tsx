@@ -22,6 +22,7 @@ export function AddProjectDialog({ open, machineId, machineName, onClose, onSubm
   const [submitError, setSubmitError] = useState("");
   const [busy, setBusy] = useState(false);
   const [folderListing, setFolderListing] = useState<ProjectFolderListing>();
+  const [browsePath, setBrowsePath] = useState(".");
   const [folderLoading, setFolderLoading] = useState(false);
   const [folderError, setFolderError] = useState("");
   const [trustLoading, setTrustLoading] = useState(false);
@@ -75,8 +76,8 @@ export function AddProjectDialog({ open, machineId, machineName, onClose, onSubm
     if (folderListing !== undefined) return;
     const controller = new AbortController();
     setFolderLoading(true); setFolderError("");
-    void projectsApi.projectFolder({ path: path.trim() || "." }, machineId, { signal: controller.signal }).then(listing => {
-      if (!controller.signal.aborted) { setFolderListing(listing); setPath(listing.path); }
+    void projectsApi.projectFolder({ path: browsePath }, machineId, { signal: controller.signal }).then(listing => {
+      if (!controller.signal.aborted) { setFolderListing(listing); setBrowsePath(listing.path); setPath(listing.path); }
     }).catch(error => { if (!controller.signal.aborted) setFolderError(error instanceof Error ? error.message : String(error)); })
       .finally(() => { if (!controller.signal.aborted) setFolderLoading(false); });
     return () => controller.abort();
@@ -84,7 +85,7 @@ export function AddProjectDialog({ open, machineId, machineName, onClose, onSubm
 
   const browse = async (target: string) => {
     setFolderLoading(true); setFolderError("");
-    try { const listing = await projectsApi.projectFolder({ path: target }, machineId); setFolderListing(listing); setPath(listing.path); }
+    try { const listing = await projectsApi.projectFolder({ path: target }, machineId); setFolderListing(listing); setBrowsePath(listing.path); setPath(listing.path); }
     catch (error) { setFolderError(error instanceof Error ? error.message : String(error)); }
     finally { setFolderLoading(false); }
   };
