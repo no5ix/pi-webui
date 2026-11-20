@@ -124,13 +124,29 @@ reads. The steps, in order:
    it: lit-html swallows an exception raised inside a binding's own function and reports nothing, so the
    isolation that works is the catch around *producing* the template (`pluginSurfaceResult`), and that
    is where a host must catch.
-2. **Next:** bootstrap `PluginRegistry` for React. It is constructed only inside the Lit app today
-   (`src/client/src/components/PiWebApp.ts:7009`), so the React entry has no registry to read
-   `getSettingsSections(selectedMachineId)` (`src/client/src/plugins/registry.ts:336`),
-   `findMessageRenderer`, `findToolRenderer` or composer contributions from. Build that bootstrap as its
-   own module (fetch the plugin list, load each browser module, scope by machine, keep the plugin's own
-   settings through `applyPluginSettings`:407 / `pluginSettings`:447), expose it to React through a hook,
-   and render each contribution through `PluginSurface`.
+2. **Next:** bootstrap `PluginRegistry` for React. It is constructed only inside the Lit app today,
+   at `createPluginRegistry(...)` (`src/client/src/components/PiWebApp.ts:7008`), and its arguments are
+   the whole cost of the step: `ui: createPluginHostUi(dialogHost)` (a Lit host that renders a plugin's
+   dialogs and pages - React needs its own), `readPiWebStatus(machineId)`, `openPage(pageId)`,
+   `fleet: PluginFleetSource`, and `fetchJson(path, init)` built on `request()`. The Lit app also
+   registers the built-in plugin itself: `registry.register({ id: "core", plugin: corePlugin })`.
+   External plugins arrive through `src/client/src/plugins/external.ts`:
+   `loadExternalPlugins` (:47), `resolvePluginModuleUrl` (:94), `readPluginManifest` (:121), and a
+   dynamic `import(moduleUrl)` (:108).
+   The reads a React host must call, measured on `src/client/src/plugins/registry.ts`:
+   `getSettingsSections(selectedMachineId)`, `getWorkspacePanels()`, `getGlobalPanels()`,
+   `getActiveGlobalPanels(selectedMachineId)`, `getNavSections(selectedMachineId)`,
+   `getListSections/getListLabels/getListActions(list)`, `getComposerContributions(selectedMachineId)`,
+   `findMessageRenderer(tag, selectedMachineId)`, `findToolRenderer(toolName, selectedMachineId)`,
+   `findCodeFenceRenderer(language, ...)`, `getMessageActions(selectedMachineId)`,
+   `getActivityNotes(selectedMachineId)`, `getThemes()`, `getThemePairs()`, `getWorkspaceLabelItems(context)`,
+   `getActions(context)`, `getReservedAction(context)`, `applyPluginSettings(runtimePluginId, settings)`
+   (:407), `pluginSettings(runtimePluginId)` (:447), `showPage`, `isPageShown`, `open`,
+   `emit(event)`, `disposePlugin(runtimePluginId)`, `invalidateWorkspacePanels(context)`,
+   `resolveGlobalPanelRouteId` / `resolveWorkspacePanelRouteId`, and `watchReachability(wanted)`.
+   Every one of those returns Lit templates for the parts a plugin owns, so each is rendered through
+   `PluginSurface`, and each read is filtered by `isContributionActive(pluginId, machineId,
+   selectedMachineId, sourcePluginId)` - the machine scope is the registry's, not the panel's.
 3. Wire the React settings dialog's Pi Web Plugins page to `getSettingsSections` through
    `PluginSurface`, with `applyPluginSettings`/`pluginSettings` as the settings reads and writes, and a
    plugin's own section isolated from the other plugins' failures.
