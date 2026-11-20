@@ -139,3 +139,17 @@ Enumerate every producer, write down the invariant being violated, then change c
 ### State machines over ladders
 
 When a branchy decision appears twice or carries product meaning, name its states and transitions in one pure classifier (see `revisionVerdict`, `replayDecision`) and keep the callers as dumb executors; enumerate every state in tests so an unanswered state fails there instead of in production.
+
+## Autonomous mission continuation
+
+When the user gives a multi-step implementation mission, treat the requested outcome as the objective—not the next individual step—as the work boundary.
+
+- **Continue by default.** Do not voluntarily stop after an audit, plan, partial implementation, one milestone, or a progress report while requested work remains.
+- **Do not abandon work solely because the active context appears low.** Before context becomes constrained, write a durable checkpoint to the task's existing progress document (or a focused document under `docs/`) containing the objective, completed work, current state, exact remaining tasks, changed files, commits, test results, known blockers, and the next concrete action.
+- Use the runtime's supported native context-compaction mechanism when available. After compaction, reread the checkpoint and relevant project instructions, inspect Git status and HEAD, confirm the current branch, and resume from the next incomplete task. Do not assume a third-party history-retrieval plugin performs compaction or resumes execution automatically.
+- **Use subagents when they reduce elapsed work or context load.** Delegate bounded, independent investigations, reviews, or changes with explicit files, scope, and acceptance criteria. Keep shared integration points under one owner; review every result, integrate it, resolve conflicts, and run verification yourself. A subagent's completion message is not proof.
+- Work in small, complete milestones. For each: inspect, implement, test the touched behavior, review the diff, update the progress/feature-parity record, then commit the exact intended files. Continue to the next task without waiting for the user.
+- If a check fails, diagnose and fix it; do not report it as passing, hide it, or stop at the first failure. If one item is blocked by unavailable credentials, services, permissions, or a genuine external dependency, record reproducible evidence, continue all independent work, and return to the blocked item when possible.
+- Never invent data, browser evidence, test results, successful streaming, or push confirmation. Mark work verified only after the relevant behavior has actually been exercised.
+- Do not make irreversible or externally consequential product decisions without user authorization. Preserve user changes, follow the Git etiquette above, and never force-push.
+- Stop only when the requested acceptance criteria are met, or when a hard external limit makes further work impossible. In that case, leave a precise durable checkpoint and report the specific blocker and next action—not a generic context-limit excuse.
