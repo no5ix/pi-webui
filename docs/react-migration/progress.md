@@ -480,6 +480,51 @@ the popup cannot return after a refresh, a restart, a project switch, or a machi
 - `docs/design/pi-web-updates-plugin.md` stays as the record of how the module worked, marked retired
   in `docs/design/README.md`.
 
+## Plugin host in React: the measured prerequisites (2026-11-21)
+
+What exists, measured on this branch:
+
+- The registry boots in React: `react/usePluginRegistry.ts` builds a `PluginRegistry` per machine
+  (`core` plus the manifest at `pi-web-plugins/manifest.json`, or the remote machine's manifest),
+  isolates a plugin that fails to register into `failures`, owns the dialog queue
+  (`showDialog`/`closeDialog` → `ReactPluginDialogLayer`), and exposes `refresh()`.
+- `react/PluginSurface.tsx` renders one `TemplateResult` into a React-owned element, clears it on
+  unmount, and names the plugin when the render throws. The catch that works is around *producing* the
+  template, exported as `pluginSurfaceResult`.
+
+What is missing, measured: the React app calls **none** of the registry's contribution reads —
+`getActions`, `getReservedAction`, `getComposerContributions`, `getActivityNotes`, `getListLabels`,
+`getListActions`, `getListSections`, `getNavSections`, `getSettingsSections`, `findMessageRenderer`,
+`findToolRenderer`, `getMessageActions`, `findCodeFenceRenderer`, `getWorkspacePanels`,
+`getGlobalPanels`, `getActiveGlobalPanels`, `getThemes`, `getThemePairs`, `getWorkspaceLabelItems`
+(`plugins/registry.ts:210-724`). Every one of them is machine-filtered by `isContributionActive`, so a
+React host reads them with the selected machine and never with the panel's own idea of scope.
+
+The dependency that decides the order, measured: a contribution's `render` takes
+`PluginRuntimeContext` (`plugins/types.ts`), a surface of app state, the prompt editor, and about thirty
+host actions (`addProject`, `createProject`, `createMachine`, `projectDirectories`, `projectTrust`,
+`selectMainView`, `selectWorkspaceTool`, `openTerminal`, `refreshFiles`, `refreshWorkspacePanels`,
+`startSession`, `archiveSession`, `stopActiveWork`, `openThemePicker`, `openModelPicker`, …). The React
+app has no `AppState` and no prompt-editor host object, so **every family that renders with a context
+needs that context built first**. That is the milestone, and it is why a rendered plugin dialog is not
+plugin integration.
+
+The families the bundled plugins actually declare, measured from each plugin's entry file: `files` →
+`workspacePanels`; `goal` → `globalPanels`, `listLabels`, `toolRenderers`, `workspacePanels`; `info` →
+`actions`, `workspacePanels`; `mermaid` → `codeFenceRenderers`; `terminal` → `globalPanels`,
+`workspacePanels`. `git`, `machines` and `workspaces` have no `pi-web-plugin.ts` entry of their own.
+No bundled plugin declares `settingsSections`, `themes`, `navSections`, `composer`,
+`messageRenderers` or `activityNotes` — so a React host for a settings section has no first-party
+contributor to prove itself against, and needs a fixture plugin in the browser pass to be evidenced at
+all.
+
+Consequence for the plan: the cheapest family to land first is `getThemes` (a theme list contribution,
+no `PluginRuntimeContext` in its render path — `NATIVE_THEME_CHOICES` is where the React Appearance page
+currently stops at the built-ins), then `codeFenceRenderers` (`mermaid`, one renderer, rendered inside
+the transcript where the React app already has the message), then `workspacePanels`/`globalPanels`
+after the runtime context exists. Wiring `settingsSections` first buys a contract test and no live
+behavior.
+
 ## Milestone plan
 
 1. **Plugin host in React** (highest priority; it blocks the Lit removal).
