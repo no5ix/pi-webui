@@ -325,7 +325,7 @@ export function ReactWorkspaceApp() {
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
   const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
   const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
-  const activityGroups = useMemo(() => groupChatMessages(data.messages), [data.messages]);
+  const activityGroups = useMemo(() => groupReactTranscriptMessages(data.messages), [data.messages]);
   const subagentRecords = useMemo(() => collectToolRecords(data.messages, /subagent/i), [data.messages]);
   const backgroundRecords = useMemo(() => collectToolRecords(data.messages, /background/i), [data.messages]);
   const backgroundBadgeCount = backgroundRecords.length || backgroundCount;
@@ -748,3 +748,13 @@ export function ReactWorkspaceApp() {
   </div>;
 }
 
+
+/** Hide only pi's internal background-task sentinel, then use the shared part-aware grouping policy. */
+export function groupReactTranscriptMessages(messages: readonly ChatLine[]) {
+  const visible = messages.filter(message => !(
+    message.role === "system" &&
+    message.parts.length > 0 &&
+    message.parts.every(part => part.type === "text" && part.text.trim() === "background-task-notification")
+  ));
+  return groupChatMessages([...visible]);
+}
