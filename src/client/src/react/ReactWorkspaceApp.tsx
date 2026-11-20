@@ -12,6 +12,7 @@ import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_S
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
 import { groupChatMessages } from "../chatGroups";
+import { ActivityRecordsPanel, collectEditedFileDiffs, collectToolRecords, summarizeActivityGroup } from "./ActivityWorkbenchPanels";
 import type { ChatLine } from "../chatTypes";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
@@ -638,13 +639,7 @@ export function ReactWorkspaceApp() {
           {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
-          {(queuedCount > 0 || backgroundCount > 0) && <div className="rw-live-summary">
-            {queuedCount > 0 && <span><Icon name="list-ordered"/> {queuedCount} queued</span>}
-            {backgroundCount > 0 && <span><Icon name="layers"/> {backgroundCount} background runs</span>}
-          </div>}
-          <details className="rw-disclosure"><summary><Icon name="bot"/><strong>Subagents</strong><span>({subagentExecutions.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{subagentExecutions.length === 0 ? "No subagent-named tool activity is recorded in this session." : subagentExecutions.map((part, index) => <div key={index}>{part.toolName}: {part.summary}{part.type === "toolExecution" ? ` · ${part.status}` : " · running"}</div>)}</div></details>
-          <details className="rw-disclosure"><summary><Icon name="activity"/><strong>Background Runs</strong><span>({backgroundCount})</span><small>Show details</small></summary><div className="rw-disclosure-content">{backgroundCount === 0 ? "No background runs are reported." : "The session status reports the active count; this API response does not include individual process details."}</div></details>
-          <details className="rw-disclosure"><summary><Icon name="file-text"/><strong>Edited Files</strong><span>({editedFiles.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{editedFiles.length === 0 ? "No file edits are recorded in the visible transcript." : editedFiles.map(file => <button className="rw-edited-file" key={file.path} onClick={() => { if (!file.path.startsWith("/")) { void workspaceFiles.openFile(file.path); setActiveTab("Files"); } }}><span>{file.path}</span><small>{file.status}</small></button>)}</div></details>
+          {queuedCount > 0 && <div className="rw-live-summary"><span><Icon name="list-ordered"/> {queuedCount} queued</span></div>}
           {completionItems.length > 0 && <div className="rw-autocomplete" role="listbox" aria-label="Composer suggestions">{completionItems.map((item, index) => <button key={`${item.kind}-${item.insertText}-${index}`} role="option" aria-selected={index === completionIndex} onMouseDown={event => event.preventDefault()} onClick={() => void pickCompletion(item)}><strong>{item.insertText}</strong><span>{item.detail}{item.argumentHint ? ` ${item.argumentHint}` : ""}</span>{item.description && <small>{item.description}</small>}</button>)}</div>}
           <div className={"rw-composer " + (composerFocused ? "focused" : "")} onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); } }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void addAttachments(files); } }}>
             <input ref={attachmentInputRef} type="file" multiple hidden onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void addAttachments(files); }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
@@ -682,7 +677,13 @@ export function ReactWorkspaceApp() {
           hasWorkspace={data.selectedWorkspace !== undefined}
         /> : <>
           <div className="rw-workbench-toolbar"><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh Git status" onClick={() => setGitRefresh(value => value + 1)}><Icon name="refresh-cw"/></button>}</div>
-        {activeTab === "Terminal" ? (
+        {activeTab === "Subagents" ? <ActivityRecordsPanel records={subagentRecords} empty="No subagent records are present in this session."/> :
+         activeTab === "Background Runs" ? <ActivityRecordsPanel records={backgroundRecords} empty={backgroundCount > 0 ? backgroundCount + " background work item(s) are currently reported by session status. Individual historical records are not exposed by the current API." : "No background-run records are present in this session."}/> :
+         activeTab === "Edited Files" ? <div className="rw-edited-files-panel">
+           <div className="rw-edited-files-list">{editedFiles.length === 0 ? <div className="rw-empty-panel">No edited files are recorded in this session.</div> : editedFiles.map(file => <button className={selectedEditedFile === file.path ? "selected" : ""} key={file.path} onClick={() => setSelectedEditedFile(file.path)}><Icon name="file-text"/><span>{file.path}</span><small>{file.status}</small></button>)}</div>
+           {selectedEditedFile && <section className="rw-session-diff"><div className="rw-git-diff-heading"><strong title={selectedEditedFile}>{selectedEditedFile}</strong><span>Session changes</span></div>{editedFileDiffs.find(item => item.path === selectedEditedFile)?.diff ? <pre>{editedFileDiffs.find(item => item.path === selectedEditedFile)?.diff}</pre> : <div className="rw-empty-panel">A cumulative session-level diff is not available in the recorded tool data for this file.</div>}</section>}
+         </div> :
+         activeTab === "Terminal" ? (
           data.selectedWorkspace
             ? <ReactTerminalPanel key={data.selectedWorkspace.id} workspace={data.selectedWorkspace} machineId={data.state.selectedMachine?.id ?? "local"}/>
             : <div className="rw-empty-panel">Select a workspace before opening a terminal.</div>
