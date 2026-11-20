@@ -6,9 +6,13 @@ continuation point, not a product page: it is written so that a reader with no m
 session can pick the work up without re-discovering the facts below.
 
 Branch: `feat/react-workspace-ui-from-main`. The React app is the entry point:
-`src/client/index.html:397` loads `/src/react-main.tsx`, which renders `ReactWorkspaceApp`.
-The Lit application (`src/client/src/main.ts`) is no longer an entry point, and 121 files under
-`src/client/src` still import `lit`.
+`src/client/index.html:396` loads `/src/react-main.tsx`, which renders `ReactWorkspaceApp`.
+The Lit application (`src/client/src/main.ts`) is no longer an entry point.
+
+Counted on 2026-11-20 with `grep -rl 'from "lit"' <dir> --include='*.ts' --include='*.tsx' | grep -v '\.test\.'`:
+**87** non-test files under `src/client/src`, **26** under `pi-web-plugins`, **0** under `src/server`.
+`lit@^3.3.3` is a client dependency at `package.json:114`. The React tree is **45 files / 7,188 lines**
+(17 `.tsx`), of which `ReactWorkspaceApp.tsx` is 768 lines.
 
 ## Status of each milestone
 
@@ -23,9 +27,51 @@ The Lit application (`src/client/src/main.ts`) is no longer an entry point, and 
 | Conversation rendering, streaming, composer | Partially implemented | parity ledger rows; `ConversationMessage.tsx` exists, composer/attachment/pagination work not finished |
 | Plugin registry bootstrap and dialog host | Partially implemented | `react/usePluginRegistry.ts`, `react/ReactPluginDialogLayer.tsx`; focused lifecycle and dialog tests pass, browser verification not run |
 | Plugin contribution rendering in React | Not implemented | registry sections, actions, panels, transcript renderers and composer contributions are not consumed by React |
-| Built-in Updates module removed (owner decision, 2026-08-22) | Done | `pi-web-plugins/updates` deleted; `src/server/web/updates/*` became `src/server/web/service/*` (restart only); `/api/pi-web/updates/check`, `updateCommand`, `PI_WEB_UPDATE_COMMAND`, `deploymentUpdateCommand`, `piPackageUpdateCheck` and the status `piPackages` block deleted; changeset `built-in-updates-removed` |
-| Lit removal | Not implemented | Lit remains in the plugin runtime, legacy UI, and bundled plugins; see the plan below |
-| Built-in Updates module removed (owner, 2026-08-22) | Done — static checks green, live browser confirmation recorded below | `eb5de4e8` removes the plugin and the release check; the follow-up commit removes the `updateCommand` key, `/api/pi-web/updates/check`, `piWebStatusCache`, the General panel card, the fleet update keys, and their documentation |
+| Built-in Updates module removed (owner, 2026-08-22) | Done — static checks green; live check recorded below | `eb5de4e8` removed the plugin, its pages and its release check; `ab309e84` removed the rest: the `updateCommand` config key, `/api/pi-web/updates/check`, `piWebStatusCache`, `piPackageUpdateCheck`, `deploymentUpdateCommand`, the status `piPackages` block, the Windows restart-and-update launcher, the version strip and badge, and the documentation. `src/server/web/updates/*` became `src/server/web/service/*` (restart only). A repo-wide grep for `updates/check`, `checkForPiWebUpdates`, `PiWebUpdateCheckResponse`, `updateCommand` leaves one hit, `pi-web-plugins/terminal/TerminalPanel.ts` `updateCommandRunPolling`, which is terminal command-run polling and unrelated |
+| Lit removal | Not implemented | 87 client + 26 plugin non-test files import `lit`; see the plan below |
+
+## What is in the tree, and what was lost (2026-11-20)
+
+The committed React app is the 45-file tree under `src/client/src/react/` described above, and it is
+what the entry point renders. Settings is `ReactSettingsDialog.tsx` (135 lines) with the eight pages
+the owner asked for (General, Appearance, Notifications, Pi Packages, MCP Servers, Pi Web Plugins,
+Machines, Skills), a native `<dialog>` with `showModal()`, a page rail, a busy flag, a notice line, and
+a reload on machine/project change; the data behind it is `useReactWorkspaceData.ts` (721 lines) whose
+`loadSettings`, `saveSettings`, `setPluginEnabled`, `installPackage`, `updatePackage`, `removePackage`,
+`setSkillEnabled`, `setMcpEnabled`, `testMcp`, `removeMcp`, `saveMcp` call the existing endpoints. The
+`.rw-settings-*` rules (43 of them) are in `src/client/src/react/workspace.css`. Keyboard settings are
+absent, as decided.
+
+**A larger React tree existed only in the working tree and is gone.** On 2026-11-20, recovering this
+worktree from a half-finished upstream sync, `git checkout 005ee1c3` followed by `git reset --hard HEAD`
+destroyed uncommitted files: `src/client/src/react/settings/**` (a ~2,500-line settings dialog, settings
+runtime, search index and eight panel files), `react/workspace/**` (transcript panel 1,793 lines,
+session/stream hooks, stream reducer, code editor, file, git, goal, terminal panels), `react/state/**`,
+`react/api/**`, `react-main.tsx` and `workspace.css`. None of it was ever committed. It is not in any
+commit, not in `origin`, not in `git stash`, not in a loose object (`git cat-file -t 2f459e8c` → *Not a
+valid object name*; the 128MB pack contains no dangling commit with `SettingsModal.tsx`), not in the
+worktree reflog, and not in VS Code's Timeline, which kept exactly one snapshot
+(`ReactWorkspaceApp.tsx`, 61,918 bytes — the file as of the checkout, not the 461KB version the
+session reported). The `~/.codex/sessions/2026/11/20` rollouts are the only remaining place with
+fragments of it. **The ledger rows below that describe a `SettingsModal.tsx`, `settingsRuntime.ts`,
+`settingsSearch.ts`, `WorkspaceTranscriptPanel.tsx` or a 10,000-line `ReactWorkspaceApp.tsx` describe
+that lost tree, not this branch.** They must be re-verified row by row against the committed code before
+any of them is read as a status.
+
+The lesson the next session must keep: this worktree is written to by several agents (codex, opencode,
+this one) and its tree moves. Commit before touching git history, and never `git reset --hard` a tree
+that holds uncommitted work — `git stash push --include-untracked` costs nothing and is recoverable.
+
+Verified on 2026-11-20 on `ab309e84`: `pnpm run verify` exit 0 (typecheck, lint, Knip, Vitest; task
+`b799360d7`); `npx tsc --noEmit` exit 0; `npx vitest run src/client/src/react` exit 0 (18 files, 126
+tests); `npx eslint src/client/src/react/WorkspaceCodeEditor.test.ts src/client/src/react/useWorkspaceFiles.test.ts`
+exit 0, so the lint errors the owner reported are already gone on this branch (the react-testing-library
+eslint config in `1c736ada` fixed them).
+
+Delegated work failed on 2026-11-20 and is not a source of anything: four subagents (plugin API writer,
+settings writer, two parity scouts) each hit the 30-minute cap with `changed tracked files: none`,
+because the tasks were whole-mission sized and the settings scout stalled when the tree moved under it.
+Keep delegated tasks small enough to finish in one bounded run, and commit their output as it arrives.
 
 ## The plugin UI problem, in the terms that decide it
 
@@ -36,6 +82,13 @@ The plugin contract is Lit-shaped. `SettingsSectionContribution.render` returns 
 
 What the bundled plugins actually contribute (counted over `pi-web-plugins/`):
 
+- The registry's contribution families, read from `src/client/src/plugins/registry.ts` (the list a
+  React host must cover): `getActions` :210, `getReservedAction` :235, `getComposerContributions` :239,
+  `getActivityNotes` :245, `getListLabels` :252, `getListActions` :259, `getListSections` :266,
+  `getNavSections` :313, `getSettingsSections` :336, `findMessageRenderer` :346, `findToolRenderer` :353,
+  `getMessageActions` :369, `findCodeFenceRenderer` :376, `showPage`/`isPageShown` :420/:430,
+  `getWorkspacePanels` :671, `getGlobalPanels` :676, `getActiveGlobalPanels` :681, `getThemes` :716,
+  `getThemePairs` :720, `getWorkspaceLabelItems` :724, and `disposePlugin` :456.
 - `workspacePanels` × 5 (files, git, terminal, …), `globalPanels` × 3, `workspaceLabels`,
   `toolRenderers`, `navSections`, `listLabels`, `codeFenceRenderers` (mermaid).
 - 33 files under `pi-web-plugins/` import `lit` — the browser modules of `terminal`, `workspaces`,
