@@ -9,6 +9,7 @@ import { machineSessionKey } from "../machineKeys";
 import { MOBILE_NAVIGATION_MEDIA_QUERY } from "../breakpoints";
 import type { CompletionItem } from "../components/shared";
 import type { ChatLine } from "../chatTypes";
+import { groupChatMessages, summarizeReactActivity } from "../chatGroups";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
@@ -323,7 +324,7 @@ export function ReactWorkspaceApp() {
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
   const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
   const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
-  const activityGroups = useMemo(() => groupReactActivityMessages(data.messages), [data.messages]);
+  const activityGroups = useMemo(() => groupChatMessages(data.messages), [data.messages]);
   const subagentRecords = useMemo(() => collectToolRecords(data.messages, /subagent/i), [data.messages]);
   const backgroundRecords = useMemo(() => collectToolRecords(data.messages, /background/i), [data.messages]);
   const backgroundBadgeCount = backgroundRecords.length || backgroundCount;
@@ -635,7 +636,7 @@ export function ReactWorkspaceApp() {
             if (transcript !== null) olderPageAnchorRef.current = { scopeKey: transcriptScopeKey, scrollTop: transcript.scrollTop, scrollHeight: transcript.scrollHeight };
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
-          {activityGroups.map((group, index) => group.kind === "group" ? <details className="rw-activity-group" key={"activity-" + group.startIndex}><summary><Icon name="layers"/><strong>{summarizeActivityGroup(group.messages)}</strong><small>{group.messages.length} messages · Click to expand</small></summary><div className="rw-activity-group-content">{group.messages.map((message, messageIndex) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? (group.startIndex + "-" + messageIndex)} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div></details> : <ConversationMessage key={group.message.meta?.entryId ?? group.message.meta?.clientMessageId ?? group.index ?? index} message={group.message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
+          {activityGroups.map((group, index) => group.kind === "group" ? <details className="rw-activity-group" key={"activity-" + group.startIndex}><summary><Icon name="layers"/><strong>{summarizeReactActivity(group.messages)}</strong><small>{group.messages.length} events · Click to expand</small></summary><div className="rw-activity-group-content">{group.messages.map((message, messageIndex) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? (group.startIndex + "-" + messageIndex)} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div></details> : <ConversationMessage key={group.message.meta?.entryId ?? group.message.meta?.clientMessageId ?? group.index ?? index} message={group.message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
           {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
@@ -746,72 +747,3 @@ export function ReactWorkspaceApp() {
   </div>;
 }
 
-export function groupReactActivityMessages(messages: readonly ChatLine[]) {
-  type Group = { kind: "group"; messages: ChatLine[]; startIndex: number; endIndex: number } | { kind: "message"; message: ChatLine; index: number };
-  const groups: Group[] = [];
-  let run: ChatLine[] = [];
-  let startIndex = 0;
-  const flush = () => {
-    if (run.length) groups.push({ kind: "group", messages: run, startIndex, endIndex: startIndex + run.length - 1 });
-    run = [];
-  };
-  messages.forEach((message, index) => {
-    // pi emits this system line as a background-task lifecycle marker, not
-    // user-facing conversation. Ignore only this exact protocol sentinel.
-    if (message.role === "system" && message.parts.every(part =>
-      part.type === "text" && part.text.trim() === "background-task-notification"
-    )) return;
-
-    const technical = message.parts.some(part =>
-      part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution" || part.type === "toolResult"
-    );
-    const activity = technical || message.role === "tool" || message.role === "bash";
-    const boundary = message.role === "user" || message.role === "system" ||
-      message.source === "compaction" || message.source === "branch_summary" ||
-      (message.role === "assistant" && message.parts.some(part => part.type === "text"));
-    if (boundary) {
-      flush();
-      groups.push({ kind: "message", message, index });
-      return;
-    }
-    if (activity) {
-      if (!run.length) startIndex = index;
-      run.push(message);
-      return;
-    }
-    flush();
-    groups.push({ kind: "message", message, index });
-  });
-  flush();
-  return groups;
-}
-
-function gitMutationSuccess(mutation: GitMutation): string {
-  if (mutation.action === "stage" || mutation.action === "unstage" || mutation.action === "discard") return `Git ${mutation.action} completed for ${mutation.paths.length} file${mutation.paths.length === 1 ? "" : "s"}.`;
-  if (mutation.action === "commit") return "Commit created.";
-  if (mutation.action === "switch") return `Switched to ${mutation.branch}.`;
-  return `Git ${mutation.action} completed.`;
-}
-
-function renderGitChangeSection(
-  title: string,
-  files: readonly GitStatusResponse["files"][number][],
-  section: "staged" | "unstaged",
-  selectedPath: string | undefined,
-  disabled: boolean,
-  onSelect: (path: string) => void,
-  onChange: (file: GitStatusResponse["files"][number]) => void,
-  onDiscard: ((file: GitStatusResponse["files"][number]) => void) | undefined,
-) {
-  return <section className="rw-git-changes" aria-label={title}>
-    <strong>{title} ({files.length})</strong>
-    {files.length === 0 ? <p>No {section} changes.</p> : files.map(file => {
-      const label = gitChangeLabel(file, section);
-      return <div className="rw-git-change-row" key={file.path}>
-        <button className={selectedPath === file.path ? "selected" : ""} title={label} onClick={() => onSelect(file.path)}><span>{file.path}</span><small>{label}</small></button>
-        <button aria-label={`${section === "staged" ? "Unstage" : "Stage"} ${file.path}`} disabled={disabled} onClick={() => onChange(file)}>{section === "staged" ? "Unstage" : "Stage"}</button>
-        {section === "unstaged" && onDiscard !== undefined && file.workingTree !== "untracked" && file.workingTree !== "ignored" && <button aria-label={`Discard changes to ${file.path}`} disabled={disabled} onClick={() => onDiscard(file)}>Discard</button>}
-      </div>;
-    })}
-  </section>;
-}
