@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { LanguageSupport } from "@codemirror/language";
 import { languageForPath } from "./WorkspaceCodeEditor.js";
 
 describe("workspace editor language selection", () => {
@@ -16,7 +15,7 @@ describe("workspace editor language selection", () => {
   ])("selects %s as %s", (path, name) => {
     const extension = languageForPath(path);
     if (Array.isArray(extension)) throw new Error(`${path} did not resolve to a language support`);
-    expect((extension as LanguageSupport).language.name).toBe(name);
+    expect(extension).toMatchObject({ language: { name } });
   });
 
   it("leaves unknown text files editable without pretending they have a language", () => {

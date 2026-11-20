@@ -85,9 +85,9 @@ describe("React workspace files hook", () => {
   });
 
   it("loads the root listing and expands nested directories on demand", async () => {
-    const nested = [tree("src", [{ name: "app.ts", path: "src/app.ts", type: "file" }])];
+    const nestedTree = tree("src", [{ name: "app.ts", path: "src/app.ts", type: "file" }]);
     vi.mocked(workspacesApi.workspaceTree).mockImplementation((_projectId, _workspaceId, path = "") => {
-      if (path === "src") return Promise.resolve(nested[0] as FileTreeResponse);
+      if (path === "src") return Promise.resolve(nestedTree);
       return Promise.resolve(tree(path));
     });
 
