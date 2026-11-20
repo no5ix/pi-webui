@@ -22,6 +22,16 @@ describe("React project navigation", () => {
     vi.restoreAllMocks();
   });
 
+  it("does not highlight the project row and shows a short relative session age", async () => {
+    await act(async () => { root.render(createElement(ProjectTree, {
+      projects: [{ id: "project-1", name: "Workspace", sessions: [{ id: "session-1", name: "A long session title", session: { modified: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() } as never }], unknown: false, pending: false }],
+      query: "", expanded: ["project-1"], onExpanded: vi.fn(), selectedProject: "project-1", selectedSession: "session-1",
+      onSelectProject: vi.fn(), onSelectSession: vi.fn(), onCloseProject: vi.fn(), showMoreByProject: {}, onShowMore: vi.fn(),
+    })); await Promise.resolve(); });
+    expect(container.querySelector(".rw-project-row")?.classList.contains("selected")).toBe(false);
+    expect(container.querySelector(".rw-session-row small")?.textContent).toMatch(/^3h$/);
+  });
+
   it("keeps ordinary project selection and exposes the controller-backed close action", async () => {
     const onSelectProject = vi.fn();
     const onCloseProject = vi.fn();

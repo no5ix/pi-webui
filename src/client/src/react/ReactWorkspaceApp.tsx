@@ -8,9 +8,12 @@ import { historyIndexStep, loadPromptHistory, recallPromptHistoryAttachments, re
 import { machineSessionKey } from "../machineKeys";
 import { MOBILE_NAVIGATION_MEDIA_QUERY } from "../breakpoints";
 import type { CompletionItem } from "../components/shared";
+import type { ChatLine } from "../chatTypes";
+import { groupChatMessages, summarizeReactActivity } from "../chatGroups";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
+import { ActivityRecordsPanel, collectEditedFileDiffs, collectToolRecords } from "./ActivityWorkbenchPanels";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
@@ -26,14 +29,14 @@ import { projectActionIsPending, sessionActionIsPending } from "./reactInstantAc
 import { gitCanCommit, gitChangeGroups, gitChangeLabel } from "./gitPresentation";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
+type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals" | "Subagents" | "Background Runs" | "Edited Files";
 interface ReactWorkspaceScope {
   readonly projectId: string | undefined;
   readonly workspaceId: string | undefined;
   readonly machineId: string;
 }
 
-const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals"];
+const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals", "Subagents", "Background Runs", "Edited Files"];
 const GIT_REMOTE_REQUEST_TIMEOUT_MS = 130_000;
 export function ReactWorkspaceApp() {
   const data = useReactWorkspaceData();
@@ -83,12 +86,14 @@ export function ReactWorkspaceApp() {
   const narrowScreen = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches;
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("Files");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [addProjectTarget, setAddProjectTarget] = useState<{ machineId: string; machineName: string }>();
+  const [addProjectTarget, setAddProjectTarget] = useState<{ machineId: string; machineName: string; initialPath?: string; pickerNotice?: string }>();
+  const projectFolderInputRef = useRef<HTMLInputElement>(null);
   const [projectQuery, setProjectQuery] = useState("");
   const [leftWidth, setLeftWidth] = useState(327);
   const [rightWidth, setRightWidth] = useState(402);
   const [leftOpen, setLeftOpen] = useState(!narrowScreen);
   const [rightOpen, setRightOpen] = useState(!narrowScreen);
+  const [selectedEditedFile, setSelectedEditedFile] = useState<string>();
   const [expanded, setExpanded] = useState<string[]>([]);
   const [showMoreByProject, setShowMoreByProject] = useState<Record<string, boolean>>({});
   const [composerFocused, setComposerFocused] = useState(false);
@@ -320,11 +325,17 @@ export function ReactWorkspaceApp() {
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
   const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
   const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
+  const activityGroups = useMemo(() => groupReactTranscriptMessages(data.messages), [data.messages]);
+  const subagentRecords = useMemo(() => collectToolRecords(data.messages, /subagent/i), [data.messages]);
+  const backgroundRecords = useMemo(() => collectToolRecords(data.messages, /background/i), [data.messages]);
+  const backgroundBadgeCount = backgroundRecords.length || backgroundCount;
+  const editedFileDiffs = useMemo(() => collectEditedFileDiffs(data.messages), [data.messages]);
   const transcriptScopeKey = JSON.stringify([data.state.selectedMachine?.id ?? "local", data.selectedSession?.id]);
   useLayoutEffect(() => {
     followTranscriptRef.current = true;
     setShowTranscriptJump(false);
     olderPageAnchorRef.current = undefined;
+    setSelectedEditedFile(undefined);
     const transcript = transcriptRef.current;
     if (transcript !== null) transcript.scrollTop = transcript.scrollHeight;
   }, [transcriptScopeKey]);
@@ -343,7 +354,7 @@ export function ReactWorkspaceApp() {
     }
     previousPageStartRef.current = pageStart;
   }, [data.messages, data.state.messagePageStart, transcriptScopeKey]);
-  const subagentExecutions = useMemo(() => data.messages.flatMap(message => message.parts).filter((part): part is Extract<typeof part, { type: "toolExecution" | "toolCall" }> => (part.type === "toolExecution" || part.type === "toolCall") && part.toolName.toLowerCase().includes("subagent")), [data.messages]);
+
   useEffect(() => {
     gitOperationSequence.current += 1;
     setGitOperation(undefined);
@@ -593,7 +604,7 @@ export function ReactWorkspaceApp() {
           <div className="rw-section-heading"><strong>Running Sessions <span>({runningSessionsKnown ? activeActivities.length : "—"})</span></strong><button title="Refresh sessions" onClick={data.refresh}><Icon name="refresh-cw"/></button></div>
           {activeActivities.length > 0 ? activeActivities.map(activity => { const session = data.projects.flatMap(row => row.sessions).find(item => item.id === activity.sessionId); return <button className="rw-running-item" key={activity.sessionId} onClick={() => session && void data.selectSession(session)}><i className="rw-dot green"/><span>{session?.name || activity.label}</span><time>{activity.detail || activity.phase}</time></button>; }) : runningSessionsKnown ? <div className="rw-data-state">No active sessions reported.</div> : <div className="rw-data-state">{data.board?.unknownSources.length ? "Some session lists are still loading…" : "Loading sessions…"}</div>}
         </section>
-        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><div><button title="Add project" aria-label="Add project" onClick={() => setAddProjectTarget({ machineId: selectedMachineId, machineName: data.state.selectedMachine?.name ?? "Local machine" })}><Icon name="folder-plus"/></button><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button><button title="Settings" aria-label="Open settings" onClick={() => setSettingsOpen(true)}><Icon name="settings"/></button></div></div>
+        <div className="rw-projects-heading"><strong>Projects <span>({data.state.projectsLoad === "loaded" ? data.projects.length : "—"})</span></strong><div><input ref={projectFolderInputRef} type="file" hidden {...{ webkitdirectory: "", directory: "" }} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; if (files.length === 0) return; const file = files[0] as File & { path?: string }; const relative = file.webkitRelativePath; const absolute = file.path && relative && file.path.endsWith(relative) ? file.path.slice(0, -relative.length).replace(/[\\/]$/, "") : undefined; setAddProjectTarget({ machineId: selectedMachineId, machineName: data.state.selectedMachine?.name ?? "Local machine", ...(absolute ? { initialPath: absolute } : { pickerNotice: "This browser opened the native folder chooser but did not expose the folder’s absolute path. Enter the path below or use the folder browser." }) }); }}/><button title="Add project" aria-label="Add project" onClick={() => projectFolderInputRef.current?.click()}><Icon name="folder-plus"/></button><button title="New session in the selected workspace" onClick={data.startSession} disabled={!data.selectedWorkspace}><Icon name="plus"/></button><button title="Settings" aria-label="Open settings" onClick={() => setSettingsOpen(true)}><Icon name="settings"/></button></div></div>
         <div className="rw-search"><Icon name="search"/><input aria-label="Search sessions" placeholder="Search sessions" value={projectQuery} onChange={e => setProjectQuery(e.target.value)}/>{projectQuery && <button onClick={() => setProjectQuery("")}><Icon name="x"/></button>}</div>
         <button className="rw-all-projects" onClick={data.refresh}>Refresh project list</button>
         {machineConnectionMessage && <div className="rw-data-error" role="alert">{machineConnectionMessage}<button onClick={data.state.error && data.state.machinesLoad !== "loaded" ? () => window.location.reload() : data.refresh}>{data.state.error && data.state.machinesLoad !== "loaded" ? "Reload after access changes" : "Retry"}</button></div>}
@@ -607,7 +618,7 @@ export function ReactWorkspaceApp() {
         <header className="rw-conversation-header">
           <button className="rw-icon-button" aria-label={leftOpen ? "Collapse sidebar" : "Expand sidebar"} onClick={() => setLeftOpen(v => !v)}><Icon name="panel-left"/></button>
           <div className="rw-session-heading"><strong>{data.selectedSession === undefined ? "No session selected" : data.selectedSession.name?.trim() || data.selectedSession.firstMessage || "Untitled session"}</strong><span>{data.selectedProject?.name ?? "Select a project"}</span></div>
-          <div className="rw-header-actions"><SessionActionsMenu session={data.selectedSession} machineId={selectedMachineId} pending={selectedSessionActionPending} rename={name => data.selectedSession ? data.renameSession(data.selectedSession, name) : Promise.resolve()} archive={(session, machineId) => data.archiveSession(session, machineId)} restore={(session, machineId) => data.restoreSession(session, machineId)} deleteArchived={(session, machineId) => data.deleteArchivedSession(session, machineId)}/><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button></div>
+          <div className="rw-header-actions"><button className="rw-activity-shortcut" title="Subagents" aria-label={`Subagents (${subagentRecords.length})`} disabled={!data.selectedSession} onClick={() => { setActiveTab("Subagents"); setRightOpen(true); }}><Icon name="bot"/><span>{subagentRecords.length}</span></button><button className="rw-activity-shortcut" title="Background Runs" aria-label={`Background Runs (${backgroundBadgeCount})`} disabled={!data.selectedSession} onClick={() => { setActiveTab("Background Runs"); setRightOpen(true); }}><Icon name="activity"/><span>{backgroundBadgeCount}</span></button><button className="rw-activity-shortcut" title="Edited Files" aria-label={`Edited Files (${editedFiles.length})`} disabled={!data.selectedSession} onClick={() => { setActiveTab("Edited Files"); setRightOpen(true); }}><Icon name="file-text"/><span>{editedFiles.length}</span></button><SessionActionsMenu session={data.selectedSession} machineId={selectedMachineId} pending={selectedSessionActionPending} rename={name => data.selectedSession ? data.renameSession(data.selectedSession, name) : Promise.resolve()} archive={(session, machineId) => data.archiveSession(session, machineId)} restore={(session, machineId) => data.restoreSession(session, machineId)} deleteArchived={(session, machineId) => data.deleteArchivedSession(session, machineId)}/><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button></div>
         </header>
         {data.state.activity && <div className="rw-subagents"><div className="rw-activity-line"><i className={data.state.activity.phase === "active" ? "rw-dot green" : "rw-dot"}/><strong>{data.state.activity.label}</strong><span>{data.state.activity.detail}</span></div></div>}
         <div className="rw-transcript" ref={transcriptRef} onScroll={event => {
@@ -626,17 +637,11 @@ export function ReactWorkspaceApp() {
             if (transcript !== null) olderPageAnchorRef.current = { scopeKey: transcriptScopeKey, scrollTop: transcript.scrollTop, scrollHeight: transcript.scrollHeight };
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
-          {data.messages.map((message, index) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
+          {activityGroups.map((group, index) => group.kind === "group" ? <details className="rw-activity-group" key={"activity-" + group.startIndex}><summary><Icon name="layers"/><strong>{summarizeReactActivity(group.messages)}</strong><small>{group.messages.length} events · Click to expand</small></summary><div className="rw-activity-group-content">{group.messages.map((message, messageIndex) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? (group.startIndex + "-" + messageIndex)} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div></details> : <ConversationMessage key={group.message.meta?.entryId ?? group.message.meta?.clientMessageId ?? group.index ?? index} message={group.message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
           {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
-          {(queuedCount > 0 || backgroundCount > 0) && <div className="rw-live-summary">
-            {queuedCount > 0 && <span><Icon name="list-ordered"/> {queuedCount} queued</span>}
-            {backgroundCount > 0 && <span><Icon name="layers"/> {backgroundCount} background runs</span>}
-          </div>}
-          <details className="rw-disclosure"><summary><Icon name="bot"/><strong>Subagents</strong><span>({subagentExecutions.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{subagentExecutions.length === 0 ? "No subagent-named tool activity is recorded in this session." : subagentExecutions.map((part, index) => <div key={index}>{part.toolName}: {part.summary}{part.type === "toolExecution" ? ` · ${part.status}` : " · running"}</div>)}</div></details>
-          <details className="rw-disclosure"><summary><Icon name="activity"/><strong>Background Runs</strong><span>({backgroundCount})</span><small>Show details</small></summary><div className="rw-disclosure-content">{backgroundCount === 0 ? "No background runs are reported." : "The session status reports the active count; this API response does not include individual process details."}</div></details>
-          <details className="rw-disclosure"><summary><Icon name="file-text"/><strong>Edited Files</strong><span>({editedFiles.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{editedFiles.length === 0 ? "No file edits are recorded in the visible transcript." : editedFiles.map(file => <button className="rw-edited-file" key={file.path} onClick={() => { if (!file.path.startsWith("/")) { void workspaceFiles.openFile(file.path); setActiveTab("Files"); } }}><span>{file.path}</span><small>{file.status}</small></button>)}</div></details>
+          {queuedCount > 0 && <div className="rw-live-summary"><span><Icon name="list-ordered"/> {queuedCount} queued</span></div>}
           {completionItems.length > 0 && <div className="rw-autocomplete" role="listbox" aria-label="Composer suggestions">{completionItems.map((item, index) => <button key={`${item.kind}-${item.insertText}-${index}`} role="option" aria-selected={index === completionIndex} onMouseDown={event => event.preventDefault()} onClick={() => void pickCompletion(item)}><strong>{item.insertText}</strong><span>{item.detail}{item.argumentHint ? ` ${item.argumentHint}` : ""}</span>{item.description && <small>{item.description}</small>}</button>)}</div>}
           <div className={"rw-composer " + (composerFocused ? "focused" : "")} onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); } }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void addAttachments(files); } }}>
             <input ref={attachmentInputRef} type="file" multiple hidden onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void addAttachments(files); }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
@@ -658,13 +663,13 @@ export function ReactWorkspaceApp() {
         <footer className="rw-status">
           <span>{data.sessionStatus ? data.sessionStatus.tokens.input.toLocaleString() + " in / " + data.sessionStatus.tokens.output.toLocaleString() + " out" : "No session metrics"}</span>
           {contextUsage?.percent !== null && contextUsage?.percent !== undefined && <span>ctx {Math.round(contextUsage.percent)}%</span>}
-          {data.sessionStatus?.gitBranch && <span><Icon name="git-branch"/> {data.sessionStatus.gitBranch}</span>}
+          {data.sessionStatus?.gitBranch && <span className="rw-status-branch"><Icon name="git-branch"/> {data.sessionStatus.gitBranch}</span>}
           {data.sessionStatus && <small>$ {data.sessionStatus.cost.toFixed(4)}</small>}
         </footer>
       </main>
       {rightOpen && <button className="rw-resize rw-resize-right" aria-label="Resize workbench" onPointerDown={e => startResize("right", e)}/>}
       <aside className="rw-workbench">
-        <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
+        <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} title={tab} aria-label={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}><Icon name={tab === "Git" ? "git-branch" : tab === "Files" ? "folder" : tab === "Terminal" ? "terminal" : tab === "Goals" ? "target" : tab === "Subagents" ? "bot" : tab === "Background Runs" ? "activity" : "file-text"}/></button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
         {activeTab === "Files" ? <WorkspaceFilesPanel
           files={workspaceFiles}
           rootLabel={data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "Workspace"}
@@ -674,7 +679,13 @@ export function ReactWorkspaceApp() {
           hasWorkspace={data.selectedWorkspace !== undefined}
         /> : <>
           <div className="rw-workbench-toolbar"><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh Git status" onClick={() => setGitRefresh(value => value + 1)}><Icon name="refresh-cw"/></button>}</div>
-        {activeTab === "Terminal" ? (
+        {activeTab === "Subagents" ? <ActivityRecordsPanel records={subagentRecords} empty="No subagent records are present in this session."/> :
+         activeTab === "Background Runs" ? <ActivityRecordsPanel records={backgroundRecords} empty={backgroundCount > 0 ? backgroundCount + " background work item(s) are currently reported by session status. Individual historical records are not exposed by the current API." : "No background-run records are present in this session."}/> :
+         activeTab === "Edited Files" ? <div className="rw-edited-files-panel">
+           <div className="rw-edited-files-list">{editedFiles.length === 0 ? <div className="rw-empty-panel">No edited files are recorded in this session.</div> : editedFiles.map(file => <button className={selectedEditedFile === file.path ? "selected" : ""} key={file.path} onClick={() => setSelectedEditedFile(file.path)}><Icon name="file-text"/><span>{file.path}</span><small>{file.status}</small></button>)}</div>
+           {selectedEditedFile && <section className="rw-session-diff"><div className="rw-git-diff-heading"><strong title={selectedEditedFile}>{selectedEditedFile}</strong><span>Latest tool preview · not cumulative</span></div>{editedFileDiffs.find(item => item.path === selectedEditedFile)?.diff ? <pre>{editedFileDiffs.find(item => item.path === selectedEditedFile)?.diff}</pre> : <div className="rw-empty-panel">The transcript does not preserve the pre-session file snapshot needed for a cumulative session diff. This is the latest tool preview only.</div>}</section>}
+         </div> :
+         activeTab === "Terminal" ? (
           data.selectedWorkspace
             ? <ReactTerminalPanel key={data.selectedWorkspace.id} workspace={data.selectedWorkspace} machineId={data.state.selectedMachine?.id ?? "local"}/>
             : <div className="rw-empty-panel">Select a workspace before opening a terminal.</div>
@@ -732,37 +743,18 @@ export function ReactWorkspaceApp() {
       onCancel={() => { if (!scopeChangeBusy) { setPendingScopeChange(undefined); setScopeChangeError(undefined); } }}
     />
     <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} pluginFailures={pluginRuntime.failures}/>
-    <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
+    <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} initialPath={addProjectTarget?.initialPath} pickerNotice={addProjectTarget?.pickerNotice} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
     <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>
   </div>;
 }
 
-function gitMutationSuccess(mutation: GitMutation): string {
-  if (mutation.action === "stage" || mutation.action === "unstage" || mutation.action === "discard") return `Git ${mutation.action} completed for ${mutation.paths.length} file${mutation.paths.length === 1 ? "" : "s"}.`;
-  if (mutation.action === "commit") return "Commit created.";
-  if (mutation.action === "switch") return `Switched to ${mutation.branch}.`;
-  return `Git ${mutation.action} completed.`;
-}
 
-function renderGitChangeSection(
-  title: string,
-  files: readonly GitStatusResponse["files"][number][],
-  section: "staged" | "unstaged",
-  selectedPath: string | undefined,
-  disabled: boolean,
-  onSelect: (path: string) => void,
-  onChange: (file: GitStatusResponse["files"][number]) => void,
-  onDiscard: ((file: GitStatusResponse["files"][number]) => void) | undefined,
-) {
-  return <section className="rw-git-changes" aria-label={title}>
-    <strong>{title} ({files.length})</strong>
-    {files.length === 0 ? <p>No {section} changes.</p> : files.map(file => {
-      const label = gitChangeLabel(file, section);
-      return <div className="rw-git-change-row" key={file.path}>
-        <button className={selectedPath === file.path ? "selected" : ""} title={label} onClick={() => onSelect(file.path)}><span>{file.path}</span><small>{label}</small></button>
-        <button aria-label={`${section === "staged" ? "Unstage" : "Stage"} ${file.path}`} disabled={disabled} onClick={() => onChange(file)}>{section === "staged" ? "Unstage" : "Stage"}</button>
-        {section === "unstaged" && onDiscard !== undefined && file.workingTree !== "untracked" && file.workingTree !== "ignored" && <button aria-label={`Discard changes to ${file.path}`} disabled={disabled} onClick={() => onDiscard(file)}>Discard</button>}
-      </div>;
-    })}
-  </section>;
+/** Hide only pi's internal background-task sentinel, then use the shared part-aware grouping policy. */
+export function groupReactTranscriptMessages(messages: readonly ChatLine[]) {
+  const visible = messages.filter(message => !(
+    message.role === "system" &&
+    message.parts.length > 0 &&
+    message.parts.every(part => part.type === "text" && part.text.trim() === "background-task-notification")
+  ));
+  return groupChatMessages([...visible]);
 }
