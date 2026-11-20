@@ -18,6 +18,8 @@ import { useWorkspaceFiles } from "./useWorkspaceFiles";
 import { WorkspaceFilesPanel } from "./WorkspaceFilesPanel";
 import { WorkspaceUnsavedDialog } from "./WorkspaceFileDialogs";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
+import { ReactPluginDialogLayer } from "./ReactPluginDialogLayer";
+import { usePluginRegistry } from "./usePluginRegistry";
 import { SessionActionsMenu } from "./SessionActionsMenu";
 import { AddProjectDialog } from "./AddProjectDialog";
 import { projectActionIsPending, sessionActionIsPending } from "./reactInstantActions";
@@ -46,6 +48,7 @@ export function ReactWorkspaceApp() {
     return () => window.removeEventListener("keydown", undo);
   }, [data.undoAvailable, data.undoSessionAction]);
   const selectedMachineId = data.state.selectedMachine?.id ?? "local";
+  const pluginRuntime = usePluginRegistry({ machineId: selectedMachineId });
   const selectedSessionActionPending = data.selectedSession !== undefined && sessionActionIsPending(data.instantActions, selectedMachineId, data.selectedSession.id);
   const selectedMachineHealth = data.state.machineStatuses[selectedMachineId];
   const machineConnectionMessage = data.machineReadIssue ?? (data.state.machinesLoad !== "loaded" ? data.state.error : "");
@@ -692,7 +695,8 @@ export function ReactWorkspaceApp() {
       onDiscard={discardThenScopeChange}
       onCancel={() => { if (!scopeChangeBusy) { setPendingScopeChange(undefined); setScopeChangeError(undefined); } }}
     />
-    <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
+    <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} pluginFailures={pluginRuntime.failures}/>
     <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
+    <ReactPluginDialogLayer entries={pluginRuntime.dialogs}/>
   </div>;
 }

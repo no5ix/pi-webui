@@ -21,8 +21,9 @@ The Lit application (`src/client/src/main.ts`) is no longer an entry point, and 
 | Settings → Notifications: ntfy form and test delivery | Implemented — needs verification | `react/NotificationsSettingsPanel.tsx`, `notifications/ntfyForm.ts` (shared with the Lit page); panel tests green |
 | Parity ledger status vocabulary | Done | Every ledger row now uses `Not implemented`, `Partially implemented`, `Implemented — needs verification`, `Verified`, or `Intentionally removed` |
 | Conversation rendering, streaming, composer | Partially implemented | parity ledger rows; `ConversationMessage.tsx` exists, composer/attachment/pagination work not finished |
-| Plugin UI in React | Not implemented | no `plugins/registry` import anywhere under `src/client/src/react/` |
-| Lit removal | Blocked by plugin UI and the composer | see the plan below |
+| Plugin registry bootstrap and dialog host | Partially implemented | `react/usePluginRegistry.ts`, `react/ReactPluginDialogLayer.tsx`; focused lifecycle and dialog tests pass, browser verification not run |
+| Plugin contribution rendering in React | Not implemented | registry sections, actions, panels, transcript renderers and composer contributions are not consumed by React |
+| Lit removal | Not implemented | Lit remains in the plugin runtime, legacy UI, and bundled plugins; see the plan below |
 
 ## The plugin UI problem, in the terms that decide it
 
@@ -41,8 +42,8 @@ What the bundled plugins actually contribute (counted over `pi-web-plugins/`):
 
 Consequences, in the order they must be handled:
 
-1. The React app renders no plugin UI at all today: no workspace panels, no nav sections, no
-   code-fence or tool renderers, no workspace labels, no themes from plugins, no plugin settings
+1. The React app now loads plugins and presents plugin dialogs, but still renders no contributed
+   workspace panels, nav sections, code-fence or tool renderers, workspace labels, themes, plugin settings
    sections, no composer contributions.
 2. React cannot render a `TemplateResult` directly. Removing `lit` therefore requires either
    migrating every contribution to a React-shaped contract, or a compatibility adapter that mounts a
@@ -54,7 +55,7 @@ Consequences, in the order they must be handled:
    repo's own code no longer depends on Lit. `docs/plugins.md` must state the migration strategy for
    external plugins; the adapter must isolate a plugin's errors and clean up on unmount.
 
-## Milestone plan, with the next action
+## Milestone plan
 
 1. **Plugin host in React** (highest priority, unblocks Lit removal).
    - Boot the plugin runtime in the React app: load the registry, machine-scoped plugins, and the
@@ -80,10 +81,19 @@ Consequences, in the order they must be handled:
    obsolete styles and tests, `lit` from `package.json` (keeping `lit-html` only if the adapter ships),
    the Vite entries, and the startup scripts.
 
-**Exact next action**: add the plugin runtime boot to `ReactWorkspaceApp` and the `PluginSurface`
-adapter, then render the workspace panels of the `files` plugin through it, with
-`src/client/src/react/PluginSurface.test.ts` (happy-dom, `createElement` style — Vitest collects
-`src/**/*.test.ts` only, so React DOM tests must be `.test.ts` files, not `.tsx`).
+**Current checkpoint (2026-11-20)**: `usePluginRegistry` creates one registry for the selected machine,
+registers the core plugin, loads external plugin modules, reports failures, and disposes registrations
+on teardown. `ReactPluginDialogLayer` renders Lit-shaped dialog content through `PluginSurface` and
+handles focus, Escape and backdrop behavior. Focused Vitest coverage passes for registry initialization,
+failure isolation, machine switching, dialog rendering and close behavior. A browser smoke check on the
+isolated stack loaded the bundled Updates dialog on startup. This is bootstrap only: the React app does
+not yet read the registry's other contribution families, and plugin-triggered browser interactions have
+not been verified.
+
+**Next action**: define a React runtime context for registry consumers, then wire settings sections and
+actions first, followed by global/workspace panels, navigation, transcript renderers and composer
+contributions. Drive at least one real bundled plugin through each host surface before beginning plugin
+contract or Lit dependency removal.
 
 ## Verification record
 
@@ -124,8 +134,12 @@ reads. The steps, in order:
    it: lit-html swallows an exception raised inside a binding's own function and reports nothing, so the
    isolation that works is the catch around *producing* the template (`pluginSurfaceResult`), and that
    is where a host must catch.
-2. **Next:** bootstrap `PluginRegistry` for React. It is constructed only inside the Lit app today,
-   at `createPluginRegistry(...)` (`src/client/src/components/PiWebApp.ts:7008`), and its arguments are
+2. **Done in this working checkpoint:** bootstrap `PluginRegistry` in React. The hook registers core,
+   loads external modules, scopes a registry to the selected machine, reports load/registration
+   failures, and disposes plugin resources. The React dialog layer uses `PluginSurface`; dialog focus,
+   Escape, backdrop and stacking have focused tests. The compatibility runtime still imports Lit.
+   The existing Lit app constructs its own registry at `createPluginRegistry(...)`
+   (`src/client/src/components/PiWebApp.ts:7008`), and its arguments are
    the whole cost of the step: `ui: createPluginHostUi(dialogHost)` (a Lit host that renders a plugin's
    dialogs and pages - React needs its own), `readPiWebStatus(machineId)`, `openPage(pageId)`,
    `fleet: PluginFleetSource`, and `fetchJson(path, init)` built on `request()`. The Lit app also

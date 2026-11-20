@@ -19,9 +19,10 @@ export interface ReactSettingsDialogProps {
   readonly data: SettingsData;
   readonly open: boolean;
   readonly onClose: () => void;
+  readonly pluginFailures?: readonly string[];
 }
 
-export function ReactSettingsDialog({ data, open, onClose }: ReactSettingsDialogProps) {
+export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }: ReactSettingsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [page, setPage] = useState<Page>("General");
   const [notice, setNotice] = useState<string>();
@@ -112,6 +113,7 @@ export function ReactSettingsDialog({ data, open, onClose }: ReactSettingsDialog
           </section>}
           {page === "MCP Servers" && <McpSettingsPanel data={data} busy={busy} run={run} />}
           {page === "Pi Web Plugins" && <section>
+            {pluginFailures.map((failure, index) => <p key={`${failure}-${index}`} className="rw-setting-error" role="status">Plugin failed to load: {failure}</p>)}
             {data.settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}
             {!data.settings.plugins?.plugins.length && !data.settings.loading && <p>No plugins were returned for this machine.</p>}
           </section>}
