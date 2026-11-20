@@ -746,20 +746,41 @@ export function ReactWorkspaceApp() {
   </div>;
 }
 
-function groupReactActivityMessages(messages: readonly ChatLine[]) {
+export function groupReactActivityMessages(messages: readonly ChatLine[]) {
   type Group = { kind: "group"; messages: ChatLine[]; startIndex: number; endIndex: number } | { kind: "message"; message: ChatLine; index: number };
   const groups: Group[] = [];
   let run: ChatLine[] = [];
   let startIndex = 0;
-  const flush = () => { if (run.length) groups.push({ kind: "group", messages: run, startIndex, endIndex: startIndex + run.length - 1 }); run = []; };
+  const flush = () => {
+    if (run.length) groups.push({ kind: "group", messages: run, startIndex, endIndex: startIndex + run.length - 1 });
+    run = [];
+  };
   messages.forEach((message, index) => {
-    const technical = message.parts.some(part => part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution" || part.type === "toolResult");
+    // pi emits this system line as a background-task lifecycle marker, not
+    // user-facing conversation. Ignore only this exact protocol sentinel.
+    if (message.role === "system" && message.parts.every(part =>
+      part.type === "text" && part.text.trim() === "background-task-notification"
+    )) return;
+
+    const technical = message.parts.some(part =>
+      part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution" || part.type === "toolResult"
+    );
     const activity = technical || message.role === "tool" || message.role === "bash";
-    const narration = message.role === "assistant" && run.length > 0 && message.parts.length > 0 && message.parts.every(part => part.type === "text");
-    const boundary = message.role === "user" || message.role === "system" || message.source === "compaction" || message.source === "branch_summary";
-    if (boundary) { flush(); groups.push({ kind: "message", message, index }); return; }
-    if (activity || narration) { if (!run.length) startIndex = index; run.push(message); return; }
-    flush(); groups.push({ kind: "message", message, index });
+    const boundary = message.role === "user" || message.role === "system" ||
+      message.source === "compaction" || message.source === "branch_summary" ||
+      (message.role === "assistant" && message.parts.some(part => part.type === "text"));
+    if (boundary) {
+      flush();
+      groups.push({ kind: "message", message, index });
+      return;
+    }
+    if (activity) {
+      if (!run.length) startIndex = index;
+      run.push(message);
+      return;
+    }
+    flush();
+    groups.push({ kind: "message", message, index });
   });
   flush();
   return groups;
