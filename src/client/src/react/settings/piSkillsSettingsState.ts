@@ -166,9 +166,11 @@ export function piSkillNotLoadedNote(): string {
   return "Skills have not been read yet. Reload asks the machine to read them again.";
 }
 
-/** The note shown when the machine answers with no skills. */
-export function piSkillGlobalEmptyNote(): string {
-  return "No skills were returned for this machine.";
+/** The note shown when the machine answers with no global skills. */
+export function piSkillGlobalEmptyNote(projectName?: string): string {
+  return projectName === undefined
+    ? "No skills were returned for this machine."
+    : `No skills were returned for this machine, and ${projectName} has none in its skill directories.`;
 }
 
 /**

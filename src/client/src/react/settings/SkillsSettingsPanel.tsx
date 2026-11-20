@@ -151,7 +151,7 @@ export function SkillsSettingsPanel(props: SkillsSettingsPanelProps) {
       title="Global skills"
     >
       {globalRows.map(card)}
-      {globalRows.length === 0 ? <SettingsEmpty>{props.skills === undefined ? piSkillNotLoadedNote() : piSkillGlobalEmptyNote()}</SettingsEmpty> : null}
+      {globalRows.length === 0 ? <SettingsEmpty>{props.skills === undefined ? piSkillNotLoadedNote() : piSkillGlobalEmptyNote(props.projectScope.projectId === undefined ? undefined : props.projectName)}</SettingsEmpty> : null}
     </SettingsSection>
   </>;
 }

@@ -10,6 +10,7 @@ import {
   piSkillDirectoryLines,
   piSkillGlobalEmptyNote,
   piSkillGlobalRows,
+  piSkillNotLoadedNote,
   piSkillMutationMessage,
   piSkillNoProjectNote,
   piSkillOriginLabel,
@@ -171,5 +172,17 @@ describe("Skills scope rules", () => {
       .toBe("Global skills saved — enabled. Reload running sessions to apply it.");
     expect(piSkillMutationMessage({ skills: [skill({ scope: "project" })], diagnostics: [], scopes: [], requiresReload: false }, false))
       .toBe("Project skills saved — disabled.");
+  });
+});
+
+describe("skill list presence", () => {
+  it("names the unread list as unread, not as empty", () => {
+    expect(piSkillNotLoadedNote()).toContain("not been read");
+    expect(piSkillGlobalEmptyNote()).not.toContain("not been read");
+  });
+
+  it("names the selected project when the machine answers with no skills", () => {
+    expect(piSkillGlobalEmptyNote("Site")).toContain("and Site has none");
+    expect(piSkillGlobalEmptyNote()).not.toContain("Site");
   });
 });

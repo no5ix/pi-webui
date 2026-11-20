@@ -7,10 +7,12 @@ import {
   piPackageEmptyNote,
   piPackageEnabledMessage,
   piPackageFilteredNote,
+  piPackageGlobalEmptyStateNote,
   piPackageGlobalRows,
   piPackageInstallMessage,
   piPackageInstallPath,
   piPackageInstallTargetLabel,
+  piPackageNotLoadedNote,
   piPackageListsEmpty,
   piPackageProjectRows,
   piPackageRemoveMessage,
@@ -132,5 +134,19 @@ describe("Pi Packages scope rules", () => {
     delete projectRow.installedPath;
     expect(piPackageRemoveQuestion(projectRow)).toContain("the current project's settings");
     expect(piPackageRemoveQuestion(projectRow)).not.toContain("pi loaded it from");
+  });
+});
+
+describe("package list presence", () => {
+  it("names the unread list as unread, not as empty", () => {
+    expect(piPackageNotLoadedNote()).toContain("not been read");
+    expect(piPackageGlobalEmptyStateNote(undefined, "Site")).toBe(piPackageNotLoadedNote());
+  });
+
+  it("distinguishes an empty machine list from a list this page does not manage", () => {
+    expect(piPackageGlobalEmptyStateNote(packagesResponse({ user: [] }), "Site"))
+      .toBe("No packages are installed on this machine.");
+    expect(piPackageGlobalEmptyStateNote(packagesResponse({ packages: [pkg({ source: "npm:pi-web", scope: "project" })] }), "Site"))
+      .toContain("none of them is in a scope this page manages");
   });
 });
