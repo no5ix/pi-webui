@@ -3,6 +3,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectTree } from "./ProjectTree";
+import type { SessionInfo } from "../api";
+
+function sessionModifiedAgo(minutes: number): SessionInfo {
+  const stamp = new Date(Date.now() - minutes * 60_000).toISOString();
+  return { id: "session-1", cwd: "/srv/workspace", path: "/srv/workspace/session-1.jsonl", created: stamp, modified: stamp, messageCount: 1, firstMessage: "A long session title" };
+}
 
 let container: HTMLDivElement;
 let root: Root;
@@ -24,7 +30,7 @@ describe("React project navigation", () => {
 
   it("does not highlight the project row and shows a short relative session age", async () => {
     await act(async () => { root.render(createElement(ProjectTree, {
-      projects: [{ id: "project-1", name: "Workspace", sessions: [{ id: "session-1", name: "A long session title", session: { modified: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() } as never }], unknown: false, pending: false }],
+      projects: [{ id: "project-1", name: "Workspace", sessions: [{ id: "session-1", name: "A long session title", session: sessionModifiedAgo(180) }], unknown: false, pending: false }],
       query: "", expanded: ["project-1"], onExpanded: vi.fn(), selectedProject: "project-1", selectedSession: "session-1",
       onSelectProject: vi.fn(), onSelectSession: vi.fn(), onCloseProject: vi.fn(), showMoreByProject: {}, onShowMore: vi.fn(),
     })); await Promise.resolve(); });

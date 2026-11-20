@@ -156,9 +156,10 @@ export function summarizeReactActivity(messages: readonly ChatLine[]): string {
     if (message.role === "bash") bash += 1;
   }
   const labels: string[] = [];
-  if (thinking > 0) labels.push(`${thinking} ${thinking === 1 ? "thinking" : "thinkings"}`);
-  if (toolCalls > 0) labels.push(`${toolCalls} ${toolCalls === 1 ? "tool call" : "tool calls"}`);
-  if (toolResults > 0) labels.push(`${toolResults} ${toolResults === 1 ? "tool result" : "tool results"}`);
-  if (bash > 0) labels.push(`${bash} ${bash === 1 ? "bash command" : "bash commands"}`);
+  const counted = (count: number, singular: string, plural: string) => `${String(count)} ${count === 1 ? singular : plural}`;
+  if (thinking > 0) labels.push(counted(thinking, "thinking", "thinkings"));
+  if (toolCalls > 0) labels.push(counted(toolCalls, "tool call", "tool calls"));
+  if (toolResults > 0) labels.push(counted(toolResults, "tool result", "tool results"));
+  if (bash > 0) labels.push(counted(bash, "bash command", "bash commands"));
   return labels.length > 0 ? labels.join(", ") : summarizeChatGroup([...messages]);
 }
