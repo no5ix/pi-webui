@@ -470,3 +470,27 @@ button:disabled{cursor:not-allowed}
 .rw-plugin-dialog-fullscreen{width:100%;height:100%;max-height:none;border:0;border-radius:0;padding:24px}
 .rw-plugin-dialog-close{position:sticky;top:0;z-index:1;float:right;width:36px;height:36px;border:0;border-radius:7px;background:var(--rw-hover);color:var(--rw-text);font-size:22px}
 @media(max-width:760px){.rw-plugin-dialog-backdrop{padding:0}.rw-plugin-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border-radius:12px;padding:16px}.rw-plugin-dialog-fullscreen{width:100%;height:100%;max-height:none;border-radius:0;padding:16px}.rw-plugin-dialog-close{min-width:44px;min-height:44px}}
+
+
+/* Keep transcript overlays behind the fixed composer dock. */
+.rw-transcript { isolation: isolate; padding-bottom: 32px; }
+.rw-chat-dock { position: relative; z-index: 2; background: var(--rw-bg); }
+.rw-jump-bottom { position: sticky; z-index: 1; bottom: 8px; }
+.rw-message { width: 100%; min-width: 0; }
+.rw-message.assistant, .rw-message.tool, .rw-message.bash { padding: 0; }
+.rw-tool-execution, .rw-tool-result, .rw-tool-call, .rw-shell-output { width: 100%; min-width: 0; }
+.rw-tool-execution > summary, .rw-tool-result > summary, .rw-tool-call > summary { min-width: 0; white-space: nowrap; }
+.rw-tool-execution > summary strong, .rw-tool-result > summary strong, .rw-tool-call > summary strong { flex: 0 0 auto; white-space: nowrap; }
+.rw-tool-execution > summary span, .rw-tool-result > summary span, .rw-tool-call > summary span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-tool-execution > summary small, .rw-tool-result > summary small, .rw-tool-call > summary small { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
+.rw-tool-call { display: block; padding: 0; border: 1px solid var(--rw-line); border-radius: 9px; background: var(--rw-card); overflow: hidden; }
+.rw-tool-call > summary { min-height: 39px; display: flex; align-items: center; gap: 8px; padding: 0 11px; cursor: pointer; list-style: none; }
+.rw-tool-call > summary::-webkit-details-marker { display: none; }
+.rw-tool-call > summary svg { width: 15px; height: 15px; flex: none; color: var(--rw-warning); }
+.rw-tool-call > summary small { color: var(--rw-muted); font-size: 10px; }
+.rw-shell-output { margin: 10px 0; border: 1px solid var(--rw-line); border-radius: 9px; background: var(--rw-card); overflow: hidden; }
+.rw-shell-output > summary { min-height: 39px; display: flex; align-items: center; padding: 0 11px; cursor: pointer; color: var(--rw-muted); font-size: 12px; list-style: none; }
+.rw-shell-output > summary::-webkit-details-marker { display: none; }
+.rw-shell-output pre { max-height: 320px; overflow: auto; margin: 0; padding: 10px; border-top: 1px solid var(--rw-line); white-space: pre; }
+.rw-session-row > span:nth-child(2) { flex: 1 1 0; min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-session-row > small { flex: 0 0 auto; white-space: nowrap; }
