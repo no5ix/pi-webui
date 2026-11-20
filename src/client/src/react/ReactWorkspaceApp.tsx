@@ -636,15 +636,17 @@ export function ReactWorkspaceApp() {
               if (activity.length === 0) return;
               const messages = activity;
               rendered.push(<details className="rw-activity-group" key={`activity-${activityStart}`}>
-                <summary><Icon name="layers"/><strong>{summarizeReactActivity(messages)}</strong><small>{messages.length} messages · Show details</small></summary>
+                <summary><Icon name="layers"/><strong>{summarizeReactActivity(messages)}</strong><small>{messages.length} messages · Click to expand</small></summary>
                 <div className="rw-activity-group-content">{messages.map((item, offset) => <ConversationMessage key={item.meta?.entryId ?? item.meta?.clientMessageId ?? activityStart + offset} message={item} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div>
               </details>);
               activity = [];
             };
             data.messages.forEach((message, index) => {
-              const compactable = (message.role === "assistant" && message.parts.some(part => part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution")) ||
+              const compactable = (
+                (message.role === "assistant" && message.parts.some(part => part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution")) ||
                 (message.role === "tool" && message.parts.some(part => part.type === "toolResult")) ||
-                (message.role === "bash" && message.parts.some(part => part.type === "text"));
+                message.role === "bash"
+              ) && !message.meta?.failedAttempt;
               if (compactable) {
                 if (activity.length === 0) activityStart = index;
                 activity.push(message);
