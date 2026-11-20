@@ -23,7 +23,9 @@ The Lit application (`src/client/src/main.ts`) is no longer an entry point, and 
 | Conversation rendering, streaming, composer | Partially implemented | parity ledger rows; `ConversationMessage.tsx` exists, composer/attachment/pagination work not finished |
 | Plugin registry bootstrap and dialog host | Partially implemented | `react/usePluginRegistry.ts`, `react/ReactPluginDialogLayer.tsx`; focused lifecycle and dialog tests pass, browser verification not run |
 | Plugin contribution rendering in React | Not implemented | registry sections, actions, panels, transcript renderers and composer contributions are not consumed by React |
+| Built-in Updates module removed (owner decision, 2026-08-22) | Done | `pi-web-plugins/updates` deleted; `src/server/web/updates/*` became `src/server/web/service/*` (restart only); `/api/pi-web/updates/check`, `updateCommand`, `PI_WEB_UPDATE_COMMAND`, `deploymentUpdateCommand`, `piPackageUpdateCheck` and the status `piPackages` block deleted; changeset `built-in-updates-removed` |
 | Lit removal | Not implemented | Lit remains in the plugin runtime, legacy UI, and bundled plugins; see the plan below |
+| Built-in Updates module removed (owner, 2026-08-22) | Done — static checks green, live browser confirmation recorded below | `eb5de4e8` removes the plugin and the release check; the follow-up commit removes the `updateCommand` key, `/api/pi-web/updates/check`, `piWebStatusCache`, the General panel card, the fleet update keys, and their documentation |
 
 ## The plugin UI problem, in the terms that decide it
 
@@ -36,8 +38,9 @@ What the bundled plugins actually contribute (counted over `pi-web-plugins/`):
 
 - `workspacePanels` × 5 (files, git, terminal, …), `globalPanels` × 3, `workspaceLabels`,
   `toolRenderers`, `navSections`, `listLabels`, `codeFenceRenderers` (mermaid).
-- 38 files under `pi-web-plugins/` import `lit` — the browser modules of `terminal`, `updates`,
-  `workspaces`, `files`, `git`, `goal`, `info`, `machines`, `mermaid`.
+- 33 files under `pi-web-plugins/` import `lit` — the browser modules of `terminal`, `workspaces`,
+  `files`, `git`, `goal`, `info`, `machines`, `mermaid`. The `updates` plugin and its startup dialog are
+  removed (owner, 2026-08-22), which is why the browser no longer opens a plugin dialog on its own.
 - No bundled plugin contributes `settingsSections`; that contribution is served by the API only.
 
 Consequences, in the order they must be handled:
@@ -102,7 +105,11 @@ contract or Lit dependency removal.
   before the milestone was 685 files and 5984 tests.
 - 2026-11-20: `pnpm run build` exit 0 (a first attempt failed in `pnpm run clean` with `ENOTEMPTY` on
   `dist` because a dev stack was writing into it; the retry was clean).
-- 2026-11-20: `npx vitest run` over the MCP and notifications files: 6 files, 121 tests, all passing.
+- 2026-08-22: over the Updates-module removal, `npx vitest run` over the touched client surfaces
+  (settings panels, machine page, fleet offer, status controller, api clients, parsers): 10 files,
+  169 tests, all passing; over the touched server surfaces (status, config, routes, cli,
+  native services, plugin catalogue): 9 files, 36 tests, all passing.
+- 2026-08-22: `npx vitest run` over the MCP and notifications files: 6 files, 121 tests, all passing.
 - NOT run: the live browser flows for MCP add/edit and ntfy configuration. To run them:
   `scripts/stack-8505.sh up` (own data dir on port 8505), then drive the React settings dialog at
   1440px and 393x850 and watch the browser console. A check must fail loudly on a missing session
@@ -111,8 +118,9 @@ contract or Lit dependency removal.
 
 ## Exact next action
 
-HEAD is `70cbe110` and the working tree is clean. Measured at this commit: 120 files under
-`src/client/src` import `lit`, and there is no `react/PluginSurface.tsx`, no
+HEAD is `eb5de4e8` plus the follow-up removal of the `updateCommand` key, the release-check routes
+and their documentation, and the working tree is clean. Measured at this commit: 125 files under
+`src/client/src` import `lit` and 33 under `pi-web-plugins/`, and there is no `react/PluginSurface.tsx`, no
 `react/PiPackagesSettingsPanel.tsx`, and no composer completion work - those were described by an
 earlier session's notes, and they are not in this branch. Do not trust a summary over `git log` and
 `ls`; re-measure at the start of every session.
@@ -134,6 +142,10 @@ reads. The steps, in order:
    it: lit-html swallows an exception raised inside a binding's own function and reports nothing, so the
    isolation that works is the catch around *producing* the template (`pluginSurfaceResult`), and that
    is where a host must catch.
+The bundled Updates plugin is gone (owner, 2026-08-22), so the startup dialog a browser used to
+get from it is gone with it, and `fleetMachineOffer.ts` is restart-only: a machine's row offers a
+restart only when that machine's own status offers it, and no machine is offered an update.
+
 2. **Done in this working checkpoint:** bootstrap `PluginRegistry` in React. The hook registers core,
    loads external modules, scopes a registry to the selected machine, reports load/registration
    failures, and disposes plugin resources. The React dialog layer uses `PluginSurface`; dialog focus,
@@ -171,6 +183,31 @@ reads. The steps, in order:
    the lockfile). `lit/html` is expected to remain in `package.json` for the plugin host; the plugin API
    contract itself is Lit-typed, so a documented compatibility adapter is required before the UI
    dependency can be dropped.
+
+## The built-in Updates module is gone, and why the shape is what it is
+
+The owner asked (2026-08-22) for the built-in update functionality to be removed completely: it had
+interrupted a browser QA session with an update dialog that opened by itself when a page was opened.
+Nothing in the application asks a package registry for a newer PI WEB, announces one, or runs an
+install any more. The whole surface went: the bundled `updates` plugin (page, offer dialog, background
+check, Pi package rows, updater), the self-update and fleet-update routes, the `/api/pi-web/updates/check`
+client and its response types, the status payload's `piPackages` block and its parsers, the
+`updateCommand` config key, `PI_WEB_UPDATE_COMMAND` and `deploymentUpdateCommand.ts`, the Windows
+restart-and-update launcher, and the version strip with its badge. Deleting the plugin removes the
+trigger, not only the dialog, so the popup cannot come back after a refresh, a restart, a project
+switch or a machine switch.
+
+What is kept, and why: **restart**. `src/server/web/updates/*` became `src/server/web/service/*`
+(`restartRoutes.ts`, `fleetRoutes.ts`, `detachedCommand.ts`) because restarting an installed service is
+a real operational need that predates the update feature. `/api/machines/fleet/restart` is restart-only,
+so a fleet restart request that carries an update key is refused by the parser, and
+`fleetMachineOffer` returns restart for a machine and never update. The machine row's refusal sentences
+(own service, hosted by the other process, development services, no installed service) stay, because
+they explain a restart refusal. Git, project and workspace operations, pi package management in
+**Settings → Pi Packages**, and every other server capability are untouched.
+
+`docs/design/pi-web-updates-plugin.md` stays as the record of how the module worked, marked retired in
+`docs/design/README.md`.
 
 ## Test conventions this project uses
 

@@ -75,7 +75,6 @@ export type {
   PiWebInstallationInfo,
   PiWebInstallationKind,
   PiWebPackageManager,
-  PiWebReleaseStatus,
   PiWebServiceComponent,
   PiWebServiceRestartState,
   PiWebStatusMessage,
@@ -158,7 +157,7 @@ export interface PluginActivationContext {
   readonly callOperation?: (operation: string, input?: unknown) => Promise<unknown>;
   /**
    * The PI WEB status of the machine this registration belongs to (its components and their
-   * versions, the release check, the update commands), read once for the page and every plugin. Absent on hosts older than this contract; read
+   * versions and the service state), read once for the page and every plugin. Absent on hosts older than this contract; read
    * `api/pi-web/status` through `fetchJson` there, which answers for the machine serving the page.
    */
   readonly readPiWebStatus?: () => Promise<unknown>;
@@ -1000,8 +999,6 @@ export interface PluginRuntimeContext {
   /** Invalidate plugin workspace-panel data for the selected workspace, optionally targeting one qualified panel id. */
   refreshWorkspacePanels: (panelId?: QualifiedContributionId) => void | Promise<void>;
   refreshAppData: () => void | Promise<void>;
-  /** Force a fresh PI WEB release check on the selected machine. Optional for compatibility with older hosts. */
-  checkForPiWebUpdates?: () => void | Promise<void>;
   reloadPage: () => void;
   startSession: () => void | Promise<void>;
   archiveSession: () => void | Promise<void>;
@@ -1198,10 +1195,6 @@ export interface GlobalPanelContext {
   state?: PluginRuntimeState;
   host: WorkspaceHost;
   terminal: GlobalPanelTerminal;
-  /** Check the machine on screen for a PI WEB release now, bypassing the cached answer. Absent on older hosts. */
-  checkForPiWebUpdates?: () => Promise<void>;
-  /** Open Settings at the field where the machine on screen saves its update command. Absent on older hosts. */
-  openUpdateCommandSetting?: () => void;
   /** The fleet, the same as the activation context's. A fleet page takes its machines from here, never from `machine`. Absent on older hosts. */
   fleet?: PluginFleet;
 }

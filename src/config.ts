@@ -233,7 +233,7 @@ export function resolveEffectivePiWebConfig(loaded: LoadedPiWebConfig, options: 
  */
 const SAVED_CONFIG_KEYS: ReadonlySet<string> = new Set([
   "host", "port", "allowedHosts", "shortcuts", "plugins", "pathAccess", "uploads", "maxUploadBytes",
-  "logging", "listTiles", "askUser", "respectProjectTrust", "environmentFacts", "piBuiltInExtensions", "agent", "updateCommand", "ntfy",
+  "logging", "listTiles", "askUser", "respectProjectTrust", "environmentFacts", "piBuiltInExtensions", "agent", "ntfy",
 ]);
 
 export function savePiWebConfig(config: PiWebConfig, options: LoadOptions = {}, serverSettingsUpdates?: PiWebServerSettingsUpdates): LoadedPiWebConfig {
@@ -483,7 +483,6 @@ function piWebConfigRecord(config: PiWebConfig): Record<string, unknown> {
     ...(config.piBuiltInExtensions !== undefined ? { piBuiltInExtensions: config.piBuiltInExtensions } : {}),
     ...(config.agent !== undefined ? { agent: config.agent } : {}),
     ...(config.listTiles !== undefined ? { listTiles: config.listTiles } : {}),
-    ...(config.updateCommand !== undefined ? { updateCommand: config.updateCommand } : {}),
   };
 }
 
@@ -509,7 +508,6 @@ export function parsePiWebConfig(value: Record<string, unknown>, path: string, a
     ...(value["extensionDialogsTimeoutMs"] !== undefined ? { extensionDialogsTimeoutMs: parseExtensionDialogsTimeoutMs(value["extensionDialogsTimeoutMs"], path) } : {}),
     ...(value["agent"] !== undefined ? { agent: parseAgentConfig(value["agent"], path, agentPathHost) } : {}),
     ...(value["ntfy"] !== undefined ? { ntfy: parseNtfyConfig(value["ntfy"], path) } : {}),
-    ...(value["updateCommand"] !== undefined ? { updateCommand: parseUpdateCommand(value["updateCommand"], path) } : {}),
   };
 }
 
@@ -554,11 +552,6 @@ function parseTlsPath(value: unknown, key: string, path: string): string {
   if (typeof value !== "string" || value === "") throw new PiWebConfigError(`PI WEB config ${key} must be a non-empty file path: ${path}`);
   if (!isAbsolute(value) && !isHomePath(value, "current")) throw new PiWebConfigError(`PI WEB config ${key} must be an absolute or ~/ path: ${path}`);
   return value;
-}
-
-function parseUpdateCommand(value: unknown, path: string): string {
-  if (typeof value !== "string") throw new PiWebConfigError(`PI WEB config updateCommand must be a string: ${path}`);
-  return value.trim();
 }
 
 function parseMaxUploadBytes(value: unknown, key: string, path = "environment"): number {

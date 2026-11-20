@@ -129,7 +129,7 @@ function piWebStatusPath(machineId: string): string {
 
 export const piWebApi = {
   piWebStatus: (machineId = "local") => machineRead(piWebStatusPath(machineId), parsePiWebStatusResponse),
-  checkForUpdates: (machineId = "local") => request(`${piWebStatusPath(machineId)}?refresh=1`, parsePiWebStatusResponse, { cache: "no-store" }),
+  refreshStatus: (machineId = "local") => request(`${piWebStatusPath(machineId)}?refresh=1`, parsePiWebStatusResponse, { cache: "no-store" }),
   piWebRuntime: () => request("api/pi-web/runtime", parsePiWebRuntimeResponse),
   webServerVersion: () => request("api/pi-web/version", parseWebServerVersion, { cache: "no-store" }),
 };

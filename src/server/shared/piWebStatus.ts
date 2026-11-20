@@ -88,9 +88,6 @@ export interface PiWebStatusOptions {
   webOwnService?: () => Promise<PiWebOwnService>;
 }
 
-/** `nix profile list --json`'s elements: name to the store paths it installed. */
-export type NixProfileElements = ReadonlyMap<string, readonly string[]>;
-
 const runtimePackageInfo = readPackageInfoSync();
 
 export function getPiWebRuntimeComponent(component: PiWebServiceComponent, capabilities: readonly PiWebCapability[] = [], deprecatedAgentInputs: readonly PiWebDeprecatedAgentInput[] = []): PiWebRuntimeComponent {
@@ -655,6 +652,10 @@ async function commandSucceeds(command: string, args: string[]): Promise<boolean
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function optionalMessageCommand(command: string | undefined): Pick<PiWebStatusMessage, "command"> | object {
+  return command === undefined ? {} : { command };
 }
 
 function buildMessages(components: PiWebStatusResponse["components"], commands: PiWebStatusResponse["commands"]): PiWebStatusMessage[] {

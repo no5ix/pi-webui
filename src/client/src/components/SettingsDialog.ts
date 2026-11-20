@@ -102,7 +102,7 @@ export class SettingsDialog extends LitElement {
   @property({ type: Boolean }) fleetLoading = false;
   @property({ attribute: false }) fleetError?: string;
   @property({ attribute: false }) onRefreshFleet?: () => void | Promise<void>;
-  @property({ attribute: false }) onRunFleet?: (operation: "restart" | "update", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
+  @property({ attribute: false }) onRunFleet?: (operation: "restart", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
   @property({ attribute: false }) onNavigate?: (section: SettingsSection) => void;
   @property({ attribute: false }) pluginSections: readonly QualifiedSettingsSectionContribution[] = [];
   @property({ attribute: false }) pluginRuntimeContext?: PluginRuntimeContext;
@@ -402,7 +402,7 @@ export class SettingsDialog extends LitElement {
           ?fleetLoading=${this.fleetLoading}
           .fleetError=${this.fleetError}
           .onRefreshFleet=${() => this.onRefreshFleet?.()}
-          .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.onRunFleet?.(operation, machineIds) ?? Promise.resolve(undefined)}
+          .onRunFleet=${(operation: "restart", machineIds?: readonly string[]) => this.onRunFleet?.(operation, machineIds) ?? Promise.resolve(undefined)}
         ></settings-machines-panel>
       `;
     }
@@ -544,7 +544,6 @@ export class SettingsDialog extends LitElement {
         .onSave=${(config: PiWebConfigValues) => this.saveConfig(config)}
         .onSaveMachineConfig=${(config: PiWebConfigValues) => this.saveMachineAccessConfig(config)}
         .onSaveMachineLogging=${(config: PiWebConfigValues) => this.saveMachinePatch(config, "log settings")}
-        .onSaveMachineUpdateCommand=${(config: PiWebConfigValues) => this.saveMachinePatch(config, "the update command")}
         .reveal=${this.reveal}
         .onRevealed=${() => { this.onRevealed?.(); }}
         ?accessGate=${this.accessGate}

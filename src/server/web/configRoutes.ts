@@ -31,7 +31,6 @@ export const SELECTED_MACHINE_CONFIG_KEYS = [
   "maxUploadBytes",
   "logging",
   "agent",
-  "updateCommand",
 ] as const satisfies readonly (keyof PiWebConfigValues)[];
 
 const SELECTED_MACHINE_CONFIG_KEY_SET = new Set<string>(SELECTED_MACHINE_CONFIG_KEYS);
@@ -220,7 +219,6 @@ function pickSelectedMachineConfig(config: PiWebConfigValues): PiWebConfig {
     ...(config.maxUploadBytes !== undefined ? { maxUploadBytes: config.maxUploadBytes } : {}),
     ...(config.logging !== undefined ? { logging: config.logging } : {}),
     ...(config.agent !== undefined ? { agent: config.agent } : {}),
-    ...(config.updateCommand !== undefined ? { updateCommand: config.updateCommand } : {}),
   };
 }
 

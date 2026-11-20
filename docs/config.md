@@ -43,7 +43,6 @@ Process restarts depend on the key:
 - `pathAccess`: applies on the next request; existing file views may need a browser refresh.
 - `uploads.defaultFolder`: applies to newly opened Files upload dialogs and new direct drag/drop batches after config/workspace refresh.
 - `logging`: the web/API process and the session daemon re-read it within a minute; no restart.
-- `updateCommand`: the Updates page uses it from its next status check; no restart.
 - `plugins`: a toggle saved in **Settings → PI WEB Plugins** applies at once, without a restart or reload, except for the cases [Turn plugins on and off](plugins.md#turn-plugins-on-and-off) lists (a workspace-provider or machine-registry plugin, a changed `settings` object, `serverSettings` block or `models` list of a plugin with a server half, a new package revision, and hand edits of this file, which wait for the next page load or session-daemon start).
 - `serverPlugins.safeStart`: persistent offline recovery state applied before server-plugin discovery/import on the next sessiond start; use the `pi-web plugins safe-start ...` CLI rather than hand-editing it.
 - Pi package install/remove/update: not a PI WEB config key; after a mutation, type `/reload` in each idle PI WEB session on the target machine to refresh ordinary Pi resources such as extensions, skills, prompt templates, themes, and context/system prompt files. For a PI WEB package with `serverModule`, manually [restart the session daemon](install.md#restart-the-session-daemon), then reload the browser. If a global Pi extension adds or removes a model provider, or changes a provider's connection settings, the same manual sessiond restart is required; `/reload` cannot change either startup snapshot. A known Pi model provider refreshing only its own model list is applied without a restart. See [Pi extension provider baseline](#pi-extension-provider-baseline).
@@ -67,7 +66,6 @@ Process restarts depend on the key:
   "maxUploadBytes": 67108864,
   "extensionDialogsTimeoutMs": 0,
   "plugins": {
-    "updates": { "enabled": true },
     "info": { "enabled": false }
   },
   "shortcuts": {
@@ -144,7 +142,7 @@ worktree_path="$1"
 
 ## Configuration matrix
 
-Rows with JSON key `—` are runtime-only environment variables, not config-file keys. `Global` means machine-global. In Settings, selected-machine-safe global keys (`pathAccess`, `uploads`, `maxUploadBytes`, `logging`, `updateCommand`, and `plugins`) are edited for the selected machine; gateway host/port/allowed-hosts, keyboard shortcuts, and machine registry/tokens stay local.
+Rows with JSON key `—` are runtime-only environment variables, not config-file keys. `Global` means machine-global. In Settings, selected-machine-safe global keys (`pathAccess`, `uploads`, `maxUploadBytes`, `logging` and `plugins`) are edited for the selected machine; gateway host/port/allowed-hosts, keyboard shortcuts, and machine registry/tokens stay local.
 
 | Config | JSON key | Env var | Scope | Project-local behavior | Applies / restart |
 | --- | --- | --- | --- | --- | --- |
@@ -159,7 +157,6 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | External filesystem roots | `pathAccess.allowedPaths` | — | Global + project | **Merges**: global roots first, then project roots; duplicates removed | Next file request; refresh existing views if needed |
 | Manual file upload default folder | `uploads.defaultFolder` | — | Global + project | **Overrides**: project value wins for workspaces in that project; otherwise global/default applies | New Upload dialogs and direct drag/drop batches after config/workspace refresh |
 | Log level and retention | `logging.level`, `logging.maxFileMb`, `logging.keepFiles` | — | Global (web/API and session daemon) | Not supported locally | Within a minute, no restart |
-| Update command for the Updates page | `updateCommand` | `PI_WEB_UPDATE_COMMAND` (the saved value wins) | Global | Not supported locally | Next status check, no restart |
 | Tiles per row in the Navigate lists | `listTiles.phone`, `listTiles.desktop` | — | Global (the gateway's browser UI) | Not supported locally | At once from Settings; browser reload after a hand edit |
 | One theme for every browser | `theme.themeId`, `theme.auto` | — | Global (the gateway's browser UI) | Not supported locally | At once in the browser that changes it; other browsers when they next load the page or come back to the foreground |
 | Skills kept out of the list Pi is given | `skills.enabled`, `skills.disabled` (each entry names a skill identity) | — | Global + project | **Overrides**: a project entry answers for its project alone, then the global entry, then Pi's default (available) | Next session created, or `/reload` in each idle PI WEB session |
@@ -186,7 +183,7 @@ Rows with JSON key `—` are runtime-only environment variables, not config-file
 | Service command overrides | — | `PI_WEB_SERVER_EXEC`, `PI_WEB_SESSIOND_EXEC` | `pi-web install` env | Not supported locally | Read when you run `pi-web install`; the command is written into the service instead of `pi-web-server` / `pi-web-sessiond` |
 | Agent state directory | — | `PI_CODING_AGENT_DIR` (deprecated alias `PI_WEB_AGENT_DIR`) | Session daemon env | Not supported locally | Restart session daemon on that machine; affects auth, models, settings, sessions, Pi packages, and Pi-package-backed PI WEB plugins. See [Agent state directory](#agent-state-directory) |
 | Agent session storage directory | — | `PI_CODING_AGENT_SESSION_DIR` (deprecated alias `PI_WEB_AGENT_SESSION_DIR`) | Session daemon env | Not supported locally | Restart session daemon on that machine |
-| Skip update checks | — | `PI_WEB_SKIP_VERSION_CHECK`, `PI_WEB_OFFLINE`, `PI_SKIP_VERSION_CHECK`, `PI_OFFLINE` | Web/API env | Not supported locally | Restart web/API after env changes. Skips the PI WEB release check and the Updates page's pi package check, which then says the machine skips update checks. The session daemon always sets `PI_SKIP_VERSION_CHECK` for its own process (not for its terminals), so pi extensions that prompt for pi updates stay quiet in PI WEB sessions |
+| Skip update checks | — | `PI_WEB_SKIP_VERSION_CHECK`, `PI_WEB_OFFLINE`, `PI_SKIP_VERSION_CHECK`, `PI_OFFLINE` | Web/API env | Not supported locally | Restart web/API after env changes. Skips PI WEB's checks for newer pi package versions, which then report no known update. The session daemon always sets `PI_SKIP_VERSION_CHECK` for its own process (not for its terminals), so pi extensions that prompt for pi updates stay quiet in PI WEB sessions |
 | Offline mode | — | `PI_WEB_OFFLINE`, `PI_OFFLINE` | Web/API + session daemon env | Not supported locally | Restart session daemon and web/API after env changes; also disables the [background model catalog refresh](#background-model-catalog-refresh) |
 
 ## Key details
@@ -270,18 +267,6 @@ The per-request size limit is still controlled by `maxUploadBytes` / `PI_WEB_MAX
 - `maxFileMb` (default 50) and `keepFiles` (default 3): once `web.log` or `sessiond.log` in the log directory grows past `maxFileMb`, its last `maxFileMb` is copied to `web.log.1` (older copies move to `.2`, `.3`, …, and the oldest beyond `keepFiles` is removed), then the file is emptied in place. Only the tail is copied, so trimming a very large log does not need that much free disk.
 
 Both processes check the setting and the file sizes once a minute. The log directory is the one `pi-web install` points the service manager at, `~/.pi-web/logs`, which it records in the service as `PI_WEB_LOG_DIR`; a process started without it uses `$PI_WEB_DATA_DIR/logs`. A service installed before this setting existed keeps watching `$PI_WEB_DATA_DIR/logs` until it is installed again. Retention applies to the log files the installed launchd services write; on systemd, output that goes to the journal is kept by journald's own settings instead.
-
-### Updates
-
-`updateCommand` is the command the Updates page's **Update** button, and the fleet **Update** in **Settings → Machines**, run on that machine. Save it in **Settings → General → Updates** for the selected machine (the Updates page links there for a nix install without one), or in the global config:
-
-```json
-{
-  "updateCommand": "/usr/local/bin/update-pi-web"
-}
-```
-
-The command should update PI WEB and restart it; it runs in a new terminal on the Terminal page, so its output stays visible while the web process and the session daemon restart. The session daemon types it into that terminal once the shell has drawn its prompt. An older session daemon leaves the typing to the page; when the page cannot reach the terminal in time, a dialog names the machine and shows the command with a copy key and an **Open Terminal** button, which moves to that machine and shows the shell, to run the command there if the shell is still open. When the machine does not answer the page's request for the terminal, or answers with a server error, the page cannot tell whether the command started: it says so and opens the Terminal page, so look there before pressing Update again. It wins over the services' `PI_WEB_UPDATE_COMMAND` (which `pi-web install` records from the installing shell), which wins over the update PI WEB works out from the install method, such as `npm install -g` for a global npm install or `nix profile upgrade` for a `nix profile install`. An install from a Nix configuration (Home Manager, nix-darwin, NixOS) has no update of its own: give it one here or in the services. [Update](install.md#update) lists how each install is updated by hand. An empty value saves none. The status reads it on its next check; no restart.
 
 ### Lists
 
@@ -383,9 +368,9 @@ PI_CODING_AGENT_SESSION_DIR=/opt/pi-profiles/lab-sessions
 
 The directory must use the data layout supported by the bundled Pi SDK; PI WEB does not load or convert incompatible formats, migrate profile data, or repartition PI WEB-managed archives when the directory changes.
 
-The session daemon resolves the directory once at startup and exports the resolved values to everything it starts, so sessions, terminals, the bash tool, and subsessions all observe the same `PI_CODING_AGENT_DIR` / `PI_CODING_AGENT_SESSION_DIR`. That resolved active directory stays fixed for the daemon lifetime: changing the environment takes effect on the next session-daemon restart on that machine, and until then sessions, Pi package operations, Pi-package-backed PI WEB plugin discovery, status/install detection, and update planning continue to use the daemon-owned active directory; a web/API restart recovers that same active directory instead of applying the new value.
+The session daemon resolves the directory once at startup and exports the resolved values to everything it starts, so sessions, terminals, the bash tool, and subsessions all observe the same `PI_CODING_AGENT_DIR` / `PI_CODING_AGENT_SESSION_DIR`. That resolved active directory stays fixed for the daemon lifetime: changing the environment takes effect on the next session-daemon restart on that machine, and until then sessions, Pi package operations, Pi-package-backed PI WEB plugin discovery, status/install detection, continue to use the daemon-owned active directory; a web/API restart recovers that same active directory instead of applying the new value.
 
-If the session daemon cannot report a valid active directory, profile-dependent Pi package and PI WEB plugin operations report unavailable instead of falling back to independently resolved values. The Updates page offers an update for a Pi-package install only when the daemon reports a valid active directory and the `pi` command is on `PATH`, and the update pins that directory. Restart the session daemon on the selected machine to establish the next active directory.
+If the session daemon cannot report a valid active directory, profile-dependent Pi package and PI WEB plugin operations report unavailable instead of falling back to independently resolved values. Restart the session daemon on the selected machine to establish the next active directory.
 
 ### Pi extension provider baseline
 
@@ -431,7 +416,7 @@ Each run is bounded: it is aborted after **60 seconds**, and a run that times ou
 
 Models fetched by a background refresh appear the next time a client asks for the model list, so a model selector left open across a refresh may need to be reopened.
 
-To turn the background refresh off entirely, set `PI_WEB_OFFLINE` or `PI_OFFLINE` in the session daemon's environment and restart it. In offline mode PI WEB performs no provider catalog network requests, including after logins, and sessions use the catalogs already stored in the agent directory. The `PI_WEB_SKIP_VERSION_CHECK` and `PI_SKIP_VERSION_CHECK` keys do **not** affect this refresh; they only suppress PI WEB release checks.
+To turn the background refresh off entirely, set `PI_WEB_OFFLINE` or `PI_OFFLINE` in the session daemon's environment and restart it. In offline mode PI WEB performs no provider catalog network requests, including after logins, and sessions use the catalogs already stored in the agent directory. The `PI_WEB_SKIP_VERSION_CHECK` and `PI_SKIP_VERSION_CHECK` keys do **not** affect this refresh; they only suppress pi package version checks.
 
 ### Project trust for project-local resources
 
@@ -494,8 +479,7 @@ The `plugins` key controls desired enablement and JSON settings for PI WEB brows
 {
   "plugins": {
     "git": { "enabled": true, "settings": {} },
-    "mermaid": { "enabled": true },
-    "updates": { "enabled": false }
+    "mermaid": { "enabled": true }
   }
 }
 ```

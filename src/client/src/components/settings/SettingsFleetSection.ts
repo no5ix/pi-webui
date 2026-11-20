@@ -24,7 +24,7 @@ export class SettingsFleetSection extends LitElement {
   @property({ type: Boolean }) loading = false;
   @property({ attribute: false }) error?: string;
   @property({ attribute: false }) onRefresh?: () => void | Promise<void>;
-  @property({ attribute: false }) onRun?: (operation: "restart" | "update", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
+  @property({ attribute: false }) onRun?: (operation: "restart", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
 
   @state() private running: string | undefined;
   @state() private lastRun: PiWebFleetRunResponse | undefined;
@@ -32,13 +32,12 @@ export class SettingsFleetSection extends LitElement {
   override render() {
     const machines = this.report?.machines ?? [];
     const machineIds = machines.filter((machine) => machine.reachable ?? machine.online).map((machine) => machine.machineId);
-    const updateTargets = fleetBulkTargets(machineIds, this.statuses, "update");
     const restartTargets = fleetBulkTargets(machineIds, this.statuses, "restart");
     return html`
       <section class="fleet section-card">
         <header>
           <div>
-            <h3>Machines and Updates</h3>
+            <h3>Machines</h3>
             <p class="muted">
               ${this.report === undefined
                 ? "Reading the machine list…"
@@ -65,9 +64,8 @@ export class SettingsFleetSection extends LitElement {
                 ${machine.piVersion === undefined ? nothing : html` · pi ${machine.piVersion}`}
               </span>
               ${offer.notes.map((note) => html`<span class="note">${note}</span>`)}
-              ${offer.update || offer.restart ? html`<span class="row-actions">
-                ${offer.update ? html`<button type="button" ?disabled=${keyDisabled} @click=${() => void this.run("update", [machine.machineId])}>Update</button>` : nothing}
-                ${offer.restart ? html`<button type="button" ?disabled=${keyDisabled} @click=${() => void this.run("restart", [machine.machineId])}>Restart</button>` : nothing}
+              ${offer.restart ? html`<span class="row-actions">
+                <button type="button" ?disabled=${keyDisabled} @click=${() => void this.run("restart", [machine.machineId])}>Restart</button>
               </span>` : nothing}
             </li>
           `;
@@ -76,9 +74,6 @@ export class SettingsFleetSection extends LitElement {
         </ul>
 
         <div class="all-actions">
-          <button type="button" ?disabled=${this.running !== undefined || updateTargets === undefined || updateTargets.length === 0} @click=${() => { if (updateTargets !== undefined) void this.run("update", updateTargets); }}>
-            ${this.running === "update" ? "Updating…" : "Update every machine"}
-          </button>
           <button type="button" ?disabled=${this.running !== undefined || restartTargets === undefined || restartTargets.length === 0} @click=${() => { if (restartTargets !== undefined) void this.run("restart", restartTargets); }}>
             ${this.running === "restart" ? "Restarting…" : "Restart every machine"}
           </button>
@@ -94,7 +89,7 @@ export class SettingsFleetSection extends LitElement {
     const failed = this.lastRun.outcomes.filter((outcome) => !outcome.started);
     return html`
       <div class=${failed.length === 0 ? "outcome" : "outcome has-failures"} role="status">
-        <strong>${this.lastRun.operation === "update" ? "Update" : "Restart"} from ${this.lastRun.hub.name}</strong>
+        <strong>Restart from ${this.lastRun.hub.name}</strong>
         <ul>
           ${this.lastRun.outcomes.map((outcome) => html`
             <li>${outcome.started ? "Started" : "Did not start"} · ${outcome.name}${outcome.error === undefined ? nothing : html` — ${outcome.error}`}</li>
@@ -104,7 +99,7 @@ export class SettingsFleetSection extends LitElement {
     `;
   }
 
-  private async run(operation: "restart" | "update", machineIds?: readonly string[]): Promise<void> {
+  private async run(operation: "restart", machineIds?: readonly string[]): Promise<void> {
     if (this.onRun === undefined) return;
     this.running = operation;
     try {

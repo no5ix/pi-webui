@@ -27,7 +27,6 @@ import {
 import { checkNodePtyDarwinSpawnHelper, formatNodePtyDarwinSpawnHelperCheck } from "./server/shared/diagnostics/nodePtySpawnHelper.js";
 import { checkNodePtyNativeModule, formatNodePtyNativeModuleCheck, type NodePtyLoadFailureSeverity } from "./server/shared/diagnostics/nodePtyNativeModule.js";
 import { checkNpmAllowScripts } from "./server/shared/npmAllowScripts.js";
-import { deploymentServiceEnvironment } from "./nativeServices/serviceEnvironment.js";
 import { launchdRuntimeDetails } from "./nativeServices/launchdPrint.js";
 import {
   installNativeServiceCandidate,
@@ -466,13 +465,11 @@ function describeServiceShell(): string {
  * The environment a managed service is installed with: the config path when
  * one was chosen, the log directory launchd is pointed at (so the process trims
  * the file it is actually given; systemd sends the output to the journal and
- * the variable names nothing there), plus the deployment variables only the
- * installing environment knows. A service manager does not inherit the installing
- * shell's environment, so anything left out here is lost at service start.
+ * the variable names nothing there). A service manager does not inherit the
+ * installing shell's environment, so anything left out here is lost at service start.
  */
 function serviceEnvironment(options: InstallOptions, configPath: string): Record<string, string> {
   return {
-    ...deploymentServiceEnvironment(process.env),
     PI_WEB_LOG_DIR: logDir,
     ...(options.config === undefined ? {} : { PI_WEB_CONFIG: configPath }),
   };

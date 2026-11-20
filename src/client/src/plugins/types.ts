@@ -132,7 +132,7 @@ export interface PluginActivationContext {
   readonly callOperation?: (operation: string, input?: unknown) => Promise<unknown>;
   /**
    * The PI WEB status of the machine this registration belongs to (its components and their
-   * versions, the release check, the update commands), read once for the page and every plugin. Absent on hosts older than this contract; read
+   * versions and the service state), read once for the page and every plugin. Absent on hosts older than this contract; read
    * `api/pi-web/status` through `fetchJson` there, which answers for the machine serving the page.
    */
   readonly readPiWebStatus?: () => Promise<unknown>;
@@ -551,8 +551,6 @@ export interface GlobalPanelContext {
   state: AppState;
   host: WorkspaceHost;
   terminal: GlobalPanelTerminal;
-  checkForPiWebUpdates: () => Promise<void>;
-  openUpdateCommandSetting: () => void;
   /** The page's own plugin's fleet; the registry hands each page its plugin's, so its subscriptions go with that plugin. */
   fleet?: PluginFleet;
 }
@@ -668,7 +666,6 @@ export interface PluginRuntimeContext {
   /** Invalidate plugin workspace-panel data for the selected workspace. */
   refreshWorkspacePanels: (panelId?: QualifiedContributionId) => void | Promise<void>;
   refreshAppData: () => void | Promise<void>;
-  checkForPiWebUpdates?: () => void | Promise<void>;
   reloadPage: () => void;
   deleteWorkspace: (workspace?: Workspace) => void | Promise<void>;
   startSession: () => void | Promise<void>;

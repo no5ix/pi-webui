@@ -4,10 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VERSION as PI_CODING_AGENT_VERSION } from "@earendil-works/pi-coding-agent";
-import { comparePackageVersions, getPiWebRuntime, getPiWebStatus, getPiWebVersionStatus, updateCommandFor } from "./piWebStatus.js";
+import { comparePackageVersions, getPiWebRuntime, getPiWebStatus, getPiWebVersionStatus } from "./piWebStatus.js";
 import { SessionDaemonClient } from "./sessiondClient/sessionDaemonClient.js";
 import { systemdBooted } from "../../nativeServices/serviceBackendKind.js";
-import type { PiWebInstallationInfo, PiWebRuntimeComponent } from "../../shared/apiTypes.js";
+import type { PiWebRuntimeComponent } from "../../shared/apiTypes.js";
 
 // Every name the status code consults, not just the PI WEB one: a developer
 // machine that exports PI_SKIP_VERSION_CHECK for pi itself would otherwise make
@@ -215,25 +215,6 @@ describe("PI WEB status", () => {
     expect(runtime.capabilities).toEqual(["plugins.lifecycle"]);
   });
 
-  it("bypasses cached npm release data for a forced check", async () => {
-    for (const key of SKIP_VERSION_CHECK_KEYS) Reflect.deleteProperty(process.env, key);
-    process.env["PI_WEB_DOCKER_RUNTIME"] = "1";
-    process.env["PI_WEB_DOCKER_MODE"] = "runtime";
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(npmVersionResponse("1.202607.1"))
-      .mockResolvedValueOnce(npmVersionResponse("1.202607.2"));
-    const daemon = daemonWithRuntime(runningSessiondRuntime("1.202607.0"));
-
-    const first = await getPiWebStatus(daemon, { forceReleaseCheck: true });
-    const cached = await getPiWebStatus(daemon);
-    const forced = await getPiWebStatus(daemon, { forceReleaseCheck: true });
-
-    expect(first.release.latestVersion).toBe("1.202607.1");
-    expect(cached.release.latestVersion).toBe("1.202607.1");
-    expect(forced.release.latestVersion).toBe("1.202607.2");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
   it("marks the session daemon unavailable without falling back to the legacy health payload", async () => {
     const daemon = new SessionDaemonClient();
     const request = vi.spyOn(daemon, "request").mockResolvedValue({
@@ -306,78 +287,6 @@ describe("PI WEB status", () => {
     } finally {
       await rm(home, { recursive: true, force: true });
     }
-  });
-
-  it("suppresses Pi package update planning without an active state profile", async () => {
-    const hasCommand = vi.fn(() => Promise.resolve(true));
-
-    const updateCommand = await updateCommandFor(
-      { kind: "pi-package", source: "npm:@gang-of-beads/pi-web", scope: "user", path: "/tmp/pi-web" },
-      "pi-web restart",
-      { activeAgentProfile: undefined, hasCommand },
-    );
-
-    expect(updateCommand).toBeUndefined();
-    expect(hasCommand).not.toHaveBeenCalled();
-  });
-
-  it("preserves and shell-quotes the active state profile in Pi-package update commands", async () => {
-    const dir = "/tmp/profile's/state";
-    const updateCommand = await updateCommandFor(
-      { kind: "pi-package", source: "npm:@gang-of-beads/pi-web", scope: "user", path: "/tmp/pi-web" },
-      "pi-web restart",
-      {
-        activeAgentProfile: activeProfile(dir),
-        hasCommand: (candidate) => Promise.resolve(candidate === "pi"),
-      },
-    );
-
-    expect(updateCommand).toBe("PI_CODING_AGENT_DIR='/tmp/profile'\\''s/state' pi update 'npm:@gang-of-beads/pi-web' && pi-web restart");
-  });
-
-  it("scopes node-pty script approval in npm-global update commands, unless npm does not know the option", async () => {
-    const installation: PiWebInstallationInfo = { kind: "npm-global", path: "/opt/npm/@gang-of-beads/pi-web" };
-    const options = { activeAgentProfile: undefined, hasCommand: () => Promise.resolve(true) };
-
-    expect(await updateCommandFor(installation, "pi-web restart", { ...options, npmAllowScripts: () => Promise.resolve("known") }))
-      .toBe("npm install -g @gang-of-beads/pi-web --allow-scripts=node-pty && pi-web restart");
-    expect(await updateCommandFor(installation, "pi-web restart", { ...options, npmAllowScripts: () => Promise.resolve("undetermined") }))
-      .toBe("npm install -g @gang-of-beads/pi-web --allow-scripts=node-pty && pi-web restart");
-    expect(await updateCommandFor(installation, "pi-web restart", { ...options, npmAllowScripts: () => Promise.resolve("unknown") }))
-      .toBe("npm install -g @gang-of-beads/pi-web && pi-web restart");
-  });
-
-  it("suppresses npm-global update commands when npm is unavailable", async () => {
-    const updateCommand = await updateCommandFor(
-      { kind: "npm-global", path: "/opt/npm/@gang-of-beads/pi-web" },
-      "pi-web restart",
-      { activeAgentProfile: undefined, hasCommand: () => Promise.resolve(false) },
-    );
-
-    expect(updateCommand).toBeUndefined();
-  });
-
-  it("suppresses Pi-package updates when the active state profile cannot be represented safely", async () => {
-    const hasCommand = vi.fn(() => Promise.resolve(true));
-
-    const updateCommand = await updateCommandFor(
-      { kind: "pi-package", source: "npm:@gang-of-beads/pi-web", scope: "user", path: "/tmp/pi-web" },
-      "pi-web restart",
-      { activeAgentProfile: activeProfile("relative/state"), hasCommand },
-    );
-
-    expect(updateCommand).toBeUndefined();
-    expect(hasCommand).not.toHaveBeenCalled();
-  });
-
-  it("suppresses Pi-package updates when the pi command is not on PATH", async () => {
-    const updateCommand = await updateCommandFor(
-      { kind: "pi-package", source: "npm:@gang-of-beads/pi-web", scope: "user", path: "/tmp/pi-web" },
-      "pi-web restart",
-      { activeAgentProfile: activeProfile("/opt/pi/state"), hasCommand: () => Promise.resolve(false) },
-    );
-
-    expect(updateCommand).toBeUndefined();
   });
 
   it.skipIf(process.platform !== "linux" || !systemdBooted())("suggests native systemd commands for local development services", async () => {
@@ -486,7 +395,6 @@ describe("PI WEB status", () => {
     const status = await getPiWebStatus(daemon);
 
     expect(status.components.web.installation).toEqual({ kind: "docker", path: "/workspace/pi-web", dockerMode: "dev" });
-    expect(status.commands.update).toBe("pi-web-docker --dev update");
     expect(status.commands.status).toBe("pi-web-docker --dev status");
   });
 
@@ -514,10 +422,6 @@ function activeProfile(dir: string) {
     schemaVersion: 2 as const,
     dir,
   };
-}
-
-function npmVersionResponse(version: string): Response {
-  return new Response(JSON.stringify({ version }), { status: 200, headers: { "content-type": "application/json" } });
 }
 
 function runningSessiondRuntime(runtimeVersion = "1.202605.7"): PiWebRuntimeComponent {

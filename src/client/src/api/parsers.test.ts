@@ -374,7 +374,6 @@ describe("API parsers", () => {
         web: { component: "web", label: "Web/UI", runtimeVersion: "1.0.0", piVersion: "0.84.1", available: true, stale: false, installation: { kind: "docker", path: "/srv/pi-web-docker", dockerMode: "runtime" } },
         sessiond: { component: "sessiond", label: "Session daemon", runtimeVersion: "1.0.0", piVersion: "0.83.0", available: true, stale: false, installation: { kind: "docker", dockerMode: "dev" } },
       },
-      release: { packageName: "@gang-of-beads/pi-web", updateAvailable: false },
       commands: { restart: "pi-web-docker restart", status: "pi-web-docker status" },
       messages: [],
     };

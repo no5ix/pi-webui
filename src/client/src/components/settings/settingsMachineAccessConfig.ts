@@ -15,6 +15,5 @@ function mergeAccessConfig(base: PiWebConfigValues, selectedMachine: PiWebConfig
     ...(selectedMachine.uploads === undefined ? {} : { uploads: selectedMachine.uploads }),
     ...(selectedMachine.maxUploadBytes === undefined ? {} : { maxUploadBytes: selectedMachine.maxUploadBytes }),
     ...(selectedMachine.logging === undefined ? {} : { logging: selectedMachine.logging }),
-    ...(selectedMachine.updateCommand === undefined ? {} : { updateCommand: selectedMachine.updateCommand }),
   };
 }

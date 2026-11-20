@@ -149,7 +149,7 @@ describe("federated route contract", () => {
 
     await Promise.all([
       ignoreParseFailure(piWebApi.piWebStatus(machineId)),
-      ignoreParseFailure(piWebApi.checkForUpdates(machineId)),
+      ignoreParseFailure(piWebApi.refreshStatus(machineId)),
       ignoreParseFailure(configApi.config(machineId)),
       ignoreParseFailure(configApi.saveConfig({ maxUploadBytes: 4096 }, machineId)),
       ignoreParseFailure(pluginsApi.plugins(machineId)),

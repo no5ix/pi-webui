@@ -14,17 +14,10 @@ import type {
   MachineKind,
   MoveWorkspaceFileOptions,
   MoveWorkspaceFileResponse,
-  PiPackageListing,
-  PiPackageServerProcess,
-  PiPackageSourceKind,
-  PiPackageUpdate,
-  PiPackageUpdates,
-  PiPackageUpdateState,
   PiWebComponentStatus,
   PiWebDockerMode,
   PiWebInstallationInfo,
   PiWebInstallationKind,
-  PiWebReleaseStatus,
   PiWebServiceComponent,
   PiWebServiceRestartState,
   PiWebStatusMessage,
@@ -55,17 +48,10 @@ export type {
   MachineKind,
   MoveWorkspaceFileOptions,
   MoveWorkspaceFileResponse,
-  PiPackageListing,
-  PiPackageServerProcess,
-  PiPackageSourceKind,
-  PiPackageUpdate,
-  PiPackageUpdates,
-  PiPackageUpdateState,
   PiWebComponentStatus,
   PiWebDockerMode,
   PiWebInstallationInfo,
   PiWebInstallationKind,
-  PiWebReleaseStatus,
   PiWebServiceComponent,
   PiWebServiceRestartState,
   PiWebStatusMessage,
@@ -242,12 +228,6 @@ export interface PiWebConfigValues {
   maxUploadBytes?: number;
   /** What the web and session daemon logs record, and how much of them stays on disk. */
   logging?: PiWebLoggingConfig;
-  /**
-   * The command that updates this machine's PI WEB and restarts it, run by the
-   * Updates page's Update button. Wins over the services' PI_WEB_UPDATE_COMMAND
-   * and over the command PI WEB derives from the install method; empty is none.
-   */
-  updateCommand?: string;
   /** Tiles per row in the Navigate lists, per layout; see PiWebListTilesConfig. */
   listTiles?: PiWebListTilesConfig;
   /**
@@ -2376,7 +2356,7 @@ export interface SessionSubsessionsSnapshot {
 }
 
 /** A fleet operation runs on the machines the answering server knows. */
-export type PiWebFleetOperation = "restart" | "update";
+export type PiWebFleetOperation = "restart";
 
 export interface PiWebFleetMachineIdentity {
   readonly machineId: string;
@@ -2415,17 +2395,3 @@ export interface PiWebFleetRunResponse {
   readonly outcomes: readonly PiWebFleetTargetOutcome[];
 }
 
-/**
- * @deprecated No longer produced by PI WEB: the self-update status endpoint was removed.
- * @public Kept only so code that imports the type keeps compiling.
- */
-export interface PiWebSelfUpdateStatus {
-  readonly enabled: boolean;
-  readonly current: string;
-  readonly latest: string | undefined;
-  readonly available: boolean;
-  readonly branch: string | undefined;
-  readonly checkedAt: string;
-  /** Human reason when updates are not supported here. */
-  readonly disabledReason?: string;
-}

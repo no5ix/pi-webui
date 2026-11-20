@@ -54,7 +54,7 @@ import { boardEventOf, boardSessionsOf, dedupeById, type BoardAnswer } from "../
 import { dataTransferHasFiles, FileDragDepth, fileDropFrameStyle, filesFromDataTransfer } from "../fileDrop";
 import { MachineStatusController } from "../controllers/machineStatusController";
 import { ProjectController } from "../controllers/projectController";
-import { PI_WEB_STATUS_FRESH_MS, PiWebStatusController } from "../controllers/piWebStatusController";
+import { PiWebStatusController } from "../controllers/piWebStatusController";
 import { SessionController } from "../controllers/sessionController";
 import { TrailingRefreshCoordinator } from "../controllers/trailingRefreshCoordinator";
 import { anchoredRead, graceRemaining, type AnchoredRead } from "../socketAnchoredRead";
@@ -395,7 +395,6 @@ const PI_WEB_STATUS_DEFER_MS = 750;
 /** A failed status read is asked again this soon: the Updates page hides while the status is unknown, and the periodic refresh is 15 minutes away. */
 const PI_WEB_STATUS_RETRY_MS = 15_000;
 /** A status saying the pi package check runs is read again once the shared answer has gone stale, so the read reaches the machine. */
-const PI_WEB_STATUS_PACKAGE_CHECK_REREAD_MS = PI_WEB_STATUS_FRESH_MS + 1_000;
 /** The Go to sheet's command line: opens the action palette on touch, where its keyboard shortcut cannot reach (B39). */
 const GO_TO_ACTIONS = "actions";
 /** Go to's Settings line: on the phone it is the way to Settings from every screen (owner, 2026-10-04). */
@@ -661,7 +660,6 @@ export class PiWebApp extends LitElement {
         console.warn(`Failed to refresh PI WEB status for ${machineId}`, error);
         this.schedulePiWebStatusRefresh(PI_WEB_STATUS_RETRY_MS);
       },
-      onPackageCheckRunning: () => { this.schedulePiWebStatusRefresh(PI_WEB_STATUS_PACKAGE_CHECK_REREAD_MS); },
     },
   );
   private workspaceUploadFolderFallback = effectiveWorkspaceUploadFolder(undefined);
@@ -2635,7 +2633,7 @@ export class PiWebApp extends LitElement {
    * changes what the machine reports about itself, and a failure often means a
    * machine went offline, which the list should show.
    */
-  private async runFleetOperation(operation: "restart" | "update", machineIds?: readonly string[]): Promise<PiWebFleetRunResponse | undefined> {
+  private async runFleetOperation(operation: "restart", machineIds?: readonly string[]): Promise<PiWebFleetRunResponse | undefined> {
     this.fleetError = undefined;
     try {
       return await runFleetFromHere(this.fleetFanOutApi, this.state.machines, operation, machineIds);
@@ -4684,11 +4682,6 @@ export class PiWebApp extends LitElement {
         open: (options) => { this.openGlobalTerminal(machine.id, options?.terminalId); },
         runInNewTerminal: async (input) => { await this.runInNewMachineTerminal(machine.id, input); },
       },
-      checkForPiWebUpdates: () => this.piWebStatusController.checkForUpdates(),
-      openUpdateCommandSetting: () => {
-        this.settingsReveal = "update-command";
-        this.openSettings("general");
-      },
     };
   }
 
@@ -5575,7 +5568,6 @@ export class PiWebApp extends LitElement {
       refreshFiles: () => this.refreshWorkspaceFilesPage(),
       refreshWorkspacePanels: (panelId) => this.invalidateWorkspacePanels(panelId),
       refreshAppData: () => this.refreshAppData(),
-      checkForPiWebUpdates: () => this.piWebStatusController.checkForUpdates(),
       reloadPage: () => { this.hardReloadApp(); },
       deleteWorkspace: (workspace) => { this.deleteWorkspace(workspace); },
       startSession: () => this.withChatScrollTransition(() => this.startSessionAndOpenChat()),
@@ -6950,7 +6942,7 @@ export class PiWebApp extends LitElement {
         ${this.renderSessionTreeNavigator(state)}
         ${this.sessionCleanupDialog !== undefined ? html`<session-cleanup-dialog .preview=${this.sessionCleanupDialog.preview} .previewRequest=${this.sessionCleanupDialog.previewRequest} .result=${this.sessionCleanupDialog.result} .loading=${this.sessionCleanupDialog.loading === true} .running=${this.sessionCleanupRunning()} .error=${this.sessionCleanupDialog.error ?? ""} .onPreview=${(request: SessionCleanupRequest) => { void this.previewSessionCleanup(request); }} .onRun=${(request: SessionCleanupRequest) => { this.runSessionCleanup(request); }} .onClose=${() => { this.closeSessionCleanupDialog(); }}></session-cleanup-dialog>` : null}
         ${state.themeDialog !== undefined ? html`<command-picker ?abovedialog=${this.settingsOpen} title=${state.themeDialog.title} .options=${state.themeDialog.options} .selectedValue=${state.themeDialog.selectedValue} .onPick=${(value: string) => { this.pickTheme(value); }} .onCancel=${() => { this.setState({ themeDialog: undefined }); }}></command-picker>` : null}
-        ${this.settingsOpen ? html`<settings-dialog .accessGate=${supportsPiWebCapability(state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)} .section=${this.settingsSection} .reveal=${this.settingsReveal} .onRevealed=${() => { this.settingsReveal = undefined; }} .machine=${state.selectedMachine} .machineRuntime=${this.selectedMachineRuntime()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onBackToList=${() => { this.backToSettingsList(); }} .pluginSections=${this.plugins.getSettingsSections(selectedMachineId(state))} .pluginRuntimeContext=${this.createPluginRuntimeContext()} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }} ?reloadOnClose=${this.reloadAfterSettings} .onPluginsChanged=${() => { if (!this.settingsMachineFollowsToggles()) this.reloadAfterSettings = true; }} .onRefreshMachineRuntime=${async (machineId: string) => { await this.machines.refreshMachineRuntime(machineId, { requireSelected: false }); }} .machines=${this.shownMachines()} .machineAvailability=${Object.fromEntries(state.machines.map((machine) => [machine.id, this.machineProbes.view(machine)]))} .machinesForeground=${this.foregroundMachineList() === "settings"} .onMachinesVisibilityChange=${(owner: HTMLElement, visible: boolean) => { this.machineProbes.setVisible(owner, visible); }} .onAddMachine=${() => { this.openMachineDialog(); }} .pluginLoadFailures=${this.pluginLoadFailures} .onRenameMachine=${async (machine: Machine, name: string) => { await this.renameMachine(machine, name); }} .onRemoveMachine=${(machine: Machine) => { this.removeMachine(machine); }} .fleetReport=${this.shownFleetReport()} .fleetStatuses=${this.fleetStatuses} .instantActions=${this.instantActions.list()} .onRemovePiPackage=${(target: SettingsMachineTarget, source: string, scope: PiPackageScope) => { this.removePiPackage(target, source, scope); }} .onForgetPageAccess=${(entry: ApprovedMachineOrigin) => { this.forgetPageAccess(entry); }} ?fleetLoading=${this.fleetLoading} .fleetError=${this.fleetError} .onRefreshFleet=${() => this.refreshFleet()} .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.runFleetOperation(operation, machineIds)} .themes=${selectableThemeContributions(this.plugins.getThemes())} .selectedThemeId=${this.selectedThemePreferenceId()} .activeThemeId=${this.activeThemeId} ?followSystemTheme=${this.themePreference.auto} .onSelectTheme=${(themeId: QualifiedContributionId) => { this.selectTheme(themeId); }} .onToggleFollowSystem=${(follow: boolean) => { this.setFollowSystemTheme(follow); }} .sharedTheme=${this.sharedTheme} .sharedThemeError=${this.sharedThemeError} .onToggleSharedTheme=${(share: boolean) => { this.setSharedTheme(share); }} .notificationAvailability=${this.notificationsState.availability} .notificationsWanted=${this.notificationsState.wanted} .onToggleNotifications=${(wanted: boolean) => this.setTaskNotifications(wanted)} .onTestNotification=${() => this.sendTestNotification()}></settings-dialog>` : null}
+        ${this.settingsOpen ? html`<settings-dialog .accessGate=${supportsPiWebCapability(state.machineRuntimes[LOCAL_MACHINE_ID], PI_WEB_CAPABILITIES.accessToken)} .section=${this.settingsSection} .reveal=${this.settingsReveal} .onRevealed=${() => { this.settingsReveal = undefined; }} .machine=${state.selectedMachine} .machineRuntime=${this.selectedMachineRuntime()} .actions=${this.getDefaultActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onBackToList=${() => { this.backToSettingsList(); }} .pluginSections=${this.plugins.getSettingsSections(selectedMachineId(state))} .pluginRuntimeContext=${this.createPluginRuntimeContext()} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }} ?reloadOnClose=${this.reloadAfterSettings} .onPluginsChanged=${() => { if (!this.settingsMachineFollowsToggles()) this.reloadAfterSettings = true; }} .onRefreshMachineRuntime=${async (machineId: string) => { await this.machines.refreshMachineRuntime(machineId, { requireSelected: false }); }} .machines=${this.shownMachines()} .machineAvailability=${Object.fromEntries(state.machines.map((machine) => [machine.id, this.machineProbes.view(machine)]))} .machinesForeground=${this.foregroundMachineList() === "settings"} .onMachinesVisibilityChange=${(owner: HTMLElement, visible: boolean) => { this.machineProbes.setVisible(owner, visible); }} .onAddMachine=${() => { this.openMachineDialog(); }} .pluginLoadFailures=${this.pluginLoadFailures} .onRenameMachine=${async (machine: Machine, name: string) => { await this.renameMachine(machine, name); }} .onRemoveMachine=${(machine: Machine) => { this.removeMachine(machine); }} .fleetReport=${this.shownFleetReport()} .fleetStatuses=${this.fleetStatuses} .instantActions=${this.instantActions.list()} .onRemovePiPackage=${(target: SettingsMachineTarget, source: string, scope: PiPackageScope) => { this.removePiPackage(target, source, scope); }} .onForgetPageAccess=${(entry: ApprovedMachineOrigin) => { this.forgetPageAccess(entry); }} ?fleetLoading=${this.fleetLoading} .fleetError=${this.fleetError} .onRefreshFleet=${() => this.refreshFleet()} .onRunFleet=${(operation: "restart", machineIds?: readonly string[]) => this.runFleetOperation(operation, machineIds)} .themes=${selectableThemeContributions(this.plugins.getThemes())} .selectedThemeId=${this.selectedThemePreferenceId()} .activeThemeId=${this.activeThemeId} ?followSystemTheme=${this.themePreference.auto} .onSelectTheme=${(themeId: QualifiedContributionId) => { this.selectTheme(themeId); }} .onToggleFollowSystem=${(follow: boolean) => { this.setFollowSystemTheme(follow); }} .sharedTheme=${this.sharedTheme} .sharedThemeError=${this.sharedThemeError} .onToggleSharedTheme=${(share: boolean) => { this.setSharedTheme(share); }} .notificationAvailability=${this.notificationsState.availability} .notificationsWanted=${this.notificationsState.wanted} .onToggleNotifications=${(wanted: boolean) => this.setTaskNotifications(wanted)} .onTestNotification=${() => this.sendTestNotification()}></settings-dialog>` : null}
         ${this.pluginDialogs.map((entry) => html`<div class=${PLUGIN_DIALOG_CLASS[entry.dialog.presentation ?? "overlay"]}><modal-surface .label=${entry.dialog.label} .onClose=${entry.close}>${entry.dialog.content}</modal-surface></div>`)}
       </div>
       ${this.renderNewSessionSheet()}

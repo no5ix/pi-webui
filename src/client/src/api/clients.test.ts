@@ -20,7 +20,6 @@ function piWebStatusResponse() {
       web: { component: "web", label: "PI WEB", available: true, stale: false },
       sessiond: { component: "sessiond", label: "PI WEB Session Daemon", available: true, stale: false },
     },
-    release: { packageName: "@gang-of-beads/pi-web", updateAvailable: false },
     commands: {},
     messages: [],
   };
@@ -61,7 +60,7 @@ describe("machine-scoped runtime API", () => {
   it("requests an uncached update check through the local status route", async () => {
     const fetchMock = stubJsonFetch(piWebStatusResponse());
 
-    await piWebApi.checkForUpdates();
+    await piWebApi.refreshStatus();
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchCall(fetchMock, 0)[0]).toBe("https://pi.example.test/api/pi-web/status?refresh=1");
@@ -71,7 +70,7 @@ describe("machine-scoped runtime API", () => {
   it("requests an uncached update check through the selected machine route", async () => {
     const fetchMock = stubJsonFetch(piWebStatusResponse());
 
-    await piWebApi.checkForUpdates("remote a");
+    await piWebApi.refreshStatus("remote a");
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchCall(fetchMock, 0)[0]).toBe("https://pi.example.test/api/machines/remote%20a/pi-web/status?refresh=1");

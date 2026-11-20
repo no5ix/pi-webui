@@ -58,8 +58,8 @@ import {
   SessionDaemonActiveAgentProfileProvider,
   type ActiveAgentProfileProvider,
 } from "./activeAgentProfileProvider.js";
-import { registerFleetRoutes } from "./updates/fleetRoutes.js";
-import { createRestartService, registerRestartRoutes } from "./updates/restartRoutes.js";
+import { registerFleetRoutes } from "./service/fleetRoutes.js";
+import { createRestartService, registerRestartRoutes } from "./service/restartRoutes.js";
 import { registerMachineProxyRoutes } from "./machines/machineProxyRoutes.js";
 import { registerPluginBackendProxyRoutes } from "./plugins/pluginBackendProxyRoutes.js";
 import { registerPluginOperationProxyRoutes } from "./plugins/pluginOperationProxyRoutes.js";
@@ -502,7 +502,7 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
 
   registerMachinePluginProxyRoutes(app, machines);
   // One service instance per concern, shared by the single-machine routes and
-  // the fleet fan-out, so "update this machine" and "update every machine"
+  // the fleet fan-out, so "restart this machine" and "restart every machine"
   // cannot drift into two different local behaviours.
   const installation = () => installationRestartCheck(sessionDaemon);
   const restartService = createRestartService(app.log, installation);

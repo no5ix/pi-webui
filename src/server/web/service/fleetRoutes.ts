@@ -1,13 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import type { Machine, MachineHealth, PiWebFleetOperation, PiWebFleetReport, PiWebFleetTargetOutcome, PiWebFleetTargetReport } from "../../../shared/apiTypes.js";
 import type { RestartService } from "./restartRoutes.js";
-import type { SelfUpdateService } from "./selfUpdateRoutes.js";
 import { isRecord } from "../../../shared/unknownValues.js";
 
 /**
  * Fleet operations, scoped to the machines this server knows.
  *
- * Restarting or updating "everything" used to depend on which session happened
+ * Restarting "everything" used to depend on which session happened
  * to be selected: the slash command ran inside the agent process of the session
  * machine and fanned out over *that* machine's list, so the same words covered
  * a different set of machines depending on where the caller was standing. The
@@ -33,7 +32,7 @@ export interface FleetMachines {
 
 /**
  * The one call a fan-out makes on a remote machine, narrowed to what it reads.
- * Restart and update reply 202 with the work detached; a refusal says why in
+ * A restart replies 202 with the work detached; a refusal says why in
  * the body's `error`, which the target's row shows.
  */
 export interface FleetMachineClient {
@@ -42,22 +41,18 @@ export interface FleetMachineClient {
 
 export interface FleetRouteDeps {
   restart?: RestartService;
-  selfUpdate?: SelfUpdateService;
   /** Identity of the server running the fan-out, for the report header. */
   hubName?: () => Promise<string>;
 }
 
-const REMOTE_PATHS: Record<PiWebFleetOperation, string> = {
-  restart: "/api/pi-web/restart",
-  update: "/api/pi-web/update/apply",
-};
+const RESTART_REMOTE_PATH = "/api/pi-web/restart";
 
 export function registerFleetRoutes(app: FastifyInstance, machines: FleetMachines, deps: FleetRouteDeps): void {
   app.get("/api/pi-web/fleet", async () => await fleetReport(machines, deps));
 
   app.post<{ Body: { operation?: unknown; machineIds?: unknown } | undefined }>("/api/pi-web/fleet/run", async (request, reply) => {
     const operation = parseOperation(request.body?.operation);
-    if (operation === undefined) return reply.code(400).send({ error: "operation must be \"restart\" or \"update\"" });
+    if (operation === undefined) return reply.code(400).send({ error: "operation must be \"restart\"" });
     const requested = parseMachineIds(request.body?.machineIds);
     const targets = await resolveTargets(machines, requested);
     if (targets.length === 0) return reply.code(404).send({ error: "no machines matched" });
@@ -136,12 +131,12 @@ async function runOnTarget(
 ): Promise<PiWebFleetTargetOutcome> {
   try {
     if (target.id === "local") {
-      await runLocally(deps, operation);
+      await runLocally(deps);
       return { machineId: target.id, name: target.name, started: true };
     }
     const client = await machines.remoteClient(target.id);
     if (client === undefined) return { machineId: target.id, name: target.name, started: false, error: "Machine not found" };
-    const response = await client.requestJson("POST", REMOTE_PATHS[operation], {});
+    const response = await client.requestJson("POST", RESTART_REMOTE_PATH, {});
     const started = response.statusCode >= 200 && response.statusCode < 300;
     return started
       ? { machineId: target.id, name: target.name, started: true }
@@ -151,14 +146,9 @@ async function runOnTarget(
   }
 }
 
-async function runLocally(deps: FleetRouteDeps, operation: PiWebFleetOperation): Promise<void> {
-  if (operation === "restart") {
-    if (deps.restart === undefined) throw new Error("Restart is unavailable on this host");
-    await deps.restart.restart();
-    return;
-  }
-  if (deps.selfUpdate === undefined) throw new Error("Self-update is unavailable on this host");
-  await deps.selfUpdate.apply();
+async function runLocally(deps: FleetRouteDeps): Promise<void> {
+  if (deps.restart === undefined) throw new Error("Restart is unavailable on this host");
+  await deps.restart.restart();
 }
 
 function refusalOf(body: unknown): string | undefined {
@@ -167,7 +157,7 @@ function refusalOf(body: unknown): string | undefined {
 }
 
 function parseOperation(value: unknown): PiWebFleetOperation | undefined {
-  return value === "restart" || value === "update" ? value : undefined;
+  return value === "restart" ? value : undefined;
 }
 
 function parseMachineIds(value: unknown): string[] | undefined {

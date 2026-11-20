@@ -35,8 +35,7 @@ describe("buildApp machine routes", () => {
           web: { component: "web", label: "Remote Web", stale: false, available: true },
           sessiond: { component: "sessiond", label: "Remote Sessiond", stale: false, available: true },
         },
-        release: { packageName: "@gang-of-beads/pi-web", updateAvailable: false },
-        commands: { update: "", restart: "", restartSystemd: "", restartDev: "" },
+            commands: { update: "", restart: "", restartSystemd: "", restartDev: "" },
         messages: [],
       },
     });
