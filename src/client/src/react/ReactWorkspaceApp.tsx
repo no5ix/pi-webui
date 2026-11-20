@@ -11,6 +11,8 @@ import type { CompletionItem } from "../components/shared";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
+import { summarizeReactActivity } from "../chatGroups";
+import type { ChatLine } from "../chatTypes";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
@@ -626,7 +628,34 @@ export function ReactWorkspaceApp() {
             if (transcript !== null) olderPageAnchorRef.current = { scopeKey: transcriptScopeKey, scrollTop: transcript.scrollTop, scrollHeight: transcript.scrollHeight };
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
-          {data.messages.map((message, index) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
+          {(() => {
+            const rendered: React.ReactNode[] = [];
+            let activity: ChatLine[] = [];
+            let activityStart = 0;
+            const flushActivity = () => {
+              if (activity.length === 0) return;
+              const messages = activity;
+              rendered.push(<details className="rw-activity-group" key={`activity-${activityStart}`}>
+                <summary><Icon name="layers"/><strong>{summarizeReactActivity(messages)}</strong><small>{messages.length} messages · Show details</small></summary>
+                <div className="rw-activity-group-content">{messages.map((item, offset) => <ConversationMessage key={item.meta?.entryId ?? item.meta?.clientMessageId ?? activityStart + offset} message={item} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div>
+              </details>);
+              activity = [];
+            };
+            data.messages.forEach((message, index) => {
+              const compactable = (message.role === "assistant" && message.parts.some(part => part.type === "thinking" || part.type === "toolCall" || part.type === "toolExecution")) ||
+                (message.role === "tool" && message.parts.some(part => part.type === "toolResult")) ||
+                (message.role === "bash" && message.parts.some(part => part.type === "text"));
+              if (compactable) {
+                if (activity.length === 0) activityStart = index;
+                activity.push(message);
+              } else {
+                flushActivity();
+                rendered.push(<ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>);
+              }
+            });
+            flushActivity();
+            return rendered;
+          })()}
         </div>
         <div className="rw-chat-dock">
           {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
