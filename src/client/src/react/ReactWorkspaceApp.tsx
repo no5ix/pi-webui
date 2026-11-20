@@ -352,7 +352,7 @@ export function ReactWorkspaceApp() {
     }
     previousPageStartRef.current = pageStart;
   }, [data.messages, data.state.messagePageStart, transcriptScopeKey]);
-  const subagentExecutions = useMemo(() => data.messages.flatMap(message => message.parts).filter((part): part is Extract<typeof part, { type: "toolExecution" | "toolCall" }> => (part.type === "toolExecution" || part.type === "toolCall") && part.toolName.toLowerCase().includes("subagent")), [data.messages]);
+
   useEffect(() => {
     gitOperationSequence.current += 1;
     setGitOperation(undefined);
