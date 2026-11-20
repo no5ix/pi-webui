@@ -11,6 +11,8 @@ import type { CompletionItem } from "../components/shared";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
+import { groupChatMessages } from "../chatGroups";
+import type { ChatLine } from "../chatTypes";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
@@ -26,14 +28,14 @@ import { projectActionIsPending, sessionActionIsPending } from "./reactInstantAc
 import { gitCanCommit, gitChangeGroups, gitChangeLabel } from "./gitPresentation";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals";
+type WorkbenchTab = "Git" | "Files" | "Terminal" | "Goals" | "Subagents" | "Background Runs" | "Edited Files";
 interface ReactWorkspaceScope {
   readonly projectId: string | undefined;
   readonly workspaceId: string | undefined;
   readonly machineId: string;
 }
 
-const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals"];
+const tabs: WorkbenchTab[] = ["Git", "Files", "Terminal", "Goals", "Subagents", "Background Runs", "Edited Files"];
 const GIT_REMOTE_REQUEST_TIMEOUT_MS = 130_000;
 export function ReactWorkspaceApp() {
   const data = useReactWorkspaceData();
@@ -89,6 +91,7 @@ export function ReactWorkspaceApp() {
   const [rightWidth, setRightWidth] = useState(402);
   const [leftOpen, setLeftOpen] = useState(!narrowScreen);
   const [rightOpen, setRightOpen] = useState(!narrowScreen);
+  const [selectedEditedFile, setSelectedEditedFile] = useState<string>();
   const [expanded, setExpanded] = useState<string[]>([]);
   const [showMoreByProject, setShowMoreByProject] = useState<Record<string, boolean>>({});
   const [composerFocused, setComposerFocused] = useState(false);
@@ -320,11 +323,16 @@ export function ReactWorkspaceApp() {
   const isWorking = data.sessionStatus?.isStreaming === true || data.sessionStatus?.isCompacting === true || data.sessionStatus?.isBashRunning === true || data.sessionStatus?.isStopping === true;
   const promptHistoryKey = data.selectedSession === undefined ? undefined : machineSessionKey(data.state.selectedMachine?.id ?? "local", data.selectedSession.id);
   const editedFiles = useMemo(() => editedFilesFromMessages(data.messages), [data.messages]);
+  const activityGroups = useMemo(() => groupChatMessages(data.messages), [data.messages]);
+  const subagentRecords = useMemo(() => collectToolRecords(data.messages, /subagent/i), [data.messages]);
+  const backgroundRecords = useMemo(() => collectToolRecords(data.messages, /background/i), [data.messages]);
+  const editedFileDiffs = useMemo(() => collectEditedFileDiffs(data.messages), [data.messages]);
   const transcriptScopeKey = JSON.stringify([data.state.selectedMachine?.id ?? "local", data.selectedSession?.id]);
   useLayoutEffect(() => {
     followTranscriptRef.current = true;
     setShowTranscriptJump(false);
     olderPageAnchorRef.current = undefined;
+    setSelectedEditedFile(undefined);
     const transcript = transcriptRef.current;
     if (transcript !== null) transcript.scrollTop = transcript.scrollHeight;
   }, [transcriptScopeKey]);
@@ -607,7 +615,7 @@ export function ReactWorkspaceApp() {
         <header className="rw-conversation-header">
           <button className="rw-icon-button" aria-label={leftOpen ? "Collapse sidebar" : "Expand sidebar"} onClick={() => setLeftOpen(v => !v)}><Icon name="panel-left"/></button>
           <div className="rw-session-heading"><strong>{data.selectedSession === undefined ? "No session selected" : data.selectedSession.name?.trim() || data.selectedSession.firstMessage || "Untitled session"}</strong><span>{data.selectedProject?.name ?? "Select a project"}</span></div>
-          <div className="rw-header-actions"><SessionActionsMenu session={data.selectedSession} machineId={selectedMachineId} pending={selectedSessionActionPending} rename={name => data.selectedSession ? data.renameSession(data.selectedSession, name) : Promise.resolve()} archive={(session, machineId) => data.archiveSession(session, machineId)} restore={(session, machineId) => data.restoreSession(session, machineId)} deleteArchived={(session, machineId) => data.deleteArchivedSession(session, machineId)}/><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button></div>
+          <div className="rw-header-actions"><button className="rw-activity-shortcut" title="Subagents" aria-label={`Subagents (${subagentRecords.length})`} disabled={!data.selectedSession} onClick={() => { setActiveTab("Subagents"); setRightOpen(true); }}><Icon name="bot"/><span>{subagentRecords.length}</span></button><button className="rw-activity-shortcut" title="Background Runs" aria-label={`Background Runs (${backgroundRecords.length})`} disabled={!data.selectedSession} onClick={() => { setActiveTab("Background Runs"); setRightOpen(true); }}><Icon name="activity"/><span>{backgroundRecords.length}</span></button><button className="rw-activity-shortcut" title="Edited Files" aria-label={`Edited Files (${editedFiles.length})`} disabled={!data.selectedSession} onClick={() => { setActiveTab("Edited Files"); setRightOpen(true); }}><Icon name="file-text"/><span>{editedFiles.length}</span></button><SessionActionsMenu session={data.selectedSession} machineId={selectedMachineId} pending={selectedSessionActionPending} rename={name => data.selectedSession ? data.renameSession(data.selectedSession, name) : Promise.resolve()} archive={(session, machineId) => data.archiveSession(session, machineId)} restore={(session, machineId) => data.restoreSession(session, machineId)} deleteArchived={(session, machineId) => data.deleteArchivedSession(session, machineId)}/><button title={rightOpen ? "Collapse workbench" : "Open workbench"} aria-label={rightOpen ? "Collapse workbench" : "Open workbench"} onClick={() => setRightOpen(value => !value)}><Icon name="panel-right"/></button></div>
         </header>
         {data.state.activity && <div className="rw-subagents"><div className="rw-activity-line"><i className={data.state.activity.phase === "active" ? "rw-dot green" : "rw-dot"}/><strong>{data.state.activity.label}</strong><span>{data.state.activity.detail}</span></div></div>}
         <div className="rw-transcript" ref={transcriptRef} onScroll={event => {
@@ -626,7 +634,7 @@ export function ReactWorkspaceApp() {
             if (transcript !== null) olderPageAnchorRef.current = { scopeKey: transcriptScopeKey, scrollTop: transcript.scrollTop, scrollHeight: transcript.scrollHeight };
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
-          {data.messages.map((message, index) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? index} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
+          {activityGroups.map((group, index) => group.kind === "group" ? <details className="rw-activity-group" key={"activity-" + group.startIndex}><summary><Icon name="layers"/><strong>{summarizeActivityGroup(group.messages)}</strong><small>{group.messages.length} messages · Click to expand</small></summary><div className="rw-activity-group-content">{group.messages.map((message, messageIndex) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? (group.startIndex + "-" + messageIndex)} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div></details> : <ConversationMessage key={group.message.meta?.entryId ?? group.message.meta?.clientMessageId ?? group.index ?? index} message={group.message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
           {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
@@ -664,7 +672,7 @@ export function ReactWorkspaceApp() {
       </main>
       {rightOpen && <button className="rw-resize rw-resize-right" aria-label="Resize workbench" onPointerDown={e => startResize("right", e)}/>}
       <aside className="rw-workbench">
-        <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
+        <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} title={tab} aria-label={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}><Icon name={tab === "Git" ? "git-branch" : tab === "Files" ? "folder" : tab === "Terminal" ? "terminal" : tab === "Goals" ? "target" : tab === "Subagents" ? "bot" : tab === "Background Runs" ? "activity" : "file-text"}/></button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
         {activeTab === "Files" ? <WorkspaceFilesPanel
           files={workspaceFiles}
           rootLabel={data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "Workspace"}
