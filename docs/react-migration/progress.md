@@ -19,6 +19,7 @@ The Lit application (`src/client/src/main.ts`) is no longer an entry point, and 
 | Settings dialog (floating, gear button) with eight pages | Implemented — needs verification | `ReactSettingsDialog.tsx` |
 | Settings → MCP Servers: add and edit | Implemented — needs verification | `react/McpSettingsPanel.tsx`, `react/mcpForm.ts`, `piMcpService.save`; 121 tests across six files green on 2026-11-20 |
 | Settings → Notifications: ntfy form and test delivery | Implemented — needs verification | `react/NotificationsSettingsPanel.tsx`, `notifications/ntfyForm.ts` (shared with the Lit page); panel tests green |
+| Parity ledger status vocabulary | Done | Every ledger row now uses `Not implemented`, `Partially implemented`, `Implemented — needs verification`, `Verified`, or `Intentionally removed` |
 | Conversation rendering, streaming, composer | Partially implemented | parity ledger rows; `ConversationMessage.tsx` exists, composer/attachment/pagination work not finished |
 | Plugin UI in React | Not implemented | no `plugins/registry` import anywhere under `src/client/src/react/` |
 | Lit removal | Blocked by plugin UI and the composer | see the plan below |
@@ -86,11 +87,29 @@ adapter, then render the workspace panels of the `files` plugin through it, with
 
 ## Verification record
 
+- 2026-11-20: `pnpm run verify` exit 0 over the MCP and notifications milestone — typecheck, lint, Knip
+  and Vitest all clean; 689 test files, 6056 tests passed, 5 skipped. The baseline on the same branch
+  before the milestone was 685 files and 5984 tests.
+- 2026-11-20: `pnpm run build` exit 0 (a first attempt failed in `pnpm run clean` with `ENOTEMPTY` on
+  `dist` because a dev stack was writing into it; the retry was clean).
 - 2026-11-20: `npx vitest run` over the MCP and notifications files: 6 files, 121 tests, all passing.
-- 2026-11-20: `pnpm run build` exit 0. The chunk-size warning for the main React chunk (~940 kB) is
-  open work: it must be split, not silenced.
-- `pnpm run verify` (typecheck, lint, Knip, Vitest) is run per milestone; record the exit code and the
-  test count here as each milestone lands.
+- NOT run: the live browser flows for MCP add/edit and ntfy configuration. To run them:
+  `scripts/stack-8505.sh up` (own data dir on port 8505), then drive the React settings dialog at
+  1440px and 393x850 and watch the browser console. A check must fail loudly on a missing session
+  daemon rather than pass empty.
+- The chunk-size warning for the main React chunk (~940 kB) is open work: it must be split, not silenced.
+
+## Exact next action
+
+The largest unstarted feature is the plugin UI contract: the public browser API is `src/plugin-api.ts`
+(1342 lines) and its contributions return Lit `TemplateResult` values, so a React host must render them
+through `lit/html`'s `render()` into a container it owns. Start with a `react/PluginSurface.tsx` that
+mounts one contribution, isolates a throwing plugin, and cleans up on unmount; test it in
+`src/client/src/react/PluginSurface.test.ts` (happy-dom, `createElement` style — Vitest collects
+`src/**/*.test.ts` only, so React DOM tests must be `.test.ts` files, not `.tsx`), then wire the
+settings plugin sections, workspace panels, conversation renderers and composer actions in that order.
+Lit cannot be removed before that surface exists, because 121 files under `src/client/src` import `lit`
+and the bundled plugins render through it.
 
 ## Test conventions this project uses
 
