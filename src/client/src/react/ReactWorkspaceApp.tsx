@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { capturePromptAttachments, type CapturedAttachment } from "../promptAttachmentCapture";
 import { readBlobAsBase64 } from "../sentImages";
-import { filesApi, requestPluginBackend, sessionsApi, workspacesApi, type FileTreeEntry } from "../api";
+import { filesApi, requestPluginBackend, sessionsApi } from "../api";
 import { readPluginManifest } from "../plugins/external";
 import { detectPromptCompletionTrigger, fileCompletionInsertText, modelCompletionChoices, asksExtensionCompletion } from "../promptCompletions";
 import { historyIndexStep, loadPromptHistory, recallPromptHistoryAttachments, rememberPromptHistory, type HistoryDirection } from "../promptHistory";
@@ -14,8 +14,9 @@ import { ConversationMessage, editedFilesFromMessages } from "./ConversationMess
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
 import { ReactTerminalPanel } from "./ReactTerminalPanel";
-import { WorkspaceFileTree } from "./WorkspaceFileTree";
-import { WorkspaceCodeEditor } from "./WorkspaceCodeEditor";
+import { useWorkspaceFiles } from "./useWorkspaceFiles";
+import { WorkspaceFilesPanel } from "./WorkspaceFilesPanel";
+import { WorkspaceUnsavedDialog } from "./WorkspaceFileDialogs";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import { SessionActionsMenu } from "./SessionActionsMenu";
 import { AddProjectDialog } from "./AddProjectDialog";
@@ -76,7 +77,6 @@ export function ReactWorkspaceApp() {
     const current = selectedScopeRef.current;
     return current.projectId === scope.projectId && current.workspaceId === scope.workspaceId && current.machineId === scope.machineId;
   };
-  const scopeHasWorkspace = (scope: ReactWorkspaceScope): scope is ReactWorkspaceScope & { projectId: string; workspaceId: string } => scope.projectId !== undefined && scope.workspaceId !== undefined;
   const narrowScreen = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches;
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("Files");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -101,40 +101,15 @@ export function ReactWorkspaceApp() {
   const promptHistoryRef = useRef<{ key: string | undefined; index: number | undefined; draft: string }>({ key: undefined, index: undefined, draft: "" });
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
-  const [fileFilter, setFileFilter] = useState("");
-  const [fileSearchResults, setFileSearchResults] = useState<Awaited<ReturnType<typeof filesApi.files>>>([]);
-  const [fileSearchScopeKey, setFileSearchScopeKey] = useState("");
-  const [fileSearchLoading, setFileSearchLoading] = useState(false);
-  const [fileSearchLoadingScopeKey, setFileSearchLoadingScopeKey] = useState("");
-  const [fileUploadDirectory, setFileUploadDirectory] = useState("");
-  const [fileTreeEntries, setFileTreeEntries] = useState<Record<string, readonly FileTreeEntry[]>>({});
-  const [fileTreeEntriesScopeKey, setFileTreeEntriesScopeKey] = useState("");
-  const [fileTreeExpanded, setFileTreeExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [fileTreeLoading, setFileTreeLoading] = useState<ReadonlySet<string>>(new Set());
-  const [fileTreeError, setFileTreeError] = useState<string>();
-  const [fileTreeErrorScopeKey, setFileTreeErrorScopeKey] = useState("");
-  const visibleFileTreeEntries = fileTreeEntriesScopeKey === selectedScopeKey ? fileTreeEntries : {};
-  const visibleFileTreeExpanded = fileTreeEntriesScopeKey === selectedScopeKey ? fileTreeExpanded : new Set<string>();
-  const visibleFileTreeLoadingPaths = fileTreeEntriesScopeKey === selectedScopeKey ? fileTreeLoading : data.selectedWorkspace === undefined ? new Set<string>() : new Set([""]);
-  const visibleFileSearchResults = fileSearchScopeKey === selectedScopeKey ? fileSearchResults : [];
-  const visibleFileSearchLoading = fileSearchLoadingScopeKey === selectedScopeKey && fileSearchLoading;
-  const visibleFileTreeError = fileTreeErrorScopeKey === selectedScopeKey ? fileTreeError : undefined;
-  const fileUploadDirectoryForScope = fileTreeEntriesScopeKey === selectedScopeKey ? fileUploadDirectory : "";
-  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const workspaceFiles = useWorkspaceFiles({ projectId: data.selectedWorkspace?.projectId, workspaceId: data.selectedWorkspace?.id, machineId: selectedMachineId });
+  const [pendingScopeChange, setPendingScopeChange] = useState<{ readonly description: string; readonly run: () => void }>();
+  const [scopeChangeBusy, setScopeChangeBusy] = useState(false);
+  const [scopeChangeError, setScopeChangeError] = useState<string>();
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<CapturedAttachment[]>([]);
   const historyRecallRef = useRef(0);
-  const fileReadRequestRef = useRef(0);
   const [attachmentError, setAttachmentError] = useState<string>();
   const [attaching, setAttaching] = useState(false);
-  const [fileDraft, setFileDraft] = useState("");
-  const [fileDirty, setFileDirty] = useState(false);
-  const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
-  const fileDrafts = useRef(new Map<string, { content: string; dirty: boolean }>());
-  const fileDraftRef = useRef("");
-  const hasUnsavedFiles = fileDirty || [...fileDrafts.current.values()].some(draft => draft.dirty);
-  const [fileSaving, setFileSaving] = useState(false);
-  const [fileDeleting, setFileDeleting] = useState(false);
   const [gitRefresh, setGitRefresh] = useState(0);
   const [gitStatus, setGitStatus] = useState<GitStatusResponse>();
   const [gitStatusScopeKey, setGitStatusScopeKey] = useState("");
@@ -171,30 +146,66 @@ export function ReactWorkspaceApp() {
     sessions: row.sessions.map(session => ({ id: session.id, name: session.name?.trim() || session.firstMessage || "New session", session })),
     unknown: row.unknown,
   }));
-  const selectProject = (id: string) => {
-    const changesProject = data.selectedProject?.id !== id;
-    if (changesProject && hasUnsavedFiles && !window.confirm("Discard unsaved file edits and switch projects?")) return;
-    if (changesProject) {
-      setFileDirty(false);
-      fileDrafts.current.clear();
-      setOpenFilePaths([]);
+  const runScopeChange = (description: string, run: () => void) => {
+    if (!workspaceFiles.hasUnsavedChanges) {
+      run();
+      return;
     }
-    void data.selectProject(id);
-    setExpanded(current => current.includes(id) ? current : [...current, id]);
+    setScopeChangeError(undefined);
+    setPendingScopeChange({ description, run });
+  };
+  const saveThenScopeChange = async () => {
+    const pending = pendingScopeChange;
+    if (pending === undefined || scopeChangeBusy) return;
+    setScopeChangeBusy(true);
+    setScopeChangeError(undefined);
+    try {
+      const summary = await workspaceFiles.saveAll();
+      if (summary.failed > 0 || summary.conflicts > 0) {
+        setScopeChangeError(summary.conflicts > 0
+          ? "Some files changed on disk since they were opened. Resolve those files before leaving."
+          : "Some files could not be saved. Your drafts are still here; cancel to keep editing.");
+        return;
+      }
+      setPendingScopeChange(undefined);
+      pending.run();
+    } finally {
+      setScopeChangeBusy(false);
+    }
+  };
+  const discardThenScopeChange = () => {
+    const pending = pendingScopeChange;
+    if (pending === undefined) return;
+    workspaceFiles.discardAll();
+    setPendingScopeChange(undefined);
+    setScopeChangeError(undefined);
+    pending.run();
+  };
+  const selectProject = (id: string) => {
+    runScopeChange("Switching projects will discard unsaved file edits.", () => {
+      void data.selectProject(id);
+      setExpanded(current => current.includes(id) ? current : [...current, id]);
+    });
   };
   const selectSession = (projectId: string, sessionId: string) => {
     const session = data.projects.flatMap(row => row.sessions).find(item => item.id === sessionId);
-    const changesFileScope = data.selectedProject?.id !== projectId || session?.cwd !== data.selectedWorkspace?.path;
-    if (changesFileScope && hasUnsavedFiles && !window.confirm("Discard unsaved file edits and switch workspace?")) return;
-    if (session !== undefined) {
-      if (changesFileScope) {
-        setFileDirty(false);
-        fileDrafts.current.clear();
-        setOpenFilePaths([]);
-      }
+    if (session === undefined) return;
+    const changesFileScope = data.selectedProject?.id !== projectId || session.cwd !== data.selectedWorkspace?.path;
+    if (!changesFileScope) {
       void data.selectSession(session);
+      return;
     }
+    runScopeChange("Switching workspaces will discard unsaved file edits.", () => { void data.selectSession(session); });
   };
+  useEffect(() => {
+    if (!workspaceFiles.hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [workspaceFiles.hasUnsavedChanges]);
   const addAttachments = async (files: File[]) => {
     if (files.length === 0) return;
     setAttaching(true);
@@ -331,26 +342,6 @@ export function ReactWorkspaceApp() {
   }, [data.messages, data.state.messagePageStart, transcriptScopeKey]);
   const subagentExecutions = useMemo(() => data.messages.flatMap(message => message.parts).filter((part): part is Extract<typeof part, { type: "toolExecution" | "toolCall" }> => (part.type === "toolExecution" || part.type === "toolCall") && part.toolName.toLowerCase().includes("subagent")), [data.messages]);
   useEffect(() => {
-    if (data.selectedFile !== undefined) {
-      const cached = fileDrafts.current.get(data.selectedFile.path);
-      const content = cached?.content ?? data.selectedFile.content;
-      fileDraftRef.current = content;
-      setFileDraft(content);
-      setFileDirty(cached?.dirty ?? false);
-      setOpenFilePaths(current => current.includes(data.selectedFile!.path) ? current : [...current, data.selectedFile!.path]);
-    } else {
-      fileDraftRef.current = "";
-      setFileDraft("");
-      setFileDirty(false);
-    }
-  }, [data.selectedFile?.path, data.selectedFile?.modifiedAt]);
-
-  useEffect(() => {
-    fileDrafts.current.clear();
-    setOpenFilePaths([]);
-  }, [data.selectedProject?.id, data.selectedWorkspace?.id, data.state.selectedMachine?.id]);
-
-  useEffect(() => {
     gitOperationSequence.current += 1;
     setGitOperation(undefined);
     setGitOperationScopeKey(selectedScopeKey);
@@ -359,215 +350,6 @@ export function ReactWorkspaceApp() {
     setGitOperationError(undefined);
     setGitOperationErrorScopeKey(selectedScopeKey);
   }, [data.selectedProject?.id, data.selectedWorkspace?.id, data.state.selectedMachine?.id]);
-
-  useEffect(() => {
-    const project = data.selectedProject;
-    const workspace = data.selectedWorkspace;
-    const machineId = data.state.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, project?.id, workspace?.id]);
-    setFileTreeEntries({});
-    setFileTreeEntriesScopeKey(scopeKey);
-    setFileTreeExpanded(new Set());
-    setFileUploadDirectory("");
-    setFileTreeError(undefined);
-    setFileTreeErrorScopeKey(scopeKey);
-    setFileTreeLoading(project !== undefined && workspace !== undefined ? new Set([""]) : new Set());
-    if (project === undefined || workspace === undefined) return;
-    let active = true;
-    void workspacesApi.workspaceTree(project.id, workspace.id, "", machineId).then(tree => {
-      if (active) {
-        setFileTreeEntries({ "": tree.entries });
-        setFileTreeEntriesScopeKey(scopeKey);
-      }
-    }).catch(error => {
-      if (active) {
-        setFileTreeError(error instanceof Error ? error.message : String(error));
-        setFileTreeErrorScopeKey(scopeKey);
-      }
-    }).finally(() => {
-      if (active) setFileTreeLoading(new Set());
-    });
-    return () => { active = false; };
-  }, [data.selectedProject?.id, data.selectedWorkspace?.id, data.state.selectedMachine?.id]);
-
-  useEffect(() => {
-    const query = fileFilter.trim();
-    const project = data.selectedProject;
-    const workspace = data.selectedWorkspace;
-    const machineId = data.state.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, project?.id, workspace?.id]);
-    if (query === "" || project === undefined || workspace === undefined) {
-      setFileSearchResults([]);
-      setFileSearchScopeKey(scopeKey);
-      setFileSearchLoading(false);
-      setFileSearchLoadingScopeKey(scopeKey);
-      return;
-    }
-    let active = true;
-    setFileSearchLoading(true);
-    setFileSearchLoadingScopeKey(scopeKey);
-    setFileTreeError(undefined);
-    setFileTreeErrorScopeKey(scopeKey);
-    void filesApi.files(query, { projectId: project.id, workspaceId: workspace.id, machineId, mode: "file", scope: "all" }).then(results => {
-      if (active) {
-        setFileSearchResults(results);
-        setFileSearchScopeKey(scopeKey);
-      }
-    }).catch(error => {
-      if (active) {
-        setFileTreeError(error instanceof Error ? error.message : String(error));
-        setFileTreeErrorScopeKey(scopeKey);
-      }
-    }).finally(() => {
-      if (active) setFileSearchLoading(false);
-    });
-    return () => { active = false; };
-  }, [fileFilter, data.selectedProject?.id, data.selectedWorkspace?.id, data.state.selectedMachine?.id]);
-
-  const toggleFileDirectory = (entry: FileTreeEntry) => {
-    if (fileTreeExpanded.has(entry.path)) {
-      setFileTreeExpanded(current => new Set([...current].filter(path => path !== entry.path)));
-      if (fileUploadDirectory === entry.path || fileUploadDirectory.startsWith(`${entry.path}/`)) {
-        setFileUploadDirectory(entry.path.split("/").slice(0, -1).join("/"));
-      }
-      return;
-    }
-    setFileTreeExpanded(current => new Set([...current, entry.path]));
-    setFileUploadDirectory(entry.path);
-    if (visibleFileTreeEntries[entry.path] !== undefined) return;
-    const scope = selectedScopeRef.current;
-    if (!scopeHasWorkspace(scope)) return;
-    const scopeKey = JSON.stringify([scope.machineId, scope.projectId, scope.workspaceId]);
-    setFileTreeLoading(current => new Set([...current, entry.path]));
-    void workspacesApi.workspaceTree(scope.projectId, scope.workspaceId, entry.path, scope.machineId).then(tree => {
-      if (scopeIsCurrent(scope)) {
-        setFileTreeEntries(current => ({ ...(fileTreeEntriesScopeKey === scopeKey ? current : {}), [entry.path]: tree.entries }));
-        setFileTreeEntriesScopeKey(scopeKey);
-      }
-    }).catch(error => {
-      if (scopeIsCurrent(scope)) {
-        setFileTreeError(error instanceof Error ? error.message : String(error));
-        setFileTreeErrorScopeKey(scopeKey);
-      }
-    }).finally(() => {
-      if (scopeIsCurrent(scope)) {
-        setFileTreeLoading(current => new Set([...current].filter(path => path !== entry.path)));
-      }
-    });
-  };
-
-  const refreshFileTreeDirectory = (path: string) => {
-    const scope = selectedScopeRef.current;
-    if (!scopeHasWorkspace(scope)) return;
-    const scopeKey = JSON.stringify([scope.machineId, scope.projectId, scope.workspaceId]);
-    setFileTreeLoading(current => new Set([...current, path]));
-    void workspacesApi.workspaceTree(scope.projectId, scope.workspaceId, path, scope.machineId).then(tree => {
-      if (scopeIsCurrent(scope)) {
-        setFileTreeEntries(current => ({ ...(fileTreeEntriesScopeKey === scopeKey ? current : {}), [path]: tree.entries }));
-        setFileTreeEntriesScopeKey(scopeKey);
-      }
-    }).catch(error => {
-      if (scopeIsCurrent(scope)) {
-        setFileTreeError(error instanceof Error ? error.message : String(error));
-        setFileTreeErrorScopeKey(scopeKey);
-      }
-    }).finally(() => {
-      if (scopeIsCurrent(scope)) {
-        setFileTreeLoading(current => new Set([...current].filter(item => item !== path)));
-      }
-    });
-  };
-
-  const uploadWorkspaceFile = async (file: File) => {
-    if (fileSaving || fileDeleting) return;
-    const scope = selectedScopeRef.current;
-    if (!scopeHasWorkspace(scope)) return;
-    const directory = fileUploadDirectoryForScope;
-    try {
-      await data.uploadFile(file, directory);
-      if (scopeIsCurrent(scope)) refreshFileTreeDirectory(directory);
-    } catch {
-      return;
-    }
-  };
-
-  const createWorkspaceFile = async () => {
-    if (fileSaving || fileDeleting) return;
-    const name = window.prompt("New file name")?.trim();
-    if (name === undefined || name === "") return;
-    if (name === "." || name === ".." || name.includes("/") || name.includes("\\")) {
-      setFileTreeError("Enter a file name without path separators.");
-      setFileTreeErrorScopeKey(selectedScopeKey);
-      return;
-    }
-    if (fileDirty && !window.confirm("Discard your unsaved edits and open a new file?")) return;
-    setFileDirty(false);
-    const scope = selectedScopeRef.current;
-    if (!scopeHasWorkspace(scope)) return;
-    const path = [fileUploadDirectoryForScope, name].filter(Boolean).join("/");
-    try {
-      await data.createFile(path);
-      if (!scopeIsCurrent(scope)) return;
-      refreshFileTreeDirectory(fileUploadDirectoryForScope);
-      await data.loadFile(path);
-    } catch {
-      return;
-    }
-  };
-
-  const deleteSelectedFile = async () => {
-    const selectedFile = data.selectedFile;
-    if (fileSaving || fileDeleting) return;
-    if (selectedFile === undefined || !window.confirm(`Delete ${selectedFile.path}?${fileDirty ? " Unsaved edits will be discarded." : ""} This cannot be undone.`)) return;
-    const scope = selectedScopeRef.current;
-    const parent = selectedFile.path.split("/").slice(0, -1).join("/");
-    setFileDeleting(true);
-    try {
-      await data.deleteFile(selectedFile.path);
-      if (!scopeIsCurrent(scope)) return;
-      refreshFileTreeDirectory(parent);
-      fileDrafts.current.delete(selectedFile.path);
-      const remaining = openFilePaths.filter(path => path !== selectedFile.path);
-      setOpenFilePaths(remaining);
-      setFileDirty(false);
-      const next = remaining.at(-1);
-      if (next === undefined) void data.loadDirectory(data.filePath);
-      else void data.loadFile(next);
-    } catch {
-      return;
-    } finally {
-      setFileDeleting(false);
-    }
-  };
-
-  const selectWorkspaceFile = (path: string) => {
-    if (fileSaving || fileDeleting || data.selectedFile?.path === path) return;
-    if (data.selectedFile !== undefined) fileDrafts.current.set(data.selectedFile.path, { content: fileDraft, dirty: fileDirty });
-    setOpenFilePaths(current => current.includes(path) ? current : [...current, path]);
-    void data.loadFile(path);
-  };
-
-  const closeWorkspaceFile = () => {
-    if (fileSaving || fileDeleting) return;
-    if (fileDirty && !window.confirm("Discard your unsaved edits and close this file?")) return;
-    const path = data.selectedFile?.path;
-    if (path === undefined) return;
-    fileDrafts.current.delete(path);
-    const remaining = openFilePaths.filter(item => item !== path);
-    setOpenFilePaths(remaining);
-    setFileDirty(false);
-    const next = remaining.at(-1);
-    if (next === undefined) void data.loadDirectory(data.filePath);
-    else void data.loadFile(next);
-  };
-
-  const changeFileDraft = (content: string) => {
-    if (fileSaving || fileDeleting) return;
-    fileDraftRef.current = content;
-    setFileDraft(content);
-    setFileDirty(true);
-    if (data.selectedFile !== undefined) fileDrafts.current.set(data.selectedFile.path, { content, dirty: true });
-  };
 
   useEffect(() => {
     const workspace = data.selectedWorkspace;
@@ -706,26 +488,6 @@ export function ReactWorkspaceApp() {
     })();
     return () => { active = false; };
   }, [composerCursor, data.draft, data.selectedProject?.id, data.selectedSession?.id, data.selectedSession?.cwd, data.selectedWorkspace?.id, data.sessionStatus?.extensionUi?.completion?.triggerCharacters, data.state.selectedMachine?.id]);
-
-  const saveOpenFile = async () => {
-    if (data.selectedFile === undefined || !fileDirty || data.selectedFile.binary || data.selectedFile.truncated) return;
-    const path = data.selectedFile.path;
-    const content = fileDraft;
-    const scope = selectedScopeRef.current;
-    setFileSaving(true);
-    try {
-      await data.saveFile(path, content);
-      if (!scopeIsCurrent(scope)) return;
-      const latest = fileDraftRef.current;
-      const dirty = latest !== content;
-      setFileDirty(dirty);
-      fileDrafts.current.set(path, { content: latest, dirty });
-    } catch {
-      // The data adapter keeps the server error visible above the file list.
-    } finally {
-      setFileSaving(false);
-    }
-  };
 
   const performGitOperation = async (mutation: GitMutation) => {
     const workspace = data.selectedWorkspace;
@@ -871,7 +633,7 @@ export function ReactWorkspaceApp() {
           </div>}
           <details className="rw-disclosure"><summary><Icon name="bot"/><strong>Subagents</strong><span>({subagentExecutions.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{subagentExecutions.length === 0 ? "No subagent-named tool activity is recorded in this session." : subagentExecutions.map((part, index) => <div key={index}>{part.toolName}: {part.summary}{part.type === "toolExecution" ? ` · ${part.status}` : " · running"}</div>)}</div></details>
           <details className="rw-disclosure"><summary><Icon name="activity"/><strong>Background Runs</strong><span>({backgroundCount})</span><small>Show details</small></summary><div className="rw-disclosure-content">{backgroundCount === 0 ? "No background runs are reported." : "The session status reports the active count; this API response does not include individual process details."}</div></details>
-          <details className="rw-disclosure"><summary><Icon name="file-text"/><strong>Edited Files</strong><span>({editedFiles.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{editedFiles.length === 0 ? "No file edits are recorded in the visible transcript." : editedFiles.map(file => <button className="rw-edited-file" key={file.path} onClick={() => { if (!file.path.startsWith("/")) { selectWorkspaceFile(file.path); setActiveTab("Files"); } }}><span>{file.path}</span><small>{file.status}</small></button>)}</div></details>
+          <details className="rw-disclosure"><summary><Icon name="file-text"/><strong>Edited Files</strong><span>({editedFiles.length})</span><small>Show details</small></summary><div className="rw-disclosure-content">{editedFiles.length === 0 ? "No file edits are recorded in the visible transcript." : editedFiles.map(file => <button className="rw-edited-file" key={file.path} onClick={() => { if (!file.path.startsWith("/")) { void workspaceFiles.openFile(file.path); setActiveTab("Files"); } }}><span>{file.path}</span><small>{file.status}</small></button>)}</div></details>
           {completionItems.length > 0 && <div className="rw-autocomplete" role="listbox" aria-label="Composer suggestions">{completionItems.map((item, index) => <button key={`${item.kind}-${item.insertText}-${index}`} role="option" aria-selected={index === completionIndex} onMouseDown={event => event.preventDefault()} onClick={() => void pickCompletion(item)}><strong>{item.insertText}</strong><span>{item.detail}{item.argumentHint ? ` ${item.argumentHint}` : ""}</span>{item.description && <small>{item.description}</small>}</button>)}</div>}
           <div className={"rw-composer " + (composerFocused ? "focused" : "")} onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); } }} onPaste={event => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void addAttachments(files); } }}>
             <input ref={attachmentInputRef} type="file" multiple hidden onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void addAttachments(files); }}/><button className="rw-add" title="Attach files" aria-label="Attach files" onClick={() => attachmentInputRef.current?.click()} disabled={!data.selectedSession || attaching}><Icon name="plus"/></button>
@@ -900,29 +662,16 @@ export function ReactWorkspaceApp() {
       {rightOpen && <button className="rw-resize rw-resize-right" aria-label="Resize workbench" onPointerDown={e => startResize("right", e)}/>}
       <aside className="rw-workbench">
         <div className="rw-workbench-tabs">{tabs.map(tab => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab === "Git" && <Icon name="git-branch"/>}{tab === "Files" && <Icon name="folder"/>}{tab === "Terminal" && <Icon name="terminal"/>}{tab === "Goals" && <Icon name="target"/>}{tab}</button>)}<button className="rw-workbench-collapse" aria-label={rightOpen ? "Collapse workbench" : "Expand workbench"} onClick={() => setRightOpen(v => !v)}><Icon name="panel-right"/></button></div>
-        <div className="rw-workbench-toolbar">{activeTab === "Files" ? <><label><Icon name="search"/><input placeholder="Filter files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)}/></label><input ref={uploadInputRef} type="file" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadWorkspaceFile(file); }}/><button title="New file" onClick={() => void createWorkspaceFile()} disabled={!data.selectedWorkspace || fileSaving || fileDeleting}>New</button><button title="Upload file to the current folder" onClick={() => uploadInputRef.current?.click()} disabled={!data.selectedWorkspace || fileSaving || fileDeleting}><Icon name="upload"/></button></> : <><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh Git status" onClick={() => setGitRefresh(value => value + 1)}><Icon name="refresh-cw"/></button>}</>}</div>
-        {activeTab === "Files" ? <div className="rw-file-tree">
-          {data.filesError && <div className="rw-data-error">{data.filesError}</div>}
-          {visibleFileTreeError && <div className="rw-data-error">{visibleFileTreeError}</div>}
-          {data.selectedWorkspace && <div className="rw-file-tree-path"><strong title={data.selectedWorkspace.path}>{data.selectedWorkspace.label}</strong>{data.filePath && <span>Current folder: {data.filePath}</span>}</div>}
-          {!data.selectedWorkspace && <div className="rw-empty-state">Select a project to browse its files.</div>}
-          {data.selectedWorkspace && fileFilter.trim() === "" && <WorkspaceFileTree entriesByDirectory={visibleFileTreeEntries} expandedPaths={visibleFileTreeExpanded} loadingPaths={visibleFileTreeLoadingPaths} selectedPath={data.selectedFile?.path} onToggleDirectory={toggleFileDirectory} onSelectFile={entry => selectWorkspaceFile(entry.path)}/>}
-          {fileFilter.trim() !== "" && <div className="rw-file-search-results">{visibleFileSearchLoading ? <div className="rw-data-state">Searching files…</div> : visibleFileSearchResults.length === 0 ? <div className="rw-data-state">No files match this search.</div> : visibleFileSearchResults.map(result => <button key={result.path} className={data.selectedFile?.path === result.path ? "selected" : ""} title={`${result.path} · ${result.kind}`} onClick={() => selectWorkspaceFile(result.path)}><Icon name="file-text"/><span>{result.path}</span><small>{result.kind}</small></button>)}</div>}
-          {visibleFileTreeLoadingPaths.has("") && <div className="rw-data-state">Loading project files…</div>}
-          {visibleFileTreeEntries[""]?.length === 0 && !visibleFileTreeLoadingPaths.has("") && <div className="rw-data-state">No files in this workspace.</div>}
-          {data.selectedFile && <section className="rw-file-editor">
-            <div className="rw-file-editor-toolbar">
-              <strong title={data.selectedFile.path}>{data.selectedFile.path.split("/").pop()}</strong>
-              {data.selectedFile.truncated && <small>Preview truncated — editing disabled</small>}
-              {data.selectedFile.binary && <small>Binary file — preview unavailable</small>}
-              <button onClick={() => void saveOpenFile()} disabled={!fileDirty || fileSaving || data.selectedFile.binary || data.selectedFile.truncated}>{fileSaving ? "Saving…" : "Save"}</button>
-              <button onClick={() => void deleteSelectedFile()} disabled={fileSaving || fileDeleting}>Delete</button>
-              <button title="Close file" onClick={closeWorkspaceFile} disabled={fileSaving || fileDeleting}><Icon name="x"/></button>
-            </div>
-            <div className="rw-editor-tabs" role="tablist" aria-label="Open files">{openFilePaths.map(path => <button key={path} title={path} role="tab" aria-label={`${path}${fileDrafts.current.get(path)?.dirty ? ", unsaved changes" : ""}`} aria-selected={path === data.selectedFile?.path} className={path === data.selectedFile?.path ? "active" : ""} disabled={fileSaving || fileDeleting} onClick={() => selectWorkspaceFile(path)}>{path.split("/").pop()}{fileDrafts.current.get(path)?.dirty && <i aria-hidden="true"/>}</button>)}</div>
-            {data.selectedFile.binary ? <div className="rw-data-state">Binary file — preview unavailable.</div> : data.selectedFile.truncated ? <div className="rw-data-state">Preview truncated — editing disabled.</div> : <WorkspaceCodeEditor key={`${data.selectedWorkspace?.id ?? ""}:${data.selectedFile.path}`} path={data.selectedFile.path} value={fileDraft} readOnly={fileSaving || fileDeleting} onChange={changeFileDraft} />}
-          </section>}
-        </div> : activeTab === "Terminal" ? (
+        {activeTab === "Files" ? <WorkspaceFilesPanel
+          files={workspaceFiles}
+          rootLabel={data.selectedWorkspace?.label ?? data.selectedProject?.name ?? "Workspace"}
+          projectId={data.selectedWorkspace?.projectId}
+          workspaceId={data.selectedWorkspace?.id}
+          machineId={selectedMachineId}
+          hasWorkspace={data.selectedWorkspace !== undefined}
+        /> : <>
+          <div className="rw-workbench-toolbar"><strong>{activeTab === "Goals" ? "Session overview" : activeTab}</strong>{activeTab === "Git" && <button title="Refresh Git status" onClick={() => setGitRefresh(value => value + 1)}><Icon name="refresh-cw"/></button>}</div>
+        {activeTab === "Terminal" ? (
           data.selectedWorkspace
             ? <ReactTerminalPanel key={data.selectedWorkspace.id} workspace={data.selectedWorkspace} machineId={data.state.selectedMachine?.id ?? "local"}/>
             : <div className="rw-empty-panel">Select a workspace before opening a terminal.</div>
@@ -965,8 +714,20 @@ export function ReactWorkspaceApp() {
             </section>
           </div>
         )}
+        </>}
       </aside>
     </div>
+    <WorkspaceUnsavedDialog
+      open={pendingScopeChange !== undefined}
+      title="Unsaved file edits"
+      description={pendingScopeChange?.description ?? ""}
+      saveLabel="Save all and continue"
+      busy={scopeChangeBusy}
+      error={scopeChangeError}
+      onSave={() => void saveThenScopeChange()}
+      onDiscard={discardThenScopeChange}
+      onCancel={() => { if (!scopeChangeBusy) { setPendingScopeChange(undefined); setScopeChangeError(undefined); } }}
+    />
     <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
     <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
     <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>

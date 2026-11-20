@@ -205,6 +205,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.6
         version: 6.43.6
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@fastify/compress':
         specifier: ^9.0.0
         version: 9.0.0

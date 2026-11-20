@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, workspacesApi, type FileContentResponse, type FileTreeEntry, type Machine, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiMcpSaveRequest, type PiSkillInfo, type SessionModelCatalogResponse } from "../api";
+import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, type Machine, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageScope, type PiMcpServerInfo, type PiMcpSaveRequest, type PiSkillInfo, type SessionModelCatalogResponse } from "../api";
 import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
@@ -41,8 +41,6 @@ export interface ReactWorkspaceData {
   readonly selectedSession: SessionInfo | undefined;
   readonly messages: AppState["messages"];
   readonly sessionStatus: SessionStatus | undefined;
-  readonly fileEntries: readonly FileTreeEntry[];
-  readonly filePath: string;
   readonly modelOptions: Awaited<ReturnType<typeof sessionsApi.models>> | undefined;
   readonly modelCatalog: SessionModelCatalogResponse | undefined;
   readonly thinkingOptions: Awaited<ReturnType<typeof sessionsApi.thinkingLevels>> | undefined;
@@ -62,23 +60,15 @@ export interface ReactWorkspaceData {
   readonly addMachine: (input: { name: string; baseUrl: string; token?: string }) => Promise<void>;
   readonly renameMachine: (machine: Machine, name: string) => Promise<void>;
   readonly removeMachine: (machine: Machine) => Promise<void>;
-  readonly selectedFile: FileContentResponse | undefined;
   readonly loading: boolean;
   readonly projectsError: string | undefined;
   readonly machineReadIssue: string | undefined;
   readonly sessionError: string | undefined;
-  readonly filesError: string | undefined;
   readonly draft: string;
   readonly setDraft: (value: string) => void;
   readonly selectProject: (projectId: string) => Promise<void>;
   readonly selectSession: (session: SessionInfo) => Promise<void>;
   readonly refresh: () => void;
-  readonly loadDirectory: (path?: string) => Promise<void>;
-  readonly loadFile: (path: string) => Promise<void>;
-  readonly saveFile: (path: string, content: string) => Promise<void>;
-  readonly createFile: (path: string) => Promise<void>;
-  readonly deleteFile: (path: string) => Promise<void>;
-  readonly uploadFile: (file: File, directory?: string) => Promise<void>;
   readonly sendPrompt: (text: string, attachments?: readonly CapturedAttachment[]) => Promise<boolean>;
   readonly stopSession: () => Promise<void>;
   readonly loadEarlierMessages: () => Promise<void>;
@@ -122,22 +112,6 @@ function machineIssueText(unanswered: Unanswered | undefined): string | undefine
   return "Cannot reach the PI WEB API. Check that the web server is running, then retry.";
 }
 
-interface WorkspaceFileScope {
-  projectId: string;
-  workspaceId: string;
-  machineId: string;
-}
-
-function workspaceFileScope(state: AppState): WorkspaceFileScope | undefined {
-  if (state.selectedProject === undefined || state.selectedWorkspace === undefined) return undefined;
-  return { projectId: state.selectedProject.id, workspaceId: state.selectedWorkspace.id, machineId: state.selectedMachine?.id ?? "local" };
-}
-
-function isCurrentWorkspaceFileScope(state: AppState, scope: WorkspaceFileScope): boolean {
-  const current = workspaceFileScope(state);
-  return current?.projectId === scope.projectId && current.workspaceId === scope.workspaceId && current.machineId === scope.machineId;
-}
-
 /**
  * React owns the view, while PI WEB's existing controllers continue to own
  * listing retries, route selection, transcript convergence, stream recovery,
@@ -148,8 +122,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [state, setReactState] = useState<AppState>(stateRef.current);
   const [machineReadIssue, setMachineReadIssue] = useState<string>();
   const runtimeRef = useRef<Runtime | undefined>(undefined);
-  const [fileEntries, setFileEntries] = useState<readonly FileTreeEntry[]>([]);
-  const [filePath, setFilePath] = useState("");
   const [modelOptions, setModelOptions] = useState<Awaited<ReturnType<typeof sessionsApi.models>>>();
   const [modelCatalog, setModelCatalog] = useState<SessionModelCatalogResponse>();
   const [thinkingOptions, setThinkingOptions] = useState<Awaited<ReturnType<typeof sessionsApi.thinkingLevels>>>();
@@ -158,12 +130,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     (machineId: string) => configApi.config(machineId).then(response => response.config),
     (machineId: string, config: PiWebConfigResponse["config"]) => configApi.saveConfig(config, machineId),
   ));
-  const [selectedFile, setSelectedFile] = useState<FileContentResponse>();
-  const [selectedFileScope, setSelectedFileScope] = useState<WorkspaceFileScope>();
-  const [filesError, setFilesError] = useState<string>();
   const [draft, setDraftState] = useState("");
-  const fileReadRequestRef = useRef(0);
-  const directoryReadRequestRef = useRef(0);
   const [board, setBoard] = useState<SessionBoard>();
   const [instantActions, setInstantActions] = useState<readonly InstantAction[]>([]);
   const [undoAvailable, setUndoAvailable] = useState(false);
@@ -569,128 +536,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     return () => { active = false; };
   }, [selectedSession?.id, selectedSession?.cwd, state.selectedMachine?.id]);
 
-  const loadDirectory = useCallback(async (path = "") => {
-    const current = stateRef.current;
-    const scope = workspaceFileScope(current);
-    if (scope === undefined) return;
-    setFilesError(undefined);
-    fileReadRequestRef.current += 1;
-    setSelectedFile(undefined);
-    setSelectedFileScope(undefined);
-    setFilePath(path);
-    const requestId = ++directoryReadRequestRef.current;
-    try {
-      const result = await workspacesApi.workspaceTree(scope.projectId, scope.workspaceId, path, scope.machineId);
-      if (requestId !== directoryReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setFileEntries(result.entries);
-    } catch (error) {
-      if (requestId !== directoryReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setFileEntries([]);
-      setFilesError(errorText(error));
-    }
-  }, []);
-
-  useEffect(() => {
-    setFileEntries([]);
-    setFilePath("");
-    setSelectedFile(undefined);
-    setSelectedFileScope(undefined);
-    if (selectedProject !== undefined && selectedWorkspace !== undefined) void loadDirectory("");
-  }, [selectedProject?.id, selectedWorkspace?.id, state.selectedMachine?.id, loadDirectory]);
-
-  const loadFile = useCallback(async (path: string) => {
-    const scope = workspaceFileScope(stateRef.current);
-    if (scope === undefined) return;
-    const requestId = ++fileReadRequestRef.current;
-    setFilesError(undefined);
-    try {
-      const content = await workspacesApi.workspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
-      if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setSelectedFile(content);
-      setSelectedFileScope(scope);
-    } catch (error) {
-      if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setSelectedFile(undefined);
-      setSelectedFileScope(scope);
-      setFilesError(errorText(error));
-    }
-  }, []);
-
-  const saveFile = useCallback(async (path: string, content: string) => {
-    const scope = workspaceFileScope(stateRef.current);
-    if (scope === undefined) return;
-    const requestId = ++fileReadRequestRef.current;
-    setFilesError(undefined);
-    try {
-      await workspacesApi.writeWorkspaceFile(scope.projectId, scope.workspaceId, path, content, undefined, scope.machineId);
-      if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      const saved = await workspacesApi.workspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
-      if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setSelectedFile(saved);
-      setSelectedFileScope(scope);
-    } catch (error) {
-      if (requestId !== fileReadRequestRef.current || !isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setFilesError(errorText(error));
-      throw error;
-    }
-  }, []);
-
-  const createFile = useCallback(async (path: string) => {
-    const scope = workspaceFileScope(stateRef.current);
-    if (scope === undefined) return;
-    setFilesError(undefined);
-    try {
-      await workspacesApi.writeWorkspaceFile(scope.projectId, scope.workspaceId, path, "", { createDirs: false, overwrite: false }, scope.machineId);
-      if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-    } catch (error) {
-      if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setFilesError(errorText(error));
-      throw error;
-    }
-  }, []);
-
-  const deleteFile = useCallback(async (path: string) => {
-    const scope = workspaceFileScope(stateRef.current);
-    if (scope === undefined) return;
-    setFilesError(undefined);
-    try {
-      await workspacesApi.deleteWorkspaceFile(scope.projectId, scope.workspaceId, path, scope.machineId);
-      if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      fileReadRequestRef.current += 1;
-      if (selectedFile?.path === path) {
-        setSelectedFile(undefined);
-        setSelectedFileScope(undefined);
-      }
-    } catch (error) {
-      if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setFilesError(errorText(error));
-      throw error;
-    }
-  }, [selectedFile?.path]);
-
-  const uploadFile = useCallback(async (file: File, directory = filePath) => {
-    const current = stateRef.current;
-    const scope = workspaceFileScope(current);
-    if (scope === undefined) return;
-    const relativePath = [directory, file.name].filter(Boolean).join("/");
-    setFilesError(undefined);
-    try {
-      await workspacesApi.writeWorkspaceFile(
-        scope.projectId,
-        scope.workspaceId,
-        relativePath,
-        new Uint8Array(await file.arrayBuffer()),
-        { createDirs: true, overwrite: false },
-        scope.machineId,
-      );
-      if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-    } catch (error) {
-      if (!isCurrentWorkspaceFileScope(stateRef.current, scope)) return;
-      setFilesError(errorText(error));
-      throw error;
-    }
-  }, [filePath]);
-
   useEffect(() => {
     if (selectedSession === undefined) {
       setDraftState("");
@@ -827,13 +672,10 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     selectedSession,
     messages: state.messages,
     sessionStatus: state.status,
-    fileEntries,
-    filePath,
     modelOptions,
     modelCatalog,
     thinkingOptions,
     settings: scopedSettings,
-    selectedFile: selectedFileScope !== undefined && isCurrentWorkspaceFileScope(state, selectedFileScope) ? selectedFile : undefined,
     loadSettings,
     saveSettings,
     setPluginEnabled,
@@ -853,18 +695,11 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     projectsError,
     machineReadIssue,
     sessionError,
-    filesError,
     draft,
     setDraft,
     selectProject,
     selectSession,
     refresh,
-    loadDirectory,
-    loadFile,
-    saveFile,
-    createFile,
-    deleteFile,
-    uploadFile,
     sendPrompt,
     stopSession,
     loadEarlierMessages,
