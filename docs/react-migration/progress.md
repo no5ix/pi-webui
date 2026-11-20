@@ -24,7 +24,12 @@ real session daemon. **Unit tested** means the React unit suite covers it and no
 
 Settings is `src/client/src/react/ReactSettingsDialog.tsx`: a native `<dialog>` opened with
 `showModal()`, a searchable page rail, one panel per section, body scroll lock, Escape, and a reload
-when the machine or the project changes. Sections: General, Appearance, Notifications, Pi Packages,
+when the machine or the project changes. The reads answer through the scope ledger in
+`react/settings/settingsScope.ts`: one read answers one machine, and for Skills and MCP Servers one
+project on that machine, and an answer only counts when its scope key and request id match the newest
+read, so a reply about a scope that has left the screen is dropped instead of drawn under the heading of
+the scope now on screen, and a resource whose request could not start is answered so the page cannot sit
+at "Loading settings…" forever. Sections: General, Appearance, Notifications, Pi Packages,
 MCP Servers, Pi Web Plugins, Machines, Skills. Keyboard settings are absent by decision.
 
 | Section | State | Notes |
@@ -221,6 +226,35 @@ the table below is the current row set the definition of done is measured agains
   on 2026-11-20 is cleared. Any new React work lands inside the gate.
 
 ## Verification record
+
+- 2026-11-21 (merge of `feat/workspace-activity-workbench`): the merge is `22789815` on
+  `feat/react-workspace-ui-from-main`, with the follow-ups `59f4d49c` (test debt), `6747c436` (the
+  incoming branch's own typecheck break) and `4aeb71d4` (the incoming branch's own lint errors). The
+  incoming branch is 39 commits ahead of the merge base and its head `77045c03` **does not typecheck and
+  does not lint**: `3ca62096` cut 71 lines of retired inline-activity code and deleted the definitions of
+  `gitMutationSuccess` and `renderGitChangeSection` while leaving their call sites, it passed
+  `AddProjectDialog` optional props as explicit `undefined` under `exactOptionalPropertyTypes`,
+  `chatGroups.ts` interpolated four counts into template literals, and `ProjectTree.test.ts` built a
+  session fixture with `as never`. All four are repaired on this branch. The one textual conflict was
+  `src/client/src/react/workspace.css`, where both branches appended a block at end of file: this
+  branch's phone settings-target floor and the workbench's activity and workbench-tab rules. Both are
+  kept, and the settings media query is closed before the workbench rules begin; a selector-by-selector
+  comparison against both sides shows the merge introduced no duplicate that neither branch already had
+  (the incoming sheet carries 53 of its own repeated selectors, which is not this merge's debt and was
+  not touched).
+- 2026-11-21 (the eight red tests): the suite has been red since the Updates-module removal, in
+  `src/buildContents.test.ts`, `src/server/shared/piWebStatus.test.ts` (2),
+  `src/server/web/piWebPluginService.test.ts` (2),
+  `src/server/shared/plugins/packageInstalledPlugin.test.ts`,
+  `src/server/web/service/fleetRoutes.test.ts` and
+  `src/client/src/components/settings/SettingsGeneralPanel.test.ts`. All eight pass now. One change is a
+  real test-isolation defect, not Updates debt: two `piWebPluginService.test.ts` fixtures registered a
+  plugin with the id `updates` and built the service with the default config provider, which loads the
+  developer's own `~/.config/pi-web/config.json` — on a machine that had disabled the old updates plugin
+  the fixture was filtered out and the test answered `plugins: []`, so those two tests were green only on
+  a machine with no such preference. The fixtures now use their own ids and pass an empty config provider.
+- 2026-11-21 (checks over the merged tree): `tsc --noEmit` exit 0; `pnpm run lint` exit 0; `pnpm run
+  knip` exit 0; `pnpm run verify`, `pnpm run build` and the browser pass are recorded as they complete.
 
 - 2026-11-20: `pnpm run verify` exit 0 over the MCP and notifications milestone — typecheck, lint,
   Knip, Vitest; 689 test files, 6056 tests passed, 5 skipped.
@@ -557,20 +591,23 @@ session; do not trust a summary over `git log` and `ls`.
 
 ## Exact next action
 
-**Checkpoint, 2026-11-21, in flight.** The three modules are implemented, committed and unit-tested:
-`13628195` (the MCP form's description field, the shared `SettingsField`, the 44px switch and the CSS
-floor contract) and `f687a82f` (the pages name an unread list as unread). `docs/react-migration/progress.md`
-is the only migration document; `feature-parity.md` is deleted and referenced from here. The browser pass
-is running as `/tmp/piweb-br/cdp11.mjs` against the 8505 stack (skills, MCP and packages legs at 1440px,
-then the three at 393x850, asserting the config files in the Node process); its results land in
-`/tmp/piweb-br/results11.json` and `/tmp/piweb-br/shots11/`, and the per-run numbers go in
-[Browser and automated verification](#browser-and-automated-verification-2026-11-21).
+**Checkpoint, 2026-11-21, in flight.** Phase 1 (the merge) is landed and pushed: `7cfe7ddb` (the
+settings scope ledger) → `22789815` (the merge) → `59f4d49c` (the eight red tests) → `6747c436` (the
+incoming branch's typecheck break) → `4aeb71d4` (the incoming branch's lint errors), pushed to
+`origin/feat/react-workspace-ui-from-main`. `docs/react-migration/progress.md` is the only migration
+document; `feature-parity.md` is deleted and referenced from here.
 
-1. Run the browser pass for the three Settings modules on the isolated stack
+The browser pass runs as `/tmp/piweb-br/cdp20.mjs` (built from `cdp18.mjs`, plus the sections, reload,
+lifecycle, theme, machines and sidebar legs and a mobile sweep of all eight sections) against the 8505
+stack (`bash /tmp/piweb-br/stack.sh`, fixtures `bash /tmp/piweb-br/fixtures6.sh`); results land in
+`/tmp/piweb-br/results20.json` and `/tmp/piweb-br/shots20/`.
+
+1. Run the browser pass for the three Settings modules and the eight sections on the isolated stack
    (`scripts/stack-8505.sh up`, its own data dir, port 8505): desktop 1440px and mobile 393x850, real
    session daemon, exercising install/update/update-all/enable/disable/remove, MCP add/edit/test/remove
    in both scopes, Skills toggles in both scopes, and the empty/failure/loading states. Record the
    result in [Browser and automated verification](#browser-and-automated-verification-2026-11-21).
 2. Run `pnpm run verify` and `pnpm run build` and record the numbers here.
 3. Then the plugin host in React, per the milestone plan — it is the largest unstarted feature and it
-   blocks the Lit removal.
+   blocks the Lit removal. The contribution families are the ones named in `plugin-api-react.md` and
+   `src/client/src/plugins/types.ts`, wired in that order.
