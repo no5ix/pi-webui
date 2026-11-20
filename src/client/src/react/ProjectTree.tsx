@@ -21,7 +21,7 @@ export function ProjectTree({ projects, query, expanded, onExpanded, selectedPro
         </div>
         {project.unknown && open && <div className="rw-data-state">{selectedProject === project.id ? "Loading this workspace's sessions…" : "Select this project to load its sessions."}</div>}
         <div className="rw-session-rows">
-          {rows.map(row => <button className={"rw-session-row " + (selectedProject === project.id && selectedSession === row.id ? "selected" : "")} key={row.id} onClick={() => onSelectSession(project.id, row.id)}><span className="rw-session-mark">#</span><span>{row.name}</span><small>{new Date(row.session.modified).toLocaleDateString()}</small></button>)}
+          {rows.map(row => <button className={"rw-session-row " + (selectedProject === project.id && selectedSession === row.id ? "selected" : "")} key={row.id} onClick={() => onSelectSession(project.id, row.id)}><span className="rw-session-mark">#</span><span title={row.name}>{row.name}</span><small>{new Date(row.session.modified).toLocaleDateString()}</small></button>)}
           {open && matching.length > 5 && <button className="rw-show-more" onClick={() => onShowMore(project.id)}>{showMore ? "Show less" : "Show 5 more"}</button>}
           {open && !project.unknown && matching.length === 0 && <div className="rw-data-state">No sessions in this project.</div>}
         </div>
