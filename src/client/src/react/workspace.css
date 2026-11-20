@@ -503,7 +503,16 @@ button:disabled{cursor:not-allowed}
 .rw-activity-group > summary svg { width: 16px; height: 16px; flex: none; color: var(--rw-muted); }
 .rw-activity-group > summary strong { min-width: 0; flex: 1 1 auto; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rw-activity-group > summary small { flex: 0 0 auto; color: var(--rw-muted); font-size: 10px; white-space: nowrap; }
+
 .rw-activity-group-content { padding: 10px 12px 2px; border-top: 1px solid var(--rw-line); }
+.rw-activity-group-content .rw-message { margin-bottom: 16px; padding: 0; }
+.rw-activity-group-content .rw-message:last-child { margin-bottom: 8px; }
+.rw-activity-group-content .rw-message-meta { display: flex; align-items: center; min-height: 25px; }
+.rw-activity-group-content .rw-message-body { min-width: 0; width: 100%; }
+.rw-chat-dock { display: grid; grid-template-columns: minmax(0,1fr); }
+.rw-jump-bottom { grid-row: 1; position: static; justify-self: end; margin: 0 0 2px auto; box-shadow: none; }
+.rw-transcript { padding-bottom: 14px; }
+
 .rw-activity-group-content > .rw-message { width: 100%; }
 .rw-chat-dock { position: relative; z-index: 4; isolation: isolate; }
 .rw-jump-bottom { position: static; width: max-content; max-width: 100%; justify-self: end; margin: 0 0 2px auto; }
