@@ -12,18 +12,20 @@ export function ProjectTree({ projects, query, expanded, onExpanded, selectedPro
       const matching = project.sessions.filter(s => s.name.toLowerCase().includes(query.toLowerCase()));
       const showMore = showMoreByProject[project.id] === true;
       const rows = open ? matching.slice(0, showMore ? matching.length : 5) : [];
-      return <section className="rw-project-group" key={project.id}>
+      return <section className={"rw-project-group" + (open ? " expanded" : "")} key={project.id}>
         <div className={"rw-project-row " + (selectedProject === project.id ? "selected" : "")}>
-          <button className="rw-project-toggle" title={open ? "Collapse project" : "Expand project"} onClick={() => toggle(project.id)}><Icon name={open ? "chevron-down" : "chevron-right"}/></button>
+          <button className="rw-project-toggle" title={open ? "Collapse project" : "Expand project"} aria-expanded={open} onClick={() => toggle(project.id)}><Icon name={open ? "chevron-down" : "chevron-right"}/></button>
           <button className="rw-project-name" onClick={() => { onSelectProject(project.id); if (!open) toggle(project.id); }}><Icon name="folder"/><span>{project.name}</span></button>
           <small>{project.unknown ? "…" : project.sessions.length}</small>
           <button className="rw-project-close" type="button" aria-label={`Close project ${project.name}`} title="Close project" disabled={project.pending} onClick={() => onCloseProject(project.id)}><Icon name="x"/></button>
         </div>
         {project.unknown && open && <div className="rw-data-state">{selectedProject === project.id ? "Loading this workspace's sessions…" : "Select this project to load its sessions."}</div>}
-        <div className="rw-session-rows">
-          {rows.map(row => <button className={"rw-session-row " + (selectedProject === project.id && selectedSession === row.id ? "selected" : "")} key={row.id} onClick={() => onSelectSession(project.id, row.id)}><span className="rw-session-mark">#</span><span title={row.name}>{row.name}</span><small>{new Date(row.session.modified).toLocaleDateString()}</small></button>)}
-          {open && matching.length > 5 && <button className="rw-show-more" onClick={() => onShowMore(project.id)}>{showMore ? "Show less" : "Show 5 more"}</button>}
-          {open && !project.unknown && matching.length === 0 && <div className="rw-data-state">No sessions in this project.</div>}
+        <div className={"rw-session-rows" + (open ? " expanded" : "")} aria-hidden={!open}>
+          <div className="rw-session-rows-inner">
+            {rows.map(row => <button className={"rw-session-row " + (selectedProject === project.id && selectedSession === row.id ? "selected" : "")} key={row.id} onClick={() => onSelectSession(project.id, row.id)}><span className="rw-session-mark">#</span><span title={row.name}>{row.name}</span><small>{new Date(row.session.modified).toLocaleDateString()}</small></button>)}
+            {open && matching.length > 5 && <button className="rw-show-more" onClick={() => onShowMore(project.id)}>{showMore ? "Show less" : "Show 5 more"}</button>}
+            {open && !project.unknown && matching.length === 0 && <div className="rw-data-state">No sessions in this project.</div>}
+          </div>
         </div>
       </section>;
     })}
