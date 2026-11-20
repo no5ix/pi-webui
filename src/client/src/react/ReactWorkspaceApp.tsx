@@ -743,7 +743,7 @@ export function ReactWorkspaceApp() {
       onCancel={() => { if (!scopeChangeBusy) { setPendingScopeChange(undefined); setScopeChangeError(undefined); } }}
     />
     <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} pluginFailures={pluginRuntime.failures}/>
-    <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} initialPath={addProjectTarget?.initialPath} pickerNotice={addProjectTarget?.pickerNotice} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
+    <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} {...(addProjectTarget?.initialPath === undefined ? {} : { initialPath: addProjectTarget.initialPath })} {...(addProjectTarget?.pickerNotice === undefined ? {} : { pickerNotice: addProjectTarget.pickerNotice })} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
     <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>
   </div>;
 }
@@ -757,4 +757,34 @@ export function groupReactTranscriptMessages(messages: readonly ChatLine[]) {
     message.parts.every(part => part.type === "text" && part.text.trim() === "background-task-notification")
   ));
   return groupChatMessages([...visible]);
+}
+
+function gitMutationSuccess(mutation: GitMutation): string {
+  if (mutation.action === "stage" || mutation.action === "unstage" || mutation.action === "discard") return `Git ${mutation.action} completed for ${mutation.paths.length} file${mutation.paths.length === 1 ? "" : "s"}.`;
+  if (mutation.action === "commit") return "Commit created.";
+  if (mutation.action === "switch") return `Switched to ${mutation.branch}.`;
+  return `Git ${mutation.action} completed.`;
+}
+
+function renderGitChangeSection(
+  title: string,
+  files: readonly GitStatusResponse["files"][number][],
+  section: "staged" | "unstaged",
+  selectedPath: string | undefined,
+  disabled: boolean,
+  onSelect: (path: string) => void,
+  onChange: (file: GitStatusResponse["files"][number]) => void,
+  onDiscard: ((file: GitStatusResponse["files"][number]) => void) | undefined,
+) {
+  return <section className="rw-git-changes" aria-label={title}>
+    <strong>{title} ({files.length})</strong>
+    {files.length === 0 ? <p>No {section} changes.</p> : files.map(file => {
+      const label = gitChangeLabel(file, section);
+      return <div className="rw-git-change-row" key={file.path}>
+        <button className={selectedPath === file.path ? "selected" : ""} title={label} onClick={() => onSelect(file.path)}><span>{file.path}</span><small>{label}</small></button>
+        <button aria-label={`${section === "staged" ? "Unstage" : "Stage"} ${file.path}`} disabled={disabled} onClick={() => onChange(file)}>{section === "staged" ? "Unstage" : "Stage"}</button>
+        {section === "unstaged" && onDiscard !== undefined && file.workingTree !== "untracked" && file.workingTree !== "ignored" && <button aria-label={`Discard changes to ${file.path}`} disabled={disabled} onClick={() => onDiscard(file)}>Discard</button>}
+      </div>;
+    })}
+  </section>;
 }
