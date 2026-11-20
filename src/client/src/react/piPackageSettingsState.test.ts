@@ -144,7 +144,7 @@ describe("package list presence", () => {
   });
 
   it("distinguishes an empty machine list from a list this page does not manage", () => {
-    expect(piPackageGlobalEmptyStateNote(packagesResponse({ user: [] }), "Site"))
+    expect(piPackageGlobalEmptyStateNote(packagesResponse({ packages: [] }), "Site"))
       .toBe("No packages are installed on this machine.");
     expect(piPackageGlobalEmptyStateNote(packagesResponse({ packages: [pkg({ source: "npm:pi-web", scope: "project" })] }), "Site"))
       .toContain("none of them is in a scope this page manages");

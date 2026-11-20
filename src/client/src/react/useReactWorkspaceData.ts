@@ -371,31 +371,60 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   }, [runtime]);
 
 
+  /**
+   * Records one resource's answer for one scope.
+   *
+   * The answer carries the scope it was read for: an answer about a project that left the screen is
+   * dropped, and the page keeps saying "not read yet" for that resource instead of showing it under a
+   * heading naming another project. The scope's page stops loading when the last resource has answered.
+   */
+  const settleSettings = useCallback((scopeKey: string, apply: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"], failure: unknown) => {
+    const answers = settingsAnswersRef.current;
+    if (scopeKey !== currentSettingsScopeKey() || answers.scopeKey !== scopeKey) return;
+    answers.pending = Math.max(0, answers.pending - 1);
+    const error = failure === undefined ? undefined : errorText(failure);
+    setSettings(current => ({
+      ...apply(current),
+      loading: answers.pending > 0,
+      scopeKey,
+      error: error === undefined ? current.error : current.error === undefined ? error : `${current.error}\n${error}`,
+    }));
+  }, []);
+
+  /**
+   * Reads the settings of one scope, resource by resource.
+   *
+   * Every settings page answers from one resource: the packages page from the package list, the Skills
+   * page from the skill list. Reading the five as a single barrier held every page at "loading" while the
+   * slowest read ran, and the slowest read is a project's MCP list, which touches that project's files and
+   * can take seconds — the Skills page then named an unloaded list "no skills". Each resource lands on its
+   * own, and a resource that failed is cleared for this scope: an old answer from another scope is not an
+   * answer here.
+   */
   const loadSettings = useCallback(async (projectId?: string) => {
-    const current = stateRef.current;
-    const machineId = current.selectedMachine?.id ?? "local";
+    const machineId = stateRef.current.selectedMachine?.id ?? "local";
     const project = projectId ?? settingsProjectIdRef.current;
     const scopeKey = JSON.stringify([machineId, project]);
-    setSettings({ loading: true, scopeKey });
-    const results = await Promise.allSettled([
-      configApi.config(machineId), pluginsApi.plugins(machineId), piPackagesApi.packages(machineId),
-      piSkillsApi.list(project, machineId),
-      piMcpApi.list(project, machineId),
+    setSettings((current) => current.scopeKey === scopeKey
+      ? { ...current, loading: true, error: undefined }
+      : { loading: true, scopeKey });
+    settingsAnswersRef.current = { scopeKey, pending: 5 };
+    const answer = <T>(
+      request: Promise<T>,
+      land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"],
+      clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"],
+    ) => request.then(
+      value => settleSettings(scopeKey, current => land(current, value), undefined),
+      failure => settleSettings(scopeKey, clear, failure),
+    );
+    await Promise.all([
+      answer(configApi.config(machineId), (current, value) => ({ ...current, config: value }), current => ({ ...current, config: undefined })),
+      answer(pluginsApi.plugins(machineId), (current, value) => ({ ...current, plugins: value }), current => ({ ...current, plugins: undefined })),
+      answer(piPackagesApi.packages(machineId), (current, value) => ({ ...current, packages: value }), current => ({ ...current, packages: undefined })),
+      answer(piSkillsApi.list(project, machineId), (current, value) => ({ ...current, skills: value }), current => ({ ...current, skills: undefined })),
+      answer(piMcpApi.list(project, machineId), (current, value) => ({ ...current, mcp: value }), current => ({ ...current, mcp: undefined })),
     ]);
-    if (scopeKey !== currentSettingsScopeKey()) return;
-    setSettings({
-      config: results[0].status === "fulfilled" ? results[0].value : undefined,
-      plugins: results[1].status === "fulfilled" ? results[1].value : undefined,
-      packages: results[2].status === "fulfilled" ? results[2].value : undefined,
-      skills: results[3].status === "fulfilled" ? results[3].value : undefined,
-      mcp: results[4].status === "fulfilled" ? results[4].value : undefined,
-      loading: false,
-      scopeKey,
-      error: results.some(result => result.status === "rejected")
-        ? results.filter((result): result is PromiseRejectedResult => result.status === "rejected").map(result => errorText(result.reason)).join("\n")
-        : undefined,
-    });
-  }, []);
+  }, [settleSettings]);
   const writeSettingsForScope = (scopeKey: string, update: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"]) => {
     const latest = stateRef.current;
     if (scopeKey !== JSON.stringify([latest.selectedMachine?.id ?? "local", settingsProjectIdRef.current])) return;

@@ -4,13 +4,28 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import type { ReactSettingsDialogProps } from "./ReactSettingsDialog";
-import type { PiPackageMutationResponse, PiSkillSetEnabledResponse } from "../api";
+import type { PiPackageMutationResponse, PiSkillInfo, PiSkillSetEnabledResponse, PiSkillsResponse } from "../api";
 
 let container: HTMLDivElement;
 let root: Root;
 
 const packageMutation: PiPackageMutationResponse = { packages: [], action: "install" };
 const skillMutation: PiSkillSetEnabledResponse = { skills: [], diagnostics: [], scopes: [], requiresReload: false };
+
+const projectSkillRow: PiSkillInfo = {
+  id: "sk1:p:fixture",
+  name: "release-notes",
+  description: "Draft this project's release notes",
+  filePath: "/project/.pi/skills/release-notes/SKILL.md",
+  baseDir: "/project/.pi/skills",
+  scope: "project",
+  origin: "project",
+  source: "project",
+  preference: "default",
+  enabled: true,
+  validation: "valid",
+};
+const skillsOfTheProject: PiSkillsResponse = { skills: [projectSkillRow], diagnostics: [], scopes: [] };
 
 const data: ReactSettingsDialogProps["data"] = {
   state: { selectedMachine: undefined, machines: [], error: "" },
@@ -81,6 +96,32 @@ describe("React Settings dialog", () => {
     expect(close).not.toBeNull();
     await act(async () => { close?.click(); await Promise.resolve(); });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the rows of the scope it is reloading, so a refresh does not blank the page", async () => {
+    const scoped: ReactSettingsDialogProps["data"] = {
+      ...data,
+      settings: { loading: true, scopeKey: JSON.stringify(["local", "p1"]), skills: skillsOfTheProject },
+      settingsProjectId: "p1",
+    };
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
+    await act(async () => { skills?.click(); await Promise.resolve(); });
+    expect(container.textContent).toContain("release-notes");
+    expect(container.textContent).not.toContain("have not been read yet");
+  });
+
+  it("clears the rows when the answer belongs to another scope", async () => {
+    const scoped: ReactSettingsDialogProps["data"] = {
+      ...data,
+      settings: { loading: true, scopeKey: JSON.stringify(["local", "other-project"]), skills: skillsOfTheProject },
+      settingsProjectId: "p1",
+    };
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
+    await act(async () => { skills?.click(); await Promise.resolve(); });
+    expect(container.textContent).not.toContain("release-notes");
+    expect(container.querySelector(".rw-settings-empty")?.textContent).toContain("not been read yet");
   });
 
   it("searches the settings pages by label and reports a query that matches nothing", async () => {

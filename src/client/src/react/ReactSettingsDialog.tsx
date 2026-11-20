@@ -91,12 +91,16 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
   };
 
   const machineId = data.state.selectedMachine?.id ?? "local";
+  const settingsScopeKey = JSON.stringify([machineId, data.settingsProjectId]);
+  const settings: ReactSettingsDialogProps["data"]["settings"] = data.settings.scopeKey === settingsScopeKey
+    ? data.settings
+    : { loading: true, scopeKey: settingsScopeKey };
   const machineLabel = data.state.selectedMachine?.name ?? "Local machine";
   const projects = data.projects.map(entry => entry.project);
   const settingsProject = projects.find(project => project.id === data.settingsProjectId);
   const projectScope: SettingsProjectScope = { projects, projectId: data.settingsProjectId, onSelect: data.setSettingsProject };
   const pagesThatOwnNotices: readonly Page[] = ["Pi Packages", "MCP Servers", "Skills"];
-  const statusMessage = notice ?? (pagesThatOwnNotices.includes(page) ? undefined : data.settings.notice) ?? data.settings.error;
+  const statusMessage = notice ?? (pagesThatOwnNotices.includes(page) ? undefined : settings.notice) ?? settings.error;
   const machines = data.state.machines;
   const selectedMachine: Machine | undefined = data.state.selectedMachine;
 
@@ -113,15 +117,15 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
           {pagesMatching(query).length === 0 && <p className="rw-settings-empty" role="status">No settings match “{query.trim()}”.</p>}
         </nav>
         <div className="rw-settings-content">
-          <header className="rw-settings-page-heading"><h3>{page}</h3><button type="button" onClick={() => void data.loadSettings()} disabled={data.settings.loading}>Reload</button></header>
-          {data.settings.loading && <p role="status">Loading settings…</p>}
+          <header className="rw-settings-page-heading"><h3>{page}</h3><button type="button" onClick={() => void data.loadSettings()} disabled={settings.loading}>Reload</button></header>
+          {settings.loading && <p role="status">Loading settings…</p>}
           {statusMessage && <p className="rw-settings-notice" role="status">{statusMessage}</p>}
           {page === "General" && <section>
-            {data.settings.config ? <>
-              <label>Host<input defaultValue={data.settings.config.config.host ?? ""} key={`${data.settings.config.path}-host`} onBlur={event => saveConfig({ host: event.target.value })}/></label>
-              <label>Port<input type="number" defaultValue={data.settings.config.config.port ?? 8505} key={`${data.settings.config.path}-port`} onBlur={event => saveConfig({ port: Number(event.target.value) })}/></label>
-              <label className="rw-setting-check"><input type="checkbox" defaultChecked={data.settings.config.config.environmentFacts !== false} key={String(data.settings.config.config.environmentFacts)} onChange={event => saveConfig({ environmentFacts: event.target.checked })}/> Include environment facts in session prompts</label>
-              <label className="rw-setting-check"><input type="checkbox" defaultChecked={data.settings.config.config.piBuiltInExtensions !== false} key={String(data.settings.config.config.piBuiltInExtensions)} onChange={event => saveConfig({ piBuiltInExtensions: event.target.checked })}/> Load Pi built-in extensions</label>
+            {settings.config ? <>
+              <label>Host<input defaultValue={settings.config.config.host ?? ""} key={`${settings.config.path}-host`} onBlur={event => saveConfig({ host: event.target.value })}/></label>
+              <label>Port<input type="number" defaultValue={settings.config.config.port ?? 8505} key={`${settings.config.path}-port`} onBlur={event => saveConfig({ port: Number(event.target.value) })}/></label>
+              <label className="rw-setting-check"><input type="checkbox" defaultChecked={settings.config.config.environmentFacts !== false} key={String(settings.config.config.environmentFacts)} onChange={event => saveConfig({ environmentFacts: event.target.checked })}/> Include environment facts in session prompts</label>
+              <label className="rw-setting-check"><input type="checkbox" defaultChecked={settings.config.config.piBuiltInExtensions !== false} key={String(settings.config.config.piBuiltInExtensions)} onChange={event => saveConfig({ piBuiltInExtensions: event.target.checked })}/> Load Pi built-in extensions</label>
             </> : <p>Configuration is not available yet.</p>}
           </section>}
           {page === "Appearance" && <section>
@@ -137,8 +141,8 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
           </section>}
           {page === "Notifications" && <NotificationsSettingsPanel busy={busy} run={run} />}
           {page === "Pi Packages" && <PackagesSettingsPanel
-            packages={data.settings.packages}
-            busy={data.settings.loading}
+            packages={settings.packages}
+            busy={settings.loading}
             machineLabel={machineLabel}
             projectName={settingsProject?.name ?? ""}
             busyMessage={busy ? "Working on a setting…" : undefined}
@@ -154,13 +158,13 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             run={run}
             machineLabel={machineLabel}
             projectScope={projectScope}
-            notice={data.settings.notice}
-            error={data.settings.error}
+            notice={settings.notice}
+            error={settings.error}
           />}
           {page === "Pi Web Plugins" && <section>
             {pluginFailures.map((failure, index) => <p key={`${failure}-${index}`} className="rw-setting-error" role="status">Plugin failed to load: {failure}</p>)}
-            {data.settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}
-            {!data.settings.plugins?.plugins.length && !data.settings.loading && <p>No plugins were returned for this machine.</p>}
+            {settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}
+            {!settings.plugins?.plugins.length && !settings.loading && <p>No plugins were returned for this machine.</p>}
           </section>}
           {page === "Machines" && <section>
             <label>Selected machine<select value={machineId} onChange={event => { const machine = machines.find(candidate => candidate.id === event.target.value); if (machine) void data.selectMachine(machine); }}>
@@ -170,8 +174,8 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             <form onSubmit={event => { event.preventDefault(); void run(async () => { await data.addMachine({ name: machineName, baseUrl: machineUrl, ...(machineToken ? { token: machineToken } : {}) }); setMachineName(""); setMachineUrl(""); setMachineToken(""); }); }}><h4>Add machine</h4><label>Name<input value={machineName} onChange={event => setMachineName(event.target.value)}/></label><label>Base URL<input type="url" value={machineUrl} onChange={event => setMachineUrl(event.target.value)}/></label><label>Access token<input type="password" autoComplete="new-password" value={machineToken} onChange={event => setMachineToken(event.target.value)}/></label><button disabled={busy || !machineName.trim() || !machineUrl.trim()}>Add machine</button></form>
           </section>}
           {page === "Skills" && <SkillsSettingsPanel
-            skills={data.settings.skills}
-            busy={data.settings.loading}
+            skills={settings.skills}
+            busy={settings.loading}
             projectScope={projectScope}
             projectName={settingsProject?.name ?? ""}
             machineLabel={machineLabel}
