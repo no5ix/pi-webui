@@ -44,7 +44,7 @@ function MessagePart({ part, message, streaming, session, machineId, onImageOpen
   onImageOpen: (src: string, alt: string) => void;
 }) {
   if (part.type === "text") return message.role === "bash" ? <details className="rw-shell-output"><summary>bash output</summary><pre>{part.text}</pre></details> : markdown(part.display ?? part.text);
-  if (part.type === "thinking") return <details className="rw-thinking"><summary>Thinking</summary>{markdown(part.display ?? part.text)}</details>;
+  if (part.type === "thinking") return <div className="rw-thinking">{markdown(part.display ?? part.text)}</div>;
   if (part.type === "toolCall") return <details className="rw-tool-call"><summary><Icon name="activity"/><strong>{part.toolName}</strong><span>{part.summary}</span><small>Show details</small></summary><div className="rw-tool-details">{part.args !== undefined && <pre>{JSON.stringify(part.args, null, 2)}</pre>}</div></details>;
   if (part.type === "toolExecution") return <ToolExecution part={part} streaming={streaming}/>;
   if (part.type === "toolResult") return <details className={`rw-tool-result${part.isError ? " error" : ""}`}><summary><Icon name={part.isError ? "x" : "check-circle"}/><strong>{part.toolName} result</strong><span>{part.isError ? "error" : "completed"}</span><small>Show details</small></summary><pre>{part.text}</pre></details>;
