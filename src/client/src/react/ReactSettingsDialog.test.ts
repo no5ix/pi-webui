@@ -27,13 +27,17 @@ const projectSkillRow: PiSkillInfo = {
 };
 const skillsOfTheProject: PiSkillsResponse = { skills: [projectSkillRow], diagnostics: [], scopes: [] };
 
+/** The scope key the data hook publishes for a machine "local" and one settings project. */
+const scopeKeyOf = (projectId: string | undefined) => JSON.stringify(["local", projectId]);
+
 const data: ReactSettingsDialogProps["data"] = {
   state: { selectedMachine: undefined, machines: [], error: "" },
   selectedProject: undefined,
   settings: { loading: false },
   projects: [],
   settingsProjectId: undefined,
-  setSettingsProject: vi.fn(() => Promise.resolve(undefined)),
+  settingsScopeKey: scopeKeyOf(undefined),
+  setSettingsProject: vi.fn(),
   loadSettings: vi.fn(() => Promise.resolve()),
   saveSettings: vi.fn(() => Promise.resolve()),
   setPluginEnabled: vi.fn(() => Promise.resolve()),
@@ -101,8 +105,9 @@ describe("React Settings dialog", () => {
   it("keeps the rows of the scope it is reloading, so a refresh does not blank the page", async () => {
     const scoped: ReactSettingsDialogProps["data"] = {
       ...data,
-      settings: { loading: true, scopeKey: JSON.stringify(["local", "p1"]), skills: skillsOfTheProject },
+      settings: { loading: true, scopeKey: scopeKeyOf("p1"), skills: skillsOfTheProject },
       settingsProjectId: "p1",
+      settingsScopeKey: scopeKeyOf("p1"),
     };
     await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
     const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
@@ -116,12 +121,28 @@ describe("React Settings dialog", () => {
       ...data,
       settings: { loading: true, scopeKey: JSON.stringify(["local", "other-project"]), skills: skillsOfTheProject },
       settingsProjectId: "p1",
+      settingsScopeKey: scopeKeyOf("p1"),
     };
     await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
     const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
     await act(async () => { skills?.click(); await Promise.resolve(); });
     expect(container.textContent).not.toContain("release-notes");
     expect(container.querySelector(".rw-settings-empty")?.textContent).toContain("not been read yet");
+  });
+
+  it("names the scope's failure on the page that reads that scope, exactly once", async () => {
+    const failure = "Failed to load skills from This machine: the machine is not responding.";
+    const scoped: ReactSettingsDialogProps["data"] = {
+      ...data,
+      settings: { loading: false, scopeKey: scopeKeyOf(undefined), error: failure },
+      settingsScopeKey: scopeKeyOf(undefined),
+    };
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
+    await act(async () => { skills?.click(); await Promise.resolve(); });
+    const mentions = [...container.querySelectorAll(".rw-settings-content *")].filter(node => node.childElementCount === 0 && node.textContent === failure).length;
+    expect(container.textContent).toContain(failure);
+    expect(mentions).toBe(1);
   });
 
   it("searches the settings pages by label and reports a query that matches nothing", async () => {

@@ -19,6 +19,7 @@ import { operationKindOf, pageMaySend, writeOutgoingOperation } from "../compose
 import { effectivePromptAttachmentDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
 import type { PromptAttachment } from "../api";
 import { createConfigWriteQueue } from "./configWriteQueue";
+import { appendSettingsFailure, beginSettingsRead, settleSettingsResource, settingsScopeKey, type SettingsReadLedger } from "./settings/settingsScope";
 import { instantRefusalWords, sessionsWithInstantActions, withoutInstantTargets } from "../instantActions";
 import { createWorkspaceInstantActions, projectActionIsPending, projectActionTarget, projectCloseAdmission, sessionActionIsPending, sessionActionTarget } from "./reactInstantActions";
 import type { InstantActionController } from "../controllers/instantActionController";
@@ -45,8 +46,9 @@ export interface ReactWorkspaceData {
   readonly modelCatalog: SessionModelCatalogResponse | undefined;
   readonly thinkingOptions: Awaited<ReturnType<typeof sessionsApi.thinkingLevels>> | undefined;
   readonly settings: { config?: PiWebConfigResponse | undefined; plugins?: PiWebPluginsResponse | undefined; packages?: PiPackagesResponse | undefined; skills?: PiSkillsResponse | undefined; mcp?: PiMcpListResponse | undefined; loading: boolean; error?: string | undefined; notice?: string | undefined; scopeKey?: string | undefined };
+  readonly settingsScopeKey: string;
   readonly settingsProjectId: string | undefined;
-  readonly setSettingsProject: (projectId: string | undefined) => Promise<void>;
+  readonly setSettingsProject: (projectId: string | undefined) => void;
   readonly loadSettings: (projectId?: string) => Promise<void>;
   readonly saveSettings: (config: Partial<PiWebConfigResponse["config"]>) => Promise<void>;
   readonly setPluginEnabled: (id: string, enabled: boolean) => Promise<void>;
@@ -131,9 +133,12 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const [settings, setSettings] = useState<ReactWorkspaceData["settings"]>({ loading: false });
   const [settingsProjectId, setSettingsProjectId] = useState<string | undefined>(undefined);
   const settingsProjectIdRef = useRef<string | undefined>(undefined);
-  const settingsAnswersRef = useRef<{ scopeKey: string; requestId: number; pending: number }>({ scopeKey: "", requestId: 0, pending: 0 });
+  const settingsAnswersRef = useRef<SettingsReadLedger>(beginSettingsRead("", 0));
   const settingsRequestIdRef = useRef(0);
-  const currentSettingsScopeKey = () => JSON.stringify([stateRef.current.selectedMachine?.id ?? "local", settingsProjectIdRef.current]);
+  const settingsReadRef = useRef(false);
+  const settingsReadScopeRef = useRef("");
+  const settingsMachineRef = useRef<string | undefined>(undefined);
+  const currentSettingsScopeKey = () => settingsScopeKey({ machineId: stateRef.current.selectedMachine?.id ?? "local", projectId: settingsProjectIdRef.current });
   const settingsSaveQueueRef = useRef(createConfigWriteQueue(
     (machineId: string) => configApi.config(machineId).then(response => response.config),
     (machineId: string, config: PiWebConfigResponse["config"]) => configApi.saveConfig(config, machineId),
@@ -216,12 +221,125 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
 
   const runtime = runtimeRef.current;
 
+  /**
+   * Records one resource's answer for one scope.
+   *
+   * The answer carries the scope it was read for: an answer about a project that left the screen is
+   * dropped, and the page keeps saying "not read yet" for that resource instead of showing it under a
+   * heading naming another project. The scope's page stops loading when the last resource has answered,
+   * and a resource that answered with a failure counts as answered: the page says what failed rather
+   * than loading forever.
+   */
+  const settleSettings = useCallback((scopeKey: string, requestId: number, apply: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"], failure: unknown) => {
+    const answers = settingsAnswersRef.current;
+    const settled = settleSettingsResource(answers, scopeKey, requestId);
+    if (settled === answers) return;
+    settingsAnswersRef.current = settled;
+    const error = failure === undefined ? undefined : errorText(failure);
+    setSettings(current => ({
+      ...apply(current),
+      loading: settled.pending > 0,
+      scopeKey,
+      error: appendSettingsFailure(current.error, error),
+    }));
+  }, []);
+
+  /**
+   * Reads the settings of one scope, resource by resource.
+   *
+   * Every settings page answers from one resource: the packages page from the package list, the Skills
+   * page from the skill list. Reading the five as a single barrier held every page at "loading" while the
+   * slowest read ran, and the slowest read is a project's MCP list, which touches that project's files and
+   * can take seconds — the Skills page then named an unloaded list "no skills". Each resource lands on its
+   * own, and a resource that failed is cleared for this scope: an old answer from another scope is not an
+   * answer here.
+   *
+   * Every resource answers the ledger exactly once, including a request that throws while it is being
+   * built. A barrier that waits for a request that was never made never finishes, and the page then reads
+   * as "loading" and "not read yet" at the same time, forever.
+   */
+  const loadSettings = useCallback(async (projectId?: string) => {
+    const machineId = stateRef.current.selectedMachine?.id ?? "local";
+    const project = projectId ?? settingsProjectIdRef.current;
+    const scopeKey = settingsScopeKey({ machineId, projectId: project });
+    const requestId = ++settingsRequestIdRef.current;
+    settingsReadRef.current = true;
+    settingsReadScopeRef.current = scopeKey;
+    settingsAnswersRef.current = beginSettingsRead(scopeKey, requestId);
+    setSettings((current) => current.scopeKey === scopeKey
+      ? { ...current, loading: true, error: undefined }
+      : { loading: true, scopeKey });
+    const answer = <T,>(
+      start: () => Promise<T>,
+      land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"],
+      clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"],
+    ) => {
+      let request: Promise<T>;
+      try {
+        request = start();
+      } catch (failure) {
+        settleSettings(scopeKey, requestId, clear, failure);
+        return Promise.resolve();
+      }
+      return request.then(
+        value => { settleSettings(scopeKey, requestId, current => land(current, value), undefined); },
+        (failure: unknown) => { settleSettings(scopeKey, requestId, clear, failure); },
+      );
+    };
+    await Promise.all([
+      answer(() => configApi.config(machineId), (current, value) => ({ ...current, config: value }), current => ({ ...current, config: undefined })),
+      answer(() => pluginsApi.plugins(machineId), (current, value) => ({ ...current, plugins: value }), current => ({ ...current, plugins: undefined })),
+      answer(() => piPackagesApi.packages(machineId), (current, value) => ({ ...current, packages: value }), current => ({ ...current, packages: undefined })),
+      answer(() => piSkillsApi.list(project, machineId), (current, value) => ({ ...current, skills: value }), current => ({ ...current, skills: undefined })),
+      answer(() => piMcpApi.list(project, machineId), (current, value) => ({ ...current, mcp: value }), current => ({ ...current, mcp: undefined })),
+    ]);
+  }, []);
+  const writeSettingsForScope = (scopeKey: string, update: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"]) => {
+    if (scopeKey !== currentSettingsScopeKey()) return;
+    setSettings(current => update(current));
+  };
+  /**
+   * Chooses the project the Skills and MCP pages answer for.
+   *
+   * A skill's and an MCP server's scope is a directory on disk, not the session in the middle column,
+   * so the page picks its own project. Choosing it only moves the scope: the read that belongs to it is
+   * the machine/project effect below, so there is one path that reads a scope and one ledger per read.
+   */
+  const setSettingsProject = useCallback((projectId: string | undefined) => {
+    settingsProjectIdRef.current = projectId;
+    setSettingsProjectId(projectId);
+  }, []);
+
   useEffect(() => {
-    if (state.machinesLoad !== "loaded") return;
-    // Fetch Settings for the selected machine/project whenever machine context changes,
-    // even when the dialog is closed, so a newly selected machine cannot inherit stale state.
+    // A settings project is a project of one machine, so it never survives a machine switch: the id
+    // names a directory the new machine does not have. The new machine's pages answer for the machine
+    // alone until the reader picks one of its projects.
+    const machineId = state.selectedMachine?.id ?? "local";
+    if (settingsMachineRef.current === machineId) return;
+    settingsMachineRef.current = machineId;
+    if (settingsProjectIdRef.current === undefined) return;
+    settingsProjectIdRef.current = undefined;
+    setSettingsProjectId(undefined);
+  }, [state.selectedMachine?.id]);
+
+  useEffect(() => {
+    // A project closed while Settings had it selected leaves the same kind of dangling scope: once the
+    // machine's projects are known, an id that is not among them is dropped.
+    if (state.projectsLoad !== "loaded" || settingsProjectIdRef.current === undefined) return;
+    if (state.projects.some(project => project.id === settingsProjectIdRef.current)) return;
+    settingsProjectIdRef.current = undefined;
+    setSettingsProjectId(undefined);
+  }, [state.projectsLoad, state.projects, state.selectedMachine?.id]);
+
+  useEffect(() => {
+    // Keep the read on the scope that is on screen: a machine switch and a settings-project switch get a
+    // read of their own. The first read is the dialog's own opening, so a page that never opened
+    // Settings costs no reads, and a scope this page has read is not read twice by one switch.
+    if (state.machinesLoad !== "loaded" || !settingsReadRef.current) return;
+    const scopeKey = settingsScopeKey({ machineId: state.selectedMachine?.id ?? "local", projectId: settingsProjectIdRef.current });
+    if (settingsReadScopeRef.current === scopeKey) return;
     void loadSettings(settingsProjectIdRef.current);
-  }, [state.machinesLoad, state.selectedMachine?.id, loadSettings]);
+  }, [state.machinesLoad, state.selectedMachine?.id, settingsProjectId, loadSettings]);
 
   const refresh = useCallback(() => {
     runtime.machines.wake();
@@ -279,14 +397,6 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
       void runtime.projects.loadProjects();
     }
   }, [state.machinesLoad, state.projectsLoad, runtime]);
-
-  useEffect(() => {
-    if (state.machinesLoad !== "loaded") return;
-    // Keep Settings data scoped to the selected machine even when the dialog is closed.
-    // Opening Settings triggers another refresh; this effect prevents a new machine from inheriting
-    // the prior machine's data or displaying a permanent "not read yet" state.
-    void loadSettings(settingsProjectIdRef.current);
-  }, [state.machinesLoad, state.selectedMachine?.id, loadSettings]);
 
   useEffect(() => {
     if (state.machinesLoad !== "loaded") return;
@@ -388,95 +498,20 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     await runtime.sessions.selectSession(session);
   }, [runtime]);
 
-
-  /**
-   * Records one resource's answer for one scope.
-   *
-   * The answer carries the scope it was read for: an answer about a project that left the screen is
-   * dropped, and the page keeps saying "not read yet" for that resource instead of showing it under a
-   * heading naming another project. The scope's page stops loading when the last resource has answered.
-   */
-  const settleSettings = useCallback((scopeKey: string, requestId: number, apply: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"], failure: unknown) => {
-    const answers = settingsAnswersRef.current;
-    // Ignore every result from an earlier load, including a superseded request for the same scope.
-    if (scopeKey !== currentSettingsScopeKey() || answers.scopeKey !== scopeKey || answers.requestId !== requestId) return;
-    answers.pending = Math.max(0, answers.pending - 1);
-    const error = failure === undefined ? undefined : errorText(failure);
-    setSettings(current => ({
-      ...apply(current),
-      loading: answers.pending > 0,
-      scopeKey,
-      error: error === undefined ? current.error : current.error === undefined ? error : `${current.error}\n${error}`,
-    }));
-  }, []);
-
-  /**
-   * Reads the settings of one scope, resource by resource.
-   *
-   * Every settings page answers from one resource: the packages page from the package list, the Skills
-   * page from the skill list. Reading the five as a single barrier held every page at "loading" while the
-   * slowest read ran, and the slowest read is a project's MCP list, which touches that project's files and
-   * can take seconds — the Skills page then named an unloaded list "no skills". Each resource lands on its
-   * own, and a resource that failed is cleared for this scope: an old answer from another scope is not an
-   * answer here.
-   */
-  const loadSettings = useCallback(async (projectId?: string) => {
-    const machineId = stateRef.current.selectedMachine?.id ?? "local";
-    const project = projectId ?? settingsProjectIdRef.current;
-    const scopeKey = JSON.stringify([machineId, project]);
-    const requestId = ++settingsRequestIdRef.current;
-    setSettings((current) => current.scopeKey === scopeKey
-      ? { ...current, loading: true, error: undefined }
-      : { loading: true, scopeKey });
-    settingsAnswersRef.current = { scopeKey, requestId, pending: 5 };
-    const answer = <T>(
-      request: Promise<T>,
-      land: (current: ReactWorkspaceData["settings"], value: T) => ReactWorkspaceData["settings"],
-      clear: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"],
-    ) => request.then(
-      value => settleSettings(scopeKey, requestId, current => land(current, value), undefined),
-      failure => settleSettings(scopeKey, requestId, clear, failure),
-    );
-    await Promise.all([
-      answer(configApi.config(machineId), (current, value) => ({ ...current, config: value }), current => ({ ...current, config: undefined })),
-      answer(pluginsApi.plugins(machineId), (current, value) => ({ ...current, plugins: value }), current => ({ ...current, plugins: undefined })),
-      answer(piPackagesApi.packages(machineId), (current, value) => ({ ...current, packages: value }), current => ({ ...current, packages: undefined })),
-      answer(piSkillsApi.list(project, machineId), (current, value) => ({ ...current, skills: value }), current => ({ ...current, skills: undefined })),
-      answer(piMcpApi.list(project, machineId), (current, value) => ({ ...current, mcp: value }), current => ({ ...current, mcp: undefined })),
-    ]);
-  }, []);
-  const writeSettingsForScope = (scopeKey: string, update: (current: ReactWorkspaceData["settings"]) => ReactWorkspaceData["settings"]) => {
-    const latest = stateRef.current;
-    if (scopeKey !== JSON.stringify([latest.selectedMachine?.id ?? "local", settingsProjectIdRef.current])) return;
-    setSettings(current => update(current));
-  };
-  /**
-   * Chooses the project the Skills and MCP pages answer for.
-   *
-   * A skill's and an MCP server's scope is a directory on disk, not the session in the middle column,
-   * so the page picks its own project. The scope a read was answered for is checked again when the
-   * answer arrives, so a slow answer about the project that was on screen before cannot land under a
-   * heading naming another one, and a slow write's list refresh is dropped the same way.
-   */
-  const setSettingsProject = useCallback(async (projectId: string | undefined) => {
-    settingsProjectIdRef.current = projectId;
-    setSettingsProjectId(projectId);
-    await loadSettings(projectId);
-  }, [loadSettings]);
   const updateMachineConfig = useCallback((machineId: string, update: (current: PiWebConfigResponse["config"]) => PiWebConfigResponse["config"]) => {
     return settingsSaveQueueRef.current(machineId, update);
   }, []);
   const saveSettings = useCallback(async (config: Partial<PiWebConfigResponse["config"]>) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, settingsProjectIdRef.current]);
+    const scopeKey = currentSettingsScopeKey();
     const response = await updateMachineConfig(machineId, currentConfig => ({ ...currentConfig, ...config }));
     writeSettingsForScope(scopeKey, value => ({ ...value, config: response, notice: "Settings saved. Some changes may require a PI WEB restart." }));
   }, [updateMachineConfig]);
   const setPluginEnabled = useCallback(async (id: string, enabled: boolean) => {
     const currentState = stateRef.current;
     const machineId = currentState.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, currentState.selectedProject?.id]);
+    const scopeKey = currentSettingsScopeKey();
     const config = await updateMachineConfig(machineId, current => {
       const plugins = { ...(current.plugins ?? {}), [id]: { ...(current.plugins?.[id] ?? {}), enabled } };
       return { ...current, plugins };
@@ -487,7 +522,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const installPackage = useCallback(async (source: string) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, settingsProjectIdRef.current]);
+    const scopeKey = currentSettingsScopeKey();
     const response = await piPackagesApi.install(source, machineId);
     writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: response.requiresReload === true ? "Package installed. Reload sessions to activate it." : "Package installed." }));
     return response;
@@ -495,7 +530,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const updatePackage = useCallback(async (source?: string) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, settingsProjectIdRef.current]);
+    const scopeKey = currentSettingsScopeKey();
     const response = await piPackagesApi.update(source, machineId);
     writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: "Package update completed." }));
     return response;
@@ -503,7 +538,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   const removePackage = useCallback(async (source: string, scope: PiPackageScope) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
-    const scopeKey = JSON.stringify([machineId, settingsProjectIdRef.current]);
+    const scopeKey = currentSettingsScopeKey();
     const response = await piPackagesApi.remove(source, scope, machineId);
     writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: "Package removed." }));
     return response;
@@ -751,8 +786,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   // failure. ProjectController owns the project's answered refusal and retries
   // gateway/link misses while its listing is watched.
   const machineId = state.selectedMachine?.id ?? "local";
-  const settingsScopeKey = JSON.stringify([machineId, settingsProjectIdRef.current]);
-  const scopedSettings = settings.scopeKey === settingsScopeKey ? settings : { loading: true, scopeKey: settingsScopeKey };
+  const currentSettingsKey = settingsScopeKey({ machineId, projectId: settingsProjectId });
   const projectsError = runtime.projects.refusal(machineId);
   const sessionError = state.transcriptFailed ?? state.statusReadFailed ?? undefined;
 
@@ -768,7 +802,8 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     modelOptions,
     modelCatalog,
     thinkingOptions,
-    settings: scopedSettings,
+    settings,
+    settingsScopeKey: currentSettingsKey,
     settingsProjectId,
     setSettingsProject,
     loadSettings,

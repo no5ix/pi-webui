@@ -33,7 +33,7 @@ function pagesMatching(query: string): readonly Page[] {
 
 type SettingsData = Pick<ReactWorkspaceData,
   "selectedProject" | "settings" | "loadSettings" | "saveSettings" | "setPluginEnabled" | "installPackage" | "updatePackage" | "removePackage" | "setPackageEnabled" | "setSkillEnabled" | "setMcpEnabled" | "testMcp" | "removeMcp" | "saveMcp" | "selectMachine" | "addMachine" | "renameMachine" | "removeMachine"
-  | "projects" | "settingsProjectId" | "setSettingsProject"
+  | "projects" | "settingsProjectId" | "settingsScopeKey" | "setSettingsProject"
 > & { readonly state: Pick<ReactWorkspaceData["state"], "selectedMachine" | "machines" | "error"> };
 
 export interface ReactSettingsDialogProps {
@@ -64,9 +64,11 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
   }, [open]);
 
   useEffect(() => {
+    // Opening Settings reads the scope the data hook is on. A machine or settings-project switch is the
+    // hook's own read, so the dialog never reads a scope the hook has already moved past.
     if (!open) return;
-    void data.loadSettings(data.settingsProjectId);
-  }, [open, data.loadSettings, data.state.selectedMachine?.id, data.settingsProjectId]);
+    void data.loadSettings();
+  }, [open, data.loadSettings]);
 
   useEffect(() => setRenameDraft(data.state.selectedMachine?.name ?? ""), [data.state.selectedMachine?.id, data.state.selectedMachine?.name]);
 
@@ -91,16 +93,21 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
   };
 
   const machineId = data.state.selectedMachine?.id ?? "local";
-  const settingsScopeKey = JSON.stringify([machineId, data.settingsProjectId]);
-  const settings: ReactSettingsDialogProps["data"]["settings"] = data.settings.scopeKey === settingsScopeKey
+  // The answers carry the scope they were read for. The hook derives that scope once, from the machine
+  // and the settings project on screen; an answer read for any other scope is not an answer here, so the
+  // page loads rather than drawing rows under a heading that names a scope they do not belong to.
+  const settings: ReactSettingsDialogProps["data"]["settings"] = data.settings.scopeKey === data.settingsScopeKey
     ? data.settings
-    : { loading: true, scopeKey: settingsScopeKey };
+    : { loading: true, scopeKey: data.settingsScopeKey };
   const machineLabel = data.state.selectedMachine?.name ?? "Local machine";
   const projects = data.projects.map(entry => entry.project);
   const settingsProject = projects.find(project => project.id === data.settingsProjectId);
   const projectScope: SettingsProjectScope = { projects, projectId: data.settingsProjectId, onSelect: data.setSettingsProject };
-  const pagesThatOwnNotices: readonly Page[] = ["Pi Packages", "MCP Servers", "Skills"];
-  const statusMessage = notice ?? (pagesThatOwnNotices.includes(page) ? undefined : settings.notice) ?? settings.error;
+  // The pages whose panel lists a scope's resources report that scope's notice and failure themselves;
+  // the other pages report them here, so a read that failed is named exactly once.
+  const pagesWhosePanelReportsScopeNotices: readonly Page[] = ["Pi Packages", "MCP Servers", "Skills"];
+  const scopeNotice = pagesWhosePanelReportsScopeNotices.includes(page) ? undefined : settings.notice ?? settings.error;
+  const statusMessage = notice ?? scopeNotice;
   const machines = data.state.machines;
   const selectedMachine: Machine | undefined = data.state.selectedMachine;
 
@@ -146,7 +153,9 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             machineLabel={machineLabel}
             projectName={settingsProject?.name ?? ""}
             busyMessage={busy ? "Working on a setting…" : undefined}
-            onReload={() => void data.loadSettings(data.settingsProjectId)}
+            notice={settings.notice}
+            error={settings.error}
+            onReload={() => void data.loadSettings()}
             install={data.installPackage}
             update={data.updatePackage}
             remove={data.removePackage}
@@ -180,7 +189,9 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             projectName={settingsProject?.name ?? ""}
             machineLabel={machineLabel}
             busyMessage={busy ? "Working on a setting…" : undefined}
-            onReload={() => void data.loadSettings(data.settingsProjectId)}
+            notice={settings.notice}
+            error={settings.error}
+            onReload={() => void data.loadSettings()}
             setEnabled={data.setSkillEnabled}
           />}
         </div>
