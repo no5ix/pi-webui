@@ -215,6 +215,14 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
   }
 
   const runtime = runtimeRef.current;
+
+  useEffect(() => {
+    if (state.machinesLoad !== "loaded") return;
+    // Fetch Settings for the selected machine/project whenever machine context changes,
+    // even when the dialog is closed, so a newly selected machine cannot inherit stale state.
+    void loadSettings(settingsProjectIdRef.current);
+  }, [state.machinesLoad, state.selectedMachine?.id, loadSettings]);
+
   const refresh = useCallback(() => {
     runtime.machines.wake();
     runtime.projects.wake();
