@@ -1200,3 +1200,52 @@ next entry.
 Not run. The fence host has no unit-to-browser bridge yet: no shipped plugin claims a fence in
 React, so the visible check belongs with the mermaid migration and its entry in the matrix
 (desktop 1440 and mobile 393x850, on the 8505 stack).
+
+## The runtime-context map (measured, not delegated)
+
+Both `bg_delegate` investigations of this (tasks `d79369674ba7b1dfc26e9e1bc478383f2` and
+`d0ac5cdb82e1d7063561a0f4f2164c93d`) ended with `child_exited_without_commit`; the child logged
+`No project session found with id 'delegate-…'; creating a new session` and committed nothing.
+The map below is measured in the working tree, and delegating this question is not reliable in
+this environment.
+
+**The contract.** `PluginRuntimeContext` is declared in `src/plugin-api.ts`: required `state`
+(`PluginRuntimeState`: selectedMachine, selectedWorkspace, selectedSession, workspaceTool,
+mainView, piWebStatus, status), `prompt` (`PluginPromptEditor`: insertText, getText,
+getSelection), `focusPrompt`, `addProject`, `createProject`, `projectDirectories`,
+`projectTrust`, `configureAuth`, `logoutAuth`, `openThemePicker`, `selectMainView`,
+`selectWorkspaceTool`, `openTerminal`, `refreshFiles`, `refreshWorkspacePanels`,
+`refreshAppData`, `reloadPage`, `startSession`, `archiveSession`, `stopActiveWork`; optional
+`openActionPalette` (absent by product decision — the React workbench has no palette),
+`createMachine`, `removeMachine`, `refreshMachine`, `openMachine`, `renameMachine`,
+`projectFolders`.
+
+**The host-internal extras** are in the client mirror, not the public API: `piWebUnstable`
+(`terminalCommandRuns`, `openSettings`), `openModelPicker`, `openThinkingLevelPicker`,
+`deleteWorkspace`, `reloadSession`, `deleteCachedNewSession`.
+
+**The one existing builder** is `PiWebApp.createPluginRuntimeContext()` at
+`src/client/src/components/PiWebApp.ts:5489-5620`, which wraps the result in
+`installPluginRuntimeScope(context, scopeForPlugin)` (`src/client/src/plugins/registry.ts:1023`)
+so each plugin gets a scoped context. `src/client/src/plugins/pluginRuntimeContextTestSupport.ts`
+is the fake the plugin tests use — the cheapest reference for what a context must satisfy.
+
+**What the React side already has**, from `src/client/src/react/useReactWorkspaceData.ts`
+(the `ReactWorkspaceData` surface): `state`, `projects`, `selectedProject/Workspace/Session`,
+`sessionStatus`, `selectMachine`, `addMachine`, `renameMachine`, `removeMachine`, `addProject`,
+`closeProject`, `refresh`, `draft`/`setDraft`, `sendPrompt`, `startSession`, `stopSession`,
+`archiveSession`, `selectSession`, plus the settings actions.
+
+**What the React side does not have**, and so cannot supply to a context yet: login/logout UI
+(`configureAuth`, `logoutAuth`), model and thinking-level pickers, workspace deletion,
+terminal opening (the terminal is a plugin panel, not app state), a files-page refresh, plugin
+panel invalidation, and `piWebUnstable.terminalCommandRuns`. A React context builder therefore
+cannot be a faithful full builder today: the members it cannot back belong to app features that
+do not exist in the React workbench, and the choice of what a settings section should see when a
+member is unbacked is product semantics for the maintainers, not a migration detail.
+
+**Consequence for the plan.** The settings-section host, the panel host, and the list hosts are
+gated on that product decision. The units that are not gated, and are the ordered next work:
+the import map plus plugin-build externals (so a plugin's JSX reaches the host's React at
+runtime), mermaid's `renderReact` through the fence host that already landed, and the
+`.tsx` lint gap.
