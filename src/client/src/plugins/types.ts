@@ -637,7 +637,8 @@ export interface PluginRuntimeContext {
   state: AppState;
   prompt: PluginPromptEditor;
   piWebUnstable?: PiWebUnstableRuntimeContext;
-  openActionPalette: () => void;
+  /** Absent on a host with no command palette; see `plugin-api`. */
+  openActionPalette?: () => void;
   focusPrompt: () => void;
   addProject: () => void | Promise<void>;
   /**

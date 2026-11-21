@@ -1123,7 +1123,12 @@ export interface PluginPromptEditor {
 export interface PluginRuntimeContext {
   state: PluginRuntimeState;
   prompt: PluginPromptEditor;
-  openActionPalette: () => void;
+  /**
+   * Open the host's command palette. Absent on a host with no palette: PI WEB's React workspace has
+   * none by product decision, and a plugin that offers a palette action reports it unavailable with the
+   * reason rather than opening a surface the product removed.
+   */
+  openActionPalette?: () => void;
   focusPrompt: () => void;
   addProject: () => void | Promise<void>;
   /**

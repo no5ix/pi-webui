@@ -10,6 +10,13 @@ import { piWebReactMember } from "./plugin-react.js";
  * plugin's source is created by the reconciler that renders it — which is what lets a host component
  * and a plugin component sit in one tree.
  */
+/**
+ * The JSX namespace, re-exported so a plugin's `jsx: "react-jsx"` output finds the element types under
+ * this import source. A plugin's `<div>` is then checked against React's own element types, and the
+ * values that build it come from the published React.
+ */
+export type { JSX } from "react/jsx-runtime";
+
 export const jsx: PiWebReactMembers["jsx"] = piWebReactMember("jsx");
 export const jsxs: PiWebReactMembers["jsxs"] = piWebReactMember("jsxs");
 export const Fragment: PiWebReactMembers["Fragment"] = piWebReactMember("Fragment");

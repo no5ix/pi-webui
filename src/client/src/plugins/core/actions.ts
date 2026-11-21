@@ -12,7 +12,9 @@ export function createCoreActions(): PluginAction[] {
       description: "Open the command palette",
       shortcut: "mod+shift+p",
       group: "General",
-      run: (context) => { context.openActionPalette(); },
+      enabled: (context) => context.openActionPalette !== undefined,
+      disabledReason: () => "This host has no command palette.",
+      run: (context) => { context.openActionPalette?.(); },
     },
     {
       id: "prompt.focus",
