@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { PiMcpListResponse, PiMcpServerInfo, PiMcpSaveRequest, Project } from "../api";
 import { McpSettingsPanel, type McpSettingsPanelProps } from "./McpSettingsPanel";
+import { MCP_MUTATION_DEADLINE_MS } from "./settings/piMcpSettingsState";
 
 const globalFile = "/home/pi/.pi/agent/mcp.json";
 const projectFile = "/srv/repo/.pi/mcp.json";
@@ -397,5 +398,58 @@ describe("React MCP settings panel", () => {
     const request = savedRequest(data);
     expect(request.projectId).toBeUndefined();
     expect(selectField("Write to", form).value).toBe("definition:false");
+  });
+
+  it("gives up on a connection test that never answers and hands the controls back", async () => {
+    vi.useFakeTimers();
+    const data = panelData({ testMcp: vi.fn(() => new Promise<void>(() => undefined)) });
+    await render(data);
+    await press(() => { button("Test connection").click(); });
+    expect(container.textContent).toContain("Testing “files”");
+    expect(button("Test connection").disabled).toBe(true);
+
+    await act(async () => {
+      vi.advanceTimersByTime(MCP_MUTATION_DEADLINE_MS + 20);
+      await Promise.resolve();
+    });
+
+    const text = container.textContent;
+    expect(text).toContain("did not answer within 20 seconds");
+    expect(text).toContain("A connection test changes nothing");
+    expect(text).toContain("Press Test connection again");
+    expect(container.querySelector(".rw-settings-notice.is-info"), "the busy line is gone").toBeNull();
+    expect(container.querySelector(".rw-settings-notice.is-danger")?.textContent).toContain("did not answer within 20 seconds");
+    expect(button("Test connection").disabled).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("says a write may have landed when the machine stops answering", async () => {
+    vi.useFakeTimers();
+    const data = panelData({ setMcpEnabled: vi.fn(() => new Promise<void>(() => undefined)) });
+    await render(data);
+    const toggle = container.querySelector<HTMLInputElement>(".rw-settings-toggle input");
+    if (toggle === null) throw new Error("The row's enable control did not render.");
+    await press(() => { toggle.click(); });
+    expect(container.textContent).toContain("Updating “files”");
+
+    await act(async () => {
+      vi.advanceTimersByTime(MCP_MUTATION_DEADLINE_MS + 20);
+      await Promise.resolve();
+    });
+
+    const text = container.textContent;
+    expect(text).toContain("did not answer within 20 seconds");
+    expect(text).toContain("may have changed the entry");
+    expect(text).toContain("Reload reads the config files again");
+    expect(container.querySelector(".rw-settings-notice.is-info"), "the busy line is gone").toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("stops the busy line when a mutation answers inside the bound", async () => {
+    const data = panelData({ testMcp: vi.fn(() => Promise.resolve()) });
+    await render(data);
+    await press(() => { button("Test connection").click(); });
+    expect(container.textContent).not.toContain("did not answer within");
+    expect(button("Test connection").disabled).toBe(false);
   });
 });

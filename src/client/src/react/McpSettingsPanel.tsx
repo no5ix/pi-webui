@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PiMcpServerInfo, PiMcpWriteKind } from "../api";
 import type { ReactWorkspaceData } from "./useReactWorkspaceData";
 import { emptyMcpForm, mcpFormFromServer, mcpFormProblem, mcpSaveRequestFromForm, secretNamesLine, type McpFormState } from "./mcpForm";
@@ -23,6 +23,14 @@ import {
   piMcpStatusTone,
   piMcpTrustNote,
   piMcpSecurityLines,
+  MCP_MUTATION_DEADLINE_MS,
+  idleMcpMutation,
+  mcpMutationGaveUpNotice,
+  mcpMutationDeadlinePassed,
+  mcpMutationLocks,
+  startMcpMutation,
+  type McpMutationAction,
+  type McpMutationState,
 } from "./settings/piMcpSettingsState";
 import { NoticeList,
   SettingsButton,
@@ -73,7 +81,8 @@ interface WriteOption {
 export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, notice, error }: McpSettingsPanelProps) {
   const [form, setForm] = useState<McpFormState>();
   const [problem, setProblem] = useState<string>();
-  const [busyLabel, setBusyLabel] = useState<string>();
+  const [mutation, setMutation] = useState<McpMutationState>({ kind: "idle" });
+  const [gaveUpNotice, setGaveUpNotice] = useState<string>();
   const mcp = data.settings.mcp;
   const servers = mcp?.servers ?? [];
   const projectRows = piMcpProjectRows(servers);
@@ -81,15 +90,28 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
   const scopeProjectId = projectScope?.projectId ?? data.selectedProject?.id;
   const projectName = piMcpScopeProjectName(projectScope?.projects, data.selectedProject, scopeProjectId);
   const projectSectionState = piMcpProjectSectionState({ projectId: scopeProjectId, response: mcp, rowCount: projectRows.length });
-  const locked = busy || data.settings.loading;
+  const busyLabel = mutation.kind === "running" ? mutation.label : undefined;
+  const locked = busy || data.settings.loading || mcpMutationLocks(mutation);
   const trustNote = mcp === undefined ? undefined : piMcpTrustNote(mcp, projectName);
 
-  const act = async <T,>(label: string, action: () => Promise<T>): Promise<T | undefined> => {
-    setBusyLabel(label);
+  useEffect(() => {
+    if (mutation.kind !== "running") return;
+    const timer = setTimeout(() => {
+      if (!mcpMutationDeadlinePassed(mutation)) return;
+      const gaveUp = { kind: "gaveUp", action: mutation.action, label: mutation.label, waitedMs: MCP_MUTATION_DEADLINE_MS } as const;
+      setMutation(gaveUp);
+      setGaveUpNotice(mcpMutationGaveUpNotice(gaveUp));
+    }, Math.max(0, mutation.deadlineAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [mutation]);
+
+  const act = async <T,>(action: McpMutationAction, label: string, request: () => Promise<T>): Promise<T | undefined> => {
+    setGaveUpNotice(undefined);
+    setMutation(startMcpMutation(action, label));
     try {
-      return await run(action);
+      return await run(request);
     } finally {
-      setBusyLabel(undefined);
+      setMutation(current => current.kind === "running" && current.label === label ? idleMcpMutation() : current);
     }
   };
 
@@ -113,7 +135,7 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
       return;
     }
     setProblem(undefined);
-    void act(piMcpBusyLabel("save"), async () => {
+    void act("save", piMcpBusyLabel("save"), async () => {
       await data.saveMcp(mcpSaveRequestFromForm(form, scopeProjectId));
       setForm(undefined);
     });
@@ -145,13 +167,13 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
         checked={server.enabled}
         disabled={locked || server.targets.length === 0}
         title={server.targets.length === 0 ? "No config file at this scope can be written" : "Enable or disable this server"}
-        onChange={enabled => void act(piMcpBusyLabel("enable", server), () => data.setMcpEnabled(server, enabled))}
+        onChange={enabled => void act("enable", piMcpBusyLabel("enable", server), () => data.setMcpEnabled(server, enabled))}
       />
       <SettingsButton
         label="Test connection"
         disabled={locked}
         title="Probe the server without changing any config"
-        onClick={() => void act(piMcpBusyLabel("test", server), () => data.testMcp(server))}
+        onClick={() => void act("test", piMcpBusyLabel("test", server), () => data.testMcp(server))}
       />
       <SettingsButton
         label="Edit"
@@ -165,14 +187,14 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
         confirmLabel="Remove from this file"
         disabled={locked || server.targets.length === 0}
         title={server.targets.length === 0 ? "No config file at this scope can be written" : "Remove this entry from its config file"}
-        onConfirm={() => void act(piMcpBusyLabel("remove", server), () => data.removeMcp(server))}
+        onConfirm={() => void act("remove", piMcpBusyLabel("remove", server), () => data.removeMcp(server))}
       />
     </>}
   />;
 
   return <section className="rw-mcp-panel">
     {mcp?.errors.map((entry, index) => <p className="rw-settings-notice" key={`error-${index}`}>{entry}</p>)}
-    <NoticeList busy={busyLabel} notice={notice === undefined ? [] : [notice]} error={error === undefined ? [] : [error]}/>
+    <NoticeList busy={busyLabel} notice={notice === undefined ? [] : [notice]} error={gaveUpNotice === undefined ? (error === undefined ? [] : [error]) : [gaveUpNotice, error]}/>
     {projectScope === undefined ? null
       : <SettingsProjectSelect scope={projectScope} disabled={locked} note={piMcpScopeWriteNote(projectScope.projectId, machineLabel)}/>}
     <SettingsSection title="Configuration" note="pi reads these files when a session starts. The page shows what they say and writes them through pi.">

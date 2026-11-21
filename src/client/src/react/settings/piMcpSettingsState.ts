@@ -217,3 +217,68 @@ export function piMcpMutationMessage(action: "save" | "test" | "remove" | "enabl
   if (action === "enable") return `${who} is ${enabled === true ? "enabled" : "disabled"}. A running session keeps the servers it loaded until it reloads.`;
   return `${who} is saved in ${server.configPath}. A running session picks it up when it reloads.`;
 }
+
+/**
+ * A page mutation that answers within a bound, or says it gave up.
+ *
+ * The MCP page asks the machine to do things that reach outside it: a connection test starts the
+ * server's own process and waits for a handshake, and a write goes through the machine's file layer.
+ * A command that never answers used to leave the page's busy line set forever, and the page locks its
+ * controls while a mutation runs - so one hung server took the whole page's controls with it, with no
+ * stated deadline and no way to retry.
+ *
+ * The bound is one number, in one place. A mutation that answers settles the state; a mutation that
+ * passes the deadline answers with the truth this page can claim: the machine did not reply, what the
+ * action could and could not have changed, and how to try again. The controls are unlocked on the
+ * give-up, because a page that cannot be pressed again is a page that cannot recover.
+ */
+export const MCP_MUTATION_DEADLINE_MS = 20_000;
+
+export type McpMutationAction = "save" | "test" | "remove" | "enable";
+
+export interface McpMutationRunning {
+  readonly kind: "running";
+  readonly action: McpMutationAction;
+  readonly label: string;
+  readonly deadlineAt: number;
+}
+
+export interface McpMutationGaveUp {
+  readonly kind: "gaveUp";
+  readonly action: McpMutationAction;
+  readonly label: string;
+  readonly waitedMs: number;
+}
+
+export type McpMutationState = { readonly kind: "idle" } | McpMutationRunning | McpMutationGaveUp;
+
+export function startMcpMutation(action: McpMutationAction, label: string, now: number = Date.now()): McpMutationRunning {
+  return { kind: "running", action, label, deadlineAt: now + MCP_MUTATION_DEADLINE_MS };
+}
+
+export function idleMcpMutation(): McpMutationState {
+  return { kind: "idle" };
+}
+
+/** Whether the running mutation has passed the page's bound and should be reported as given up. */
+export function mcpMutationDeadlinePassed(state: McpMutationState, now: number = Date.now()): state is McpMutationRunning {
+  return state.kind === "running" && now >= state.deadlineAt;
+}
+
+/** The controls are locked only while a mutation is inside its bound. */
+export function mcpMutationLocks(state: McpMutationState): boolean {
+  return state.kind === "running";
+}
+
+/** What the page says when a mutation passed the bound, in the action's own terms. */
+export function mcpMutationGaveUpNotice(state: McpMutationGaveUp): string {
+  const seconds = Math.max(1, Math.round(state.waitedMs / 1000));
+  const who = state.label;
+  if (state.action === "test") {
+    return `${who} did not answer within ${String(seconds)} seconds, so the page stopped waiting. `
+      + "A connection test changes nothing, so the server stays as it was. Press Test connection again to try once more.";
+  }
+  const written = state.action === "save" ? "saved" : state.action === "remove" ? "removed" : "changed";
+  return `${who} did not answer within ${String(seconds)} seconds, so the page stopped waiting. `
+    + `The machine may have ${written} the entry anyway - Reload reads the config files again, and the control works now.`;
+}
