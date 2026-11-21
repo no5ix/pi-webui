@@ -621,6 +621,57 @@ that lists the five bundled plugins; `pageApi` truncated bodies at 400 character
 which killed a run in preflight.
 
 
+### The Settings mutations pass: what is green, and the one chain that is not
+
+Runs: drivers `/tmp/piweb-br/cdp31.mjs` / `cdp33.mjs`, stack `scripts/stack-8505.sh` (port 8505,
+disposable profile, network-isolated agent dir), fixtures `/tmp/piweb-br/fixtures.sh` (the agent's
+`settings.json` starts with `packages: []` so the install leg installs something through the machine's
+own installer), Chrome 157 headless, DevTools port 9401.
+
+**MCP Servers, desktop 1440 - the bound is live.** The connection test answers inside the page's bound
+(`MCP probe completed.`), the busy line clears, and the controls are pressable after it: the
+`the connection test ends inside the page's bound` and
+`test connection answers, or gives up truthfully` checks pass in `cdp29`/`cdp30`. The earlier sweep
+failures (`Connection tested`, `Connection failed`, `test connection answers`) are gone. The rows, the
+two-press removal wording, the secret-name visibility, and the scope-file naming pass on both viewports.
+
+**Skills, desktop - the scope read-back is honest.** The leg now reads each toggled skill back from the
+scope that row belongs to: a project-scope skill is checked against `api/machines/local/pi-skills?projectId=<the
+project the page selected>`, a global skill against the global list. The `skill missing: 200
+name=project-release-notes` line, which was the harness querying the global list for a project skill, is
+gone; the skills leg passes in `cdp27` and later runs.
+
+**Pi Packages, desktop and mobile - removal removes.** `29694ec1` made `DefaultPiPackageService.remove`
+drop the recorded entry when pi's manager declines, after the live page proved the asymmetry: a package
+installed from a path is recorded as the relative path, `manager.removeAndPersist` resolves the source it
+is given and reports nothing removed, and the settings file went on naming the package. The 22-test
+service suite covers decline-and-drop, the object form, the manager succeeding alone, and the honest
+no-op. The packages leg's other 41 checks pass (install validation refused before the network, the
+refusal naming what to type, enable/disable written through pi's settings file, update one and all,
+`/reload`, the row surviving a reload).
+
+**Mobile 393x850: 121 checks, 5 failures, all five in the packages removal chain** (the same refusal the
+server fix addresses) - layout, navigation, control sizes, the MCP form, the install field, the skills
+card, machines and theme all pass (`/tmp/cdp32-mobile.log`, `sed 's/\x1b\[[0-9;]*m//g' | grep "^x |"`).
+
+**Verify gate at the end of this pass:** `pnpm run verify` exit 0 - 697 test files, 6155 passed,
+5 skipped, 0 failed (`/tmp/verify33.log`, `/tmp/final33-status.txt`).
+
+**Open, with its mechanism recorded: the MCP write chain in the sweep.** The add-a-server step submits
+and the write never lands: the server's file keeps only the fixture entry, the API list for `secret-probe`
+comes back `{}`, and the removal checks that follow have nothing to remove. The probe built for this
+(`/tmp/piweb-br/cdp33.mjs`, checks `the add form's submit unlocks after the previous mutation` and
+`the submit control is enabled when the add form is submitted`) says the form is open, its submit control
+is disabled while the previous mutation runs and **unlocks** within 30 seconds, and the click is accepted
+- and the form's submit button reads **`Save`**, not `Add`, at that moment. So the step that should add a
+new server is submitting the **edit** form left by the previous step, and pi writes the server that form
+describes. The page's lock behaviour is the designed one (locked while a mutation runs, released by the
+20-second bound, honest notice), and a single isolated add on a fresh page is not what this run
+exercised. Next action: make the leg open the add form on a settled panel and assert the form's mode from
+its heading and submit label before filling it, then re-run; if the app's add form really can be reached
+in the edit state, that is a frontend defect to fix in `McpSettingsPanel`'s `openAdd`/`openEdit`
+transitions, and the check will name it.
+
 ### Pi Packages: the project scope is not carried by the API (measured gap, not fixed)
 
 The page lists rows the machine reports for **both** scopes (`scope: Global` and `scope: Project`, with
