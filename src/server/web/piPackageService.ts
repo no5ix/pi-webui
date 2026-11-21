@@ -110,12 +110,32 @@ export class DefaultPiPackageService implements PiPackageService {
 
   remove(source: string, scope: PiPackageScope = "user"): Promise<PiPackageMutationResponse> {
     return this.enqueueMutation(async () => {
-      const removed = scope === "project"
+      const removedByManager = scope === "project"
         ? await this.manager.removeAndPersist(source, { local: true })
         : await this.manager.removeAndPersist(source);
+      const droppedEntries = removedByManager ? 0 : await this.dropRecordedEntry(source, scope);
       await this.flushSettings();
-      return this.mutationResponse("remove", { source, scope, removed, requiresReload: true });
+      return this.mutationResponse("remove", { source, scope, removed: removedByManager || droppedEntries > 0, requiresReload: true });
     });
+  }
+
+  /**
+   * The settings file can name a package in a form pi's manager does not remove.
+   *
+   * A path package installed by URL is recorded in the shape the machine wrote - for a package inside
+   * the project's reach, the relative path - and the browser pass found a removal that pi answered
+   * "nothing to remove" while the file still named that package, so a reader's Install then Remove left
+   * the package installed with a page agreeing it was. pi is asked first, because a manager removal
+   * also unregisters what it loaded. When it declines, drop the entry that records that source, through
+   * the same write the enabled switch uses, and report `removed: false` when no entry names it: the page
+   * then says nothing was removed, which is the truth about that file.
+   */
+  private async dropRecordedEntry(source: string, scope: PiPackageScope): Promise<number> {
+    const entries = this.manager.readPackageEntries(scope);
+    const keep = entries.filter((entry) => packageSourceString(entry) !== source);
+    if (keep.length === entries.length) return 0;
+    await this.manager.writePackageEntries(scope, keep);
+    return entries.length - keep.length;
   }
 
   update(source?: string): Promise<PiPackageMutationResponse> {

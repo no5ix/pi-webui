@@ -162,6 +162,50 @@ describe("DefaultPiPackageService", () => {
   });
 });
 
+  // pi's manager removes the source it recognises. A path package is recorded in the shape the machine
+  // wrote, and the browser pass found a removal pi answered "nothing to remove" while the settings file
+  // still named that package - so a reader's Install then Remove left the package installed. The service
+  // asks the manager first and, when it declines, drops the entry that records that source.
+  it("drops the entry pi's manager would not remove", async () => {
+    const { manager, removeAndPersist, writePackageEntries } = fakeManager([], { user: ["../pkg/pi-demo-extension"] });
+    removeAndPersist.mockResolvedValueOnce(false);
+    const service = new DefaultPiPackageService(manager);
+
+    await expect(service.remove("../pkg/pi-demo-extension")).resolves.toMatchObject({
+      action: "remove",
+      source: "../pkg/pi-demo-extension",
+      scope: "user",
+      removed: true,
+    });
+    expect(writePackageEntries).toHaveBeenCalledWith("user", []);
+  });
+
+  it("reports nothing removed when the settings file never named the package", async () => {
+    const { manager, removeAndPersist, writePackageEntries } = fakeManager([], { user: ["npm:@acme/other"] });
+    removeAndPersist.mockResolvedValueOnce(false);
+    const service = new DefaultPiPackageService(manager);
+
+    await expect(service.remove("../pkg/pi-demo-extension")).resolves.toMatchObject({ removed: false });
+    expect(writePackageEntries).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when the manager removed the package itself", async () => {
+    const { manager, writePackageEntries } = fakeManager([], { user: ["../pkg/pi-demo-extension"] });
+    const service = new DefaultPiPackageService(manager);
+
+    await expect(service.remove("../pkg/pi-demo-extension")).resolves.toMatchObject({ removed: true });
+    expect(writePackageEntries).not.toHaveBeenCalled();
+  });
+
+  it("drops the entry recorded as an object", async () => {
+    const { manager, removeAndPersist, writePackageEntries } = fakeManager([], { user: [{ source: "../pkg/pi-demo-extension", autoload: false }] });
+    removeAndPersist.mockResolvedValueOnce(false);
+    const service = new DefaultPiPackageService(manager);
+
+    await expect(service.remove("../pkg/pi-demo-extension")).resolves.toMatchObject({ removed: true });
+    expect(writePackageEntries).toHaveBeenCalledWith("user", []);
+  });
+
 describe("DefaultPiPackageService setEnabled", () => {
   it("writes pi's own disable filter, in the scope the request names, and reports a reload", async () => {
     const fake = fakeManager([{ source: "npm:@acme/tools", scope: "user", filtered: false }], { user: ["npm:@acme/tools"] });
