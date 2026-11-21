@@ -353,6 +353,7 @@ interface CapturedPiPackageRequest {
   source?: string;
   scope?: "user" | "project";
   enabled?: boolean;
+  projectId?: string;
 }
 
 function appTestSkill(name: string): PiSkillInfo {
@@ -526,26 +527,31 @@ function isMachineConfigWriteBody(value: unknown): value is MachineConfigWriteBo
 
 function fakePiPackageService(): PiPackageService {
   const packages: PiPackageInfo[] = [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/tmp/pi-tools", disabled: false, enabled: true }];
+  const capture = (request: { source?: string; scope?: "user" | "project"; projectId?: string }) => ({
+    ...(request.source === undefined ? {} : { source: request.source }),
+    ...(request.scope === undefined ? {} : { scope: request.scope }),
+    ...(request.projectId === undefined ? {} : { projectId: request.projectId }),
+  });
   return {
-    list: () => {
-      piPackageRequests.push({ action: "list" });
+    list: (request) => {
+      piPackageRequests.push({ action: "list", ...capture(request) });
       return Promise.resolve({ packages });
     },
-    install: (source) => {
-      piPackageRequests.push({ action: "install", source });
-      return Promise.resolve({ action: "install", source, packages });
+    install: (request) => {
+      piPackageRequests.push({ action: "install", ...capture(request) });
+      return Promise.resolve({ action: "install", ...capture(request), packages });
     },
-    remove: (source, scope = "user") => {
-      piPackageRequests.push({ action: "remove", source, scope });
-      return Promise.resolve({ action: "remove", source, scope, removed: true, packages });
+    remove: (request) => {
+      piPackageRequests.push({ action: "remove", ...capture(request) });
+      return Promise.resolve({ action: "remove", ...capture(request), removed: true, packages });
     },
-    update: (source) => {
-      piPackageRequests.push({ action: "update", ...(source === undefined ? {} : { source }) });
-      return Promise.resolve({ action: "update", ...(source === undefined ? {} : { source }), requiresReload: true, packages });
+    update: (request) => {
+      piPackageRequests.push({ action: "update", ...capture(request) });
+      return Promise.resolve({ action: "update", ...capture(request), requiresReload: true, packages });
     },
-    setEnabled: (source, scope, enabled) => {
-      piPackageRequests.push({ action: "set-enabled", source, scope, enabled });
-      return Promise.resolve({ action: "set-enabled", source, scope, enabled, requiresReload: true, packages });
+    setEnabled: (request) => {
+      piPackageRequests.push({ action: "set-enabled", ...capture(request), enabled: request.enabled });
+      return Promise.resolve({ action: "set-enabled", ...capture(request), enabled: request.enabled, requiresReload: true, packages });
     },
   };
 }

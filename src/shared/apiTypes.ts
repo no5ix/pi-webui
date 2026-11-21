@@ -386,29 +386,70 @@ export interface PiPackageInfo {
   enabled: boolean;
 }
 
+/**
+ * Pi's configured packages, for one machine and one project.
+ *
+ * A package row's `scope` says which of pi's two settings files carries it, and the response says
+ * which files were read: `projectScopeRead` is false when no project was named, when the project is
+ * unknown to the machine, or when the project is not trusted — and in every one of those cases the
+ * read reports no project rows at all, so a reader never calls the server process's own folder
+ * "the project" and never calls an unread scope an empty one. `globalConfigPath` and
+ * `projectConfigPath` name the files a write on that scope goes to.
+ */
 export interface PiPackagesResponse {
   packages: PiPackageInfo[];
+  globalConfigPath?: string;
+  /** The project the project-scope rows belong to, as the machine resolved it. */
+  projectId?: string;
+  projectPath?: string;
+  projectConfigPath?: string;
+  projectTrusted?: boolean;
+  /** False when the project scope was not read, so a reader never calls an absence an empty. */
+  projectScopeRead?: boolean;
 }
 
+/** A packages read: the project whose own packages belong in the answer, by id. */
+export interface PiPackagesListRequest {
+  projectId?: string;
+}
+
+/**
+ * Installing a Pi package, in the scope the request names.
+ *
+ * `scope: "project"` is pi's own local install (`installAndPersist(source, { local: true })`) into
+ * the named project's `.pi/settings.json`, and needs `projectId`; anything else is pi's default,
+ * machine-wide location.
+ */
 export interface PiPackageInstallRequest {
   source: string;
+  scope?: PiPackageScope;
+  /** Required with `scope: "project"`: the project whose settings receive the package. */
+  projectId?: string;
 }
 
 export interface PiPackageRemoveRequest {
   source: string;
-  /** Optional known scope from a listed package; not an install-location picker. */
+  /** The scope the listed row was read from; the server removes it from that file only. */
   scope?: PiPackageScope;
+  /** Required with `scope: "project"`. */
+  projectId?: string;
 }
 
 export interface PiPackageUpdateRequest {
-  /** Omit to update all configured Pi packages. */
+  /** Omit to update all configured Pi packages this machine can reach. */
   source?: string;
+  /** The scope the updated row was read from, so the machine resolves a project's source. */
+  scope?: PiPackageScope;
+  /** Required with `scope: "project"`. */
+  projectId?: string;
 }
 
 export interface PiPackageSetEnabledRequest {
   source: string;
   scope: PiPackageScope;
   enabled: boolean;
+  /** Required with `scope: "project"`. */
+  projectId?: string;
 }
 
 export type PiPackageMutationAction = "install" | "remove" | "update" | "set-enabled";

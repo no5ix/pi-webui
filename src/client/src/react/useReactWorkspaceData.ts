@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, type Machine, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageMutationResponse, type PiPackageScope, type PiPackageSetEnabledRequest, type PiMcpServerInfo, type PiMcpSaveRequest, type PiSkillInfo, type PiSkillSetEnabledResponse, type SessionModelCatalogResponse } from "../api";
+import { configApi, pluginsApi, piPackagesApi, piSkillsApi, piMcpApi, sessionsApi, type Machine, type Project, type SessionInfo, type SessionStatus, type Workspace, type PiWebConfigResponse, type PiWebPluginsResponse, type PiPackagesResponse, type PiSkillsResponse, type PiMcpListResponse, type PiPackageInstallRequest, type PiPackageMutationResponse, type PiPackageRemoveRequest, type PiPackageScope, type PiPackageSetEnabledRequest, type PiPackageUpdateRequest, type PiMcpServerInfo, type PiMcpSaveRequest, type PiSkillInfo, type PiSkillSetEnabledResponse, type SessionModelCatalogResponse } from "../api";
+import { piPackageEnabledMessage, piPackageInstallMessage, piPackageRemoveMessage, piPackageScopedRequest, piPackageUpdateAllMessage, piPackageUpdateMessage } from "./settings/piPackageSettingsState";
 import { initialAppState, type AppState } from "../appState";
 import { ProjectController } from "../controllers/projectController";
 import { WorkspaceController } from "../controllers/workspaceController";
@@ -52,9 +53,9 @@ export interface ReactWorkspaceData {
   readonly loadSettings: (projectId?: string) => Promise<void>;
   readonly saveSettings: (config: Partial<PiWebConfigResponse["config"]>) => Promise<void>;
   readonly setPluginEnabled: (id: string, enabled: boolean) => Promise<void>;
-  readonly installPackage: (source: string) => Promise<PiPackageMutationResponse>;
-  readonly updatePackage: (source?: string) => Promise<PiPackageMutationResponse>;
-  readonly removePackage: (source: string, scope: PiPackageScope) => Promise<PiPackageMutationResponse>;
+  readonly installPackage: (request: PiPackageInstallRequest) => Promise<PiPackageMutationResponse>;
+  readonly updatePackage: (request: PiPackageUpdateRequest) => Promise<PiPackageMutationResponse>;
+  readonly removePackage: (request: PiPackageRemoveRequest) => Promise<PiPackageMutationResponse>;
   readonly setPackageEnabled: (request: PiPackageSetEnabledRequest) => Promise<PiPackageMutationResponse>;
   readonly setSkillEnabled: (skill: PiSkillInfo, enabled: boolean) => Promise<PiSkillSetEnabledResponse>;
   readonly setMcpEnabled: (server: PiMcpServerInfo, enabled: boolean) => Promise<void>;
@@ -322,7 +323,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     await Promise.all([
       answer(() => configApi.config(machineId), (current, value) => ({ ...current, config: value }), current => ({ ...current, config: undefined })),
       answer(() => pluginsApi.plugins(machineId), (current, value) => ({ ...current, plugins: value }), current => ({ ...current, plugins: undefined })),
-      answer(() => piPackagesApi.packages(machineId), (current, value) => ({ ...current, packages: value }), current => ({ ...current, packages: undefined })),
+      answer(() => piPackagesApi.packages({ machineId, ...(project === undefined ? {} : { projectId: project }) }), (current, value) => ({ ...current, packages: value }), current => ({ ...current, packages: undefined })),
       answer(() => piSkillsApi.list(project, machineId), (current, value) => ({ ...current, skills: value }), current => ({ ...current, skills: undefined })),
       answer(() => piMcpApi.list(project, machineId), (current, value) => ({ ...current, mcp: value }), current => ({ ...current, mcp: undefined })),
     ]);
@@ -552,28 +553,36 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const response = await pluginsApi.plugins(machineId);
     writeSettingsForScope(scopeKey, value => ({ ...value, config, plugins: response, notice: "Plugin preference saved. A server restart or reload may be required." }));
   }, [updateMachineConfig]);
-  const installPackage = useCallback(async (source: string) => {
+  /**
+   * Installs a Pi package through pi's own package manager, in the scope the request names.
+   *
+   * `scope: "project"` is pi's native local install (`installAndPersist(source, { local: true })`)
+   * into the project the page selected, and the project id is added here, from the scope the page
+   * read: a caller cannot install into a project the page is not showing. A global install is pi's
+   * default location, and the same source can exist in both scopes as two independent entries.
+   */
+  const installPackage = useCallback(async (request: PiPackageInstallRequest) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
     const scopeKey = currentSettingsScopeKey();
-    const response = await piPackagesApi.install(source, machineId);
-    writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: response.requiresReload === true ? "Package installed. Reload sessions to activate it." : "Package installed." }));
+    const response = await piPackagesApi.install(piPackageScopedRequest(request, settingsProjectIdRef.current), machineId);
+    writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: piPackageInstallMessage(response) }));
     return response;
   }, []);
-  const updatePackage = useCallback(async (source?: string) => {
+  const updatePackage = useCallback(async (request: PiPackageUpdateRequest) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
     const scopeKey = currentSettingsScopeKey();
-    const response = await piPackagesApi.update(source, machineId);
-    writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: "Package update completed." }));
+    const response = await piPackagesApi.update(piPackageScopedRequest(request, settingsProjectIdRef.current), machineId);
+    writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: piPackageUpdateMessage(response) }));
     return response;
   }, []);
-  const removePackage = useCallback(async (source: string, scope: PiPackageScope) => {
+  const removePackage = useCallback(async (request: PiPackageRemoveRequest) => {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
     const scopeKey = currentSettingsScopeKey();
-    const response = await piPackagesApi.remove(source, scope, machineId);
-    writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: "Package removed." }));
+    const response = await piPackagesApi.remove(piPackageScopedRequest(request, settingsProjectIdRef.current), machineId);
+    writeSettingsForScope(scopeKey, value => ({ ...value, packages: response, notice: piPackageRemoveMessage(response) }));
     return response;
   }, []);
   const setSkillEnabled = useCallback(async (skill: PiSkillInfo, enabled: boolean) => {
@@ -598,13 +607,11 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const current = stateRef.current;
     const machineId = current.selectedMachine?.id ?? "local";
     const scopeKey = currentSettingsScopeKey();
-    const response = await piPackagesApi.setEnabled(request, machineId);
+    const response = await piPackagesApi.setEnabled(piPackageScopedRequest(request, settingsProjectIdRef.current), machineId);
     writeSettingsForScope(scopeKey, value => ({
       ...value,
       packages: response,
-      notice: response.requiresReload === true
-        ? `Package preference saved. Reload a running session to ${request.enabled ? "load" : "stop loading"} it.`
-        : "Package preference saved.",
+      notice: piPackageEnabledMessage(response),
     }));
     return response;
   }, []);

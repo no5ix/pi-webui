@@ -704,7 +704,7 @@ export class SettingsDialog extends LitElement {
     this.packageError = "";
     if (message === "clear") this.packageMessage = "";
     try {
-      const result = await loadPiPackagesData(target, (targetId) => piPackagesApi.packages(targetId));
+      const result = await loadPiPackagesData(target, (targetId) => piPackagesApi.packages({ machineId: targetId }));
       if (!this.isCurrentPackageLoad(requestSeq, target)) return;
 
       this.packagesResponse = result.packagesResponse;
@@ -945,7 +945,7 @@ export class SettingsDialog extends LitElement {
 
   private async installPiPackage(source: string): Promise<void> {
     const target = this.packageTarget();
-    await this.runPiPackageMutation({ kind: "install", source }, "install Pi package", target, () => piPackagesApi.install(source, target.id));
+    await this.runPiPackageMutation({ kind: "install", source }, "install Pi package", target, () => piPackagesApi.install({ source }, target.id));
   }
 
   private removePiPackage(source: string, scope: PiPackageScope): void {
@@ -954,7 +954,7 @@ export class SettingsDialog extends LitElement {
 
   private async updatePiPackage(source?: string): Promise<void> {
     const target = this.packageTarget();
-    await this.runPiPackageMutation(source === undefined ? { kind: "update-all" } : { kind: "update", source }, "update Pi packages", target, () => piPackagesApi.update(source, target.id));
+    await this.runPiPackageMutation(source === undefined ? { kind: "update-all" } : { kind: "update", source }, "update Pi packages", target, () => piPackagesApi.update(source === undefined ? {} : { source }, target.id));
   }
 
   /**

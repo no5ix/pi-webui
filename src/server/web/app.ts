@@ -324,7 +324,6 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     configProvider: readCatalogConfig,
     agentDirProvider: () => desiredPluginAgentDir(agentProfileProvider, configService),
   });
-  const piPackages = deps.piPackages ?? createActiveProfilePiPackageService(agentProfileProvider);
   const settingsProjects = (agentDir: string) => createSettingsProjectResolver({
     agentDir,
     projects: {
@@ -334,6 +333,7 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
       },
     },
   });
+  const piPackages = deps.piPackages ?? createActiveProfilePiPackageService(agentProfileProvider, settingsProjects);
   const piSkills = deps.piSkills ?? createActiveProfilePiSkillsService(agentProfileProvider, settingsProjects);
   const piMcp = deps.piMcp ?? createActiveProfilePiMcpService(agentProfileProvider, settingsProjects);
   app.get("/pi-web-plugins/manifest.json", async (_request, reply) => withProfileDependency(reply, () => piWebPlugins.manifest()));

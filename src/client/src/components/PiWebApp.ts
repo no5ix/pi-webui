@@ -614,10 +614,10 @@ export class PiWebApp extends LitElement {
       },
       packages: {
         remove: async (machineId, target, keepalive) => {
-          const answer = await piPackagesApi.remove(target.label, target.packageScope, machineId, keepaliveInit(keepalive));
+          const answer = await piPackagesApi.remove({ source: target.label, ...(target.packageScope === undefined ? {} : { scope: target.packageScope }) }, machineId, keepaliveInit(keepalive));
           if (answer.removed === false) throw new InstantRefusal(`${target.label} is not installed there`);
         },
-        read: async (machineId) => (await piPackagesApi.packages(machineId)).packages,
+        read: async (machineId) => (await piPackagesApi.packages({ machineId })).packages,
         applyRemoved: (machineId) => this.piPackageRemoved(machineId),
       },
       pageAccess: {

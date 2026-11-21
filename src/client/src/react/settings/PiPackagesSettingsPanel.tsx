@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PiPackageInfo, PiPackageMutationResponse, PiPackageScope, PiPackagesResponse, PiPackageSetEnabledRequest } from "../../api";
+import type { PiPackageInfo, PiPackageInstallRequest, PiPackageMutationResponse, PiPackageRemoveRequest, PiPackagesResponse, PiPackageSetEnabledRequest, PiPackageUpdateRequest } from "../../api";
 import {
   piPackageBusyMessage,
   piPackageCanUpdate,
@@ -8,13 +8,15 @@ import {
   piPackageEnabledMessage,
   piPackageFilteredNote,
   piPackageGlobalRows,
+  piPackageGlobalEmptyStateNote,
   piPackageInstallMessage,
   piPackageInstallPath,
+  piPackageInstallProjectDisabledReason,
+  piPackageInstallRequest,
   piPackageInstallTargetLabel,
-  piPackageListsEmpty,
-  piPackageNotLoadedNote,
-  piPackageGlobalEmptyStateNote,
   piPackageProjectRows,
+  piPackageProjectScopeNote,
+  piPackageProjectScopeState,
   piPackageRemoveMessage,
   piPackageRemoveQuestion,
   piPackageRemoveRequest,
@@ -30,6 +32,7 @@ import {
   piPackageUpdateDisabledReason,
   piPackageUpdateMessage,
   piPackageUpdateRequest,
+  type PiPackageInstallScope,
 } from "./piPackageSettingsState";
 import { NoticeList, SettingsButton, SettingsCard, SettingsConfirmAction, SettingsEmpty, SettingsNotice, SettingsSection, SettingsToggle } from "./SettingsKit";
 
@@ -42,9 +45,9 @@ export interface PackagesSettingsPanelProps {
   readonly error?: string | undefined;
   readonly busyMessage?: string | undefined;
   readonly onReload: () => void;
-  readonly install: (source: string) => Promise<PiPackageMutationResponse>;
-  readonly update: (source: string | undefined) => Promise<PiPackageMutationResponse>;
-  readonly remove: (source: string, scope: PiPackageScope) => Promise<PiPackageMutationResponse>;
+  readonly install: (request: PiPackageInstallRequest) => Promise<PiPackageMutationResponse>;
+  readonly update: (request: PiPackageUpdateRequest) => Promise<PiPackageMutationResponse>;
+  readonly remove: (request: PiPackageRemoveRequest) => Promise<PiPackageMutationResponse>;
   readonly setEnabled: (request: PiPackageSetEnabledRequest) => Promise<PiPackageMutationResponse>;
 }
 
@@ -70,9 +73,12 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [source, setSource] = useState("");
+  const [installScope, setInstallScope] = useState<PiPackageInstallScope>("user");
   const globalRows = piPackageGlobalRows(props.packages);
   const projectRows = piPackageProjectRows(props.packages);
   const counts = piPackageScopeCounts(props.packages);
+  const projectScope = piPackageProjectScopeState(props.packages);
+  const projectInstallBlock = piPackageInstallProjectDisabledReason(projectScope, props.projectName);
   const busyLine = piPackageBusyMessage(busy);
   const locked = props.busy || busyLine !== undefined;
 
@@ -95,7 +101,11 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
       setError("Enter a package source, for example npm:opencode-formatters.");
       return;
     }
-    void run("install", `Installing ${trimmed}`, () => props.install(trimmed), piPackageInstallMessage);
+    if (installScope === "project" && projectInstallBlock !== undefined) {
+      setError(projectInstallBlock);
+      return;
+    }
+    void run("install", `Installing ${trimmed}`, () => props.install(piPackageInstallRequest(trimmed, installScope)), piPackageInstallMessage);
     setSource("");
   };
 
@@ -103,7 +113,7 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
     const key = piPackageRowKey(pkg.scope, pkg.source);
     const pending = piPackageRowPending(busy, pkg);
     const status = piPackageStatus(pkg);
-    const canUpdate = piPackageCanUpdate(pkg.scope);
+    const canUpdate = piPackageCanUpdate(pkg.source);
     const installPath = piPackageInstallPath(pkg);
     const meta = [
       `scope: ${piPackageScopeLabel(pkg.scope)}`,
@@ -137,11 +147,11 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
           disabled={locked || !canUpdate}
           label="Update"
           pending={pending}
-          title={canUpdate ? `Update ${pkg.source} on ${props.machineLabel}` : piPackageUpdateDisabledReason(pkg.scope)}
+          title={canUpdate ? `Update ${pkg.source} on ${props.machineLabel}` : piPackageUpdateDisabledReason(pkg.source)}
           onClick={() => void run(
             key,
             `Updating ${pkg.source}`,
-            () => props.update(piPackageUpdateRequest(pkg).source),
+            () => props.update(piPackageUpdateRequest(pkg)),
             piPackageUpdateMessage,
           )}
         />
@@ -155,10 +165,7 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
           onConfirm={() => void run(
             key,
             `Removing ${pkg.source}`,
-            () => {
-              const removal = piPackageRemoveRequest(pkg.source, pkg.scope);
-              return props.remove(removal.source, removal.scope ?? pkg.scope);
-            },
+            () => props.remove(piPackageRemoveRequest(pkg.source, pkg.scope)),
             piPackageRemoveMessage,
           )}
         />
@@ -166,14 +173,17 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
     />;
   };
 
+  const projectFile = props.packages?.projectConfigPath;
+  const globalFile = props.packages?.globalConfigPath;
+
   return <>
     <SettingsSection
       actions={<>
         <SettingsButton
           disabled={!piPackageCanUpdateAll(props.packages) || locked}
           label="Update All"
-          title="Update every installed package pi can update"
-          onClick={() => void run("update-all", "Updating all packages", () => props.update(undefined), piPackageUpdateAllMessage)}
+          title="Update every package pi can advance: npm sources with a range, and git sources, in both scopes"
+          onClick={() => void run("update-all", "Updating all packages", () => props.update({}), piPackageUpdateAllMessage)}
         />
         <SettingsButton disabled={locked} label="Reload" onClick={props.onReload} />
       </>}
@@ -185,17 +195,32 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
       <NoticeList busy={busyLine ?? props.busyMessage} notice={[notice, props.notice]} error={[error, props.error]} />
       <form className="rw-settings-inline-form" onSubmit={event => { event.preventDefault(); install(); }}>
         <input aria-label="Package source" disabled={locked} onChange={event => setSource(event.currentTarget.value)} placeholder="npm:opencode-formatters" type="text" value={source} />
+        <select
+          aria-label="Install scope"
+          disabled={locked}
+          onChange={event => setInstallScope(event.currentTarget.value === "project" ? "project" : "user")}
+          title={projectInstallBlock ?? "Choose where this package is installed"}
+          value={installScope}
+        >
+          <option value="user">Global</option>
+          <option disabled={projectInstallBlock !== undefined} value="project">Project</option>
+        </select>
         <SettingsButton disabled={locked} label="Install" tone="primary" type="submit" />
         <SettingsButton disabled={locked} label="Clear" onClick={() => { setSource(""); setError(undefined); setNotice(undefined); }} />
       </form>
-      <p className="rw-settings-help">{piPackageInstallTargetLabel(props.machineLabel)}</p>
+      <p className="rw-settings-help">{piPackageInstallTargetLabel(installScope, props.machineLabel, props.projectName)}</p>
+      {installScope === "project" && projectInstallBlock !== undefined ? <SettingsNotice tone="danger">{projectInstallBlock}</SettingsNotice> : null}
+      {globalFile === undefined ? null : <p className="rw-settings-help">Global settings file: {globalFile}</p>}
     </SettingsSection>
     <SettingsSection
-      note={piPackageScopeNote("project", projectRows.length, props.projectName, props.machineLabel)}
+      note={projectScope === "read"
+        ? piPackageScopeNote("project", projectRows.length, props.projectName, props.machineLabel)
+        : piPackageProjectScopeNote(projectScope, props.projectName, props.machineLabel)}
       title="Project packages"
     >
-      {projectRows.map(card)}
-      {projectRows.length === 0 ? <SettingsEmpty>{props.packages === undefined ? piPackageNotLoadedNote() : piPackageEmptyNote("project", props.projectName)}</SettingsEmpty> : null}
+      {projectScope === "read" ? projectRows.map(card) : null}
+      {projectScope === "read" && projectRows.length === 0 ? <SettingsEmpty>{piPackageEmptyNote("project", props.projectName)}</SettingsEmpty> : null}
+      {projectScope !== "read" && projectFile !== undefined ? <p className="rw-settings-help">Project settings file: {projectFile}</p> : null}
     </SettingsSection>
     <SettingsSection
       note={piPackageScopeNote("user", globalRows.length, props.projectName, props.machineLabel)}

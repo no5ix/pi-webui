@@ -2086,7 +2086,17 @@ function parsePiWebConfigEnvOverrides(value: unknown): PiWebConfigEnvOverrides {
 
 export function parsePiPackagesResponse(value: unknown): PiPackagesResponse {
   const record = requireRecord(value);
-  return { packages: arrayOf(parsePiPackageInfo)(record["packages"]) };
+  const projectTrusted = parseOptionalBoolean(record["projectTrusted"], "projectTrusted");
+  const projectScopeRead = parseOptionalBoolean(record["projectScopeRead"], "projectScopeRead");
+  return {
+    packages: arrayOf(parsePiPackageInfo)(record["packages"]),
+    ...optionalField("globalConfigPath", optionalString(record, "globalConfigPath")),
+    ...optionalField("projectId", optionalString(record, "projectId")),
+    ...optionalField("projectPath", optionalString(record, "projectPath")),
+    ...optionalField("projectConfigPath", optionalString(record, "projectConfigPath")),
+    ...optionalField("projectTrusted", projectTrusted),
+    ...optionalField("projectScopeRead", projectScopeRead),
+  };
 }
 
 export function parsePiPackageMutationResponse(value: unknown): PiPackageMutationResponse {
@@ -2103,7 +2113,7 @@ export function parsePiPackageMutationResponse(value: unknown): PiPackageMutatio
     ...optionalField("removed", removed),
     ...optionalField("enabled", enabled),
     ...optionalField("requiresReload", requiresReload),
-    packages: arrayOf(parsePiPackageInfo)(record["packages"]),
+    ...parsePiPackagesResponse(value),
   };
 }
 
