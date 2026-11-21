@@ -1,5 +1,6 @@
 import type { PiWebPlugin } from "@gang-of-beads/pi-web/plugin-api";
-import { createMermaidFenceRenderer, pageIsDark, type MermaidLike } from "./mermaidRenderer.js";
+import { createMermaidDomFenceRenderer, createMermaidDrawer, pageIsDark, type MermaidLike } from "./mermaidRenderer.js";
+import { createMermaidReactFenceRenderer } from "./mermaidFenceReact.js";
 
 /**
  * The library ships beside this module as a vendored, chunked ESM bundle
@@ -12,18 +13,28 @@ function loadMermaid(): Promise<MermaidLike> {
   return import(/* @vite-ignore */ url).then((module: { default: MermaidLike }) => module.default);
 }
 
-const render = createMermaidFenceRenderer({
-  loadMermaid,
-  darkTheme: () => pageIsDark(getComputedStyle(document.documentElement), matchMedia("(prefers-color-scheme: dark)").matches),
-  createElement: (tag) => document.createElement(tag),
-});
+function pageIsDarkNow(): boolean {
+  return pageIsDark(getComputedStyle(document.documentElement), matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+/**
+ * One drawer, two presenters.
+ *
+ * The transcript that draws a fence is the Lit one on the pages that still run
+ * it and the React one on the React workbench, and both are served from this
+ * module, so the engine loads once per page and the two hosts cannot be handed
+ * the same mermaid render id.
+ */
+const draw = createMermaidDrawer({ loadMermaid, darkTheme: pageIsDarkNow });
+const render = createMermaidDomFenceRenderer(draw, (tag) => document.createElement(tag));
+const renderReact = createMermaidReactFenceRenderer(draw);
 
 const plugin: PiWebPlugin = {
   apiVersion: 2,
   name: "Mermaid Diagrams",
   activate: () => ({
     contributions: {
-      codeFenceRenderers: [{ id: "mermaid", language: "mermaid", render }],
+      codeFenceRenderers: [{ id: "mermaid", language: "mermaid", render, renderReact }],
     },
   }),
 };

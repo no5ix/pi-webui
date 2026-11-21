@@ -4,12 +4,7 @@ import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promi
 import { dirname, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import * as esbuild from "esbuild";
-
-const HOST_REACT_SPECIFIERS = [
-  "@gang-of-beads/pi-web/plugin-react",
-  "@gang-of-beads/pi-web/plugin-react-hooks",
-  "@gang-of-beads/pi-web/jsx-runtime",
-];
+import { HOST_REACT_SPECIFIERS } from "./pluginModuleSpecifiers.mjs";
 
 const rootDir = resolve("pi-web-plugins");
 const outFlag = process.argv.indexOf("--out");
@@ -168,7 +163,7 @@ async function buildDirectory(sourceDir, targetDir) {
     if (entry.name.endsWith(".d.ts") || isTestSource(entry.name)) continue;
 
     if (isPluginSource(entry.name)) {
-      await buildFile(sourcePath, targetPath.replace(/\.ts$/u, ".js"));
+      await buildFile(sourcePath, targetPath.replace(/\.tsx?$/u, ".js"));
       transpiled += 1;
       continue;
     }
@@ -192,6 +187,10 @@ async function buildFile(file, outputPath) {
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
       verbatimModuleSyntax: true,
+      // A plugin's JSX compiles against the React the page publishes, so the emit imports the host's
+      // published runtime by specifier and the plugin bundle carries no React of its own.
+      jsx: ts.JsxEmit.ReactJSX,
+      jsxImportSource: "@gang-of-beads/pi-web",
       // Same decorator dialect the app compiles with. Without it a decorated
       // Lit field survives into the output as a standard decorator, which the
       // bundler cannot parse and the browser refuses to import.
@@ -234,13 +233,13 @@ async function findPluginDirs(dir) {
 }
 
 function isPluginSource(fileName) {
-  return fileName.endsWith(".ts") && !fileName.endsWith(".d.ts");
+  return /\.tsx?$/u.test(fileName) && !fileName.endsWith(".d.ts");
 }
 
 function isTestSource(fileName) {
   // Test helpers ship as source for the repo's own vitest run but never in the
   // package, matching the pack manifest's testSupport exclusion.
-  return /\.(?:test|spec|testSupport)\.ts$/u.test(fileName);
+  return /\.(?:test|spec|testSupport)\.tsx?$/u.test(fileName);
 }
 
 async function hasTypeScriptSource(javaScriptPath) {
