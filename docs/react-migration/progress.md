@@ -537,7 +537,63 @@ the transcript where the React app already has the message), then `workspacePane
 after the runtime context exists. Wiring `settingsSections` first buys a contract test and no live
 behavior.
 
-## Browser pass of 2026-11-21: what is evidenced, and what is not
+## Phase 1: the five open findings, investigated (2026-11-21, second block)
+
+Each was investigated against the implementation and against a live page, not against the old log.
+
+1. **Appearance changes no tokens. Real defect. Fixed `f1f219ed`.** `theme.ts`'s `applyNativeTheme` is
+   the app's one applier: it writes a theme's `--pi-*` tokens inline on `<html>`, sets `color-scheme`,
+   and names the theme in `data-pi-web-theme`. `react/tokens.css` shipped an **independent** `--rw-*`
+   palette of fixed literals that no theme ever wrote, so choosing Lightness repainted nothing. The
+   palette is now a projection: each React colour names the theme token that carries its role,
+   `color-mix` derives the window/header/strong-line separations from the theme's own text and border
+   ramps (the way `theme.ts` derives its ladder stops), and every mapping keeps its previous literal as
+   the fallback, so the pre-paint frame and a token-sparse theme answer with the old look. Live: computed
+   `--rw-bg` is `#141218` under Material Dark and `#fdf7ff` under Material Light. `react/tokens.test.ts`
+   (4 tests) pins that every React colour names a `--pi-*` token, that the tokens consulted are ones the
+   applier paints, and that **all four native themes answer every token the sheet reads**. The existing
+   `index.html` first-paint script already paints the stored `--pi-*` in the first frame, so a light user
+   no longer sees a dark frame - no change to `index.html`.
+2. **Settings renders no content after reload. Not a defect.** A clean probe (write a server behind the
+   page's back → click the page's Reload) shows the new row **1 second** later with no loader, and every
+   Settings endpoint answers in ~10 ms (`pi-packages`, `pi-plugins`, `pi-skills`, `machines`, `config`).
+   The old failure came from the leg clicking Reload while a sweep read was in flight; the leg now waits
+   for the loader to clear.
+3. **MCP removal never reaches confirmation. Not a defect.** Removal is a two-press control
+   (`SettingsConfirmAction`, `McpSettingsPanel.tsx:163-168`) whose confirm label is "Remove from this
+   file" and whose question names the target file; the leg's needle was the old Lit-era word
+   "disk-only". The MCP leg's own removal checks (confirm step, `mcp.json` write, the other server
+   surviving) pass against the live page.
+4. **Close unverified. Testability gap, fixed `f0892930`.** The close button carried only an accessible
+   name, so no browser handle existed; it now carries `data-test-id="settings-close"`, pinned by
+   `ReactSettingsDialog.test.ts` to the same node the accessible name points at. Live: `dialog.open`
+   becomes `false` on that click, and reopening shows a loaded page.
+5. **Skills, MCP, Packages, mobile unverified.** The pass with the corrected driver is the run recorded
+   below. Two real defects surfaced on Packages while investigating it:
+   - **A removal that found nothing said it removed. Real defect. Fixed `dd987bb9`.** pi answers
+     `remove` with `removed`, and `piPackageRemoveMessage` ignored it: the page said
+     "Removed ../pkg/pi-demo-extension (Global)" while `settings.json` and the list kept the entry
+     (a package recorded in pi's plain string form is not the entry its manager carries). The refusal
+     now names the source and the scope and drops the reload sentence; a response without the flag keeps
+     the old wording. Five tests.
+   - **Update on a path-sourced package.** The control is enabled for a package pi cannot update, and pi
+     answers "No matching package found for ../pkg/pi-demo-extension", which the page shows as an error.
+     Enabling/disabling that control is product semantics, so nothing was changed: **maintainers should
+     decide** whether a path source offers Update at all. The leg now accepts pi's answer (success or
+     that refusal) and records which it saw.
+
+**Harness artifacts, fixed in `/tmp/piweb-br/cdp22.mjs`** (each was a wrong expectation, not an app
+bug): the theme probe read `data-theme` (the app writes `data-pi-web-theme`) and inline `--rw-bg` (the
+palette is on the stylesheet); the close check asserted a detached content node instead of
+`dialog.open`; the churn leg expected a `local` project while the machine was `lab` and sampled rows
+before they settled; the mobile control-height rule measured `<label>` text (a 15px label, with the
+selects at 44px) instead of controls; the mobile install selector used a test id the app never had (the
+input is `[aria-label="Package source"]`); the Plugins needles demanded an empty-state string on a page
+that lists the five bundled plugins; `pageApi` truncated bodies at 400 characters and then parsed them,
+which killed a run in preflight.
+
+
+## Browser pass of 2026-11-21 (first block): what was evidenced, and what was not
 
 Stack: `scripts/stack-8505.sh` on port 8505 with its own data/config/sessiond, fixtures at
 `/tmp/piweb-br` (local machine trusted, one project, global + project MCP servers, global + project
