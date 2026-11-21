@@ -98,6 +98,7 @@ describe("React Settings dialog", () => {
     expect(container.querySelector(".rw-settings-page-heading h3")?.textContent).toBe("Appearance");
     const close = container.querySelector<HTMLButtonElement>("button[aria-label='Close settings']");
     expect(close).not.toBeNull();
+    expect(container.querySelector("[data-test-id='settings-close']")).toBe(close);
     await act(async () => { close?.click(); await Promise.resolve(); });
     expect(onClose).toHaveBeenCalledOnce();
   });

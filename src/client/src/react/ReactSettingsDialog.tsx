@@ -115,7 +115,7 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
     <div className="rw-settings-window">
       <header className="rw-settings-titlebar">
         <div><h2 id="rw-settings-title">Settings</h2><small>{data.state.selectedMachine?.name ?? "Local machine"} · {data.selectedProject?.name ?? "Global scope"}</small></div>
-        <button type="button" aria-label="Close settings" onClick={() => dialogRef.current?.close()}>×</button>
+        <button type="button" aria-label="Close settings" data-test-id="settings-close" onClick={() => dialogRef.current?.close()}>×</button>
       </header>
       <div className="rw-settings-layout">
         <nav className="rw-settings-nav" aria-label="Settings pages">
