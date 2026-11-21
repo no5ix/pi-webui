@@ -82,7 +82,7 @@
     "dev:server": "pnpm run dev:web",
     "dev:client": "vite --host 127.0.0.1",
     "dev:plugins": "node scripts/build-plugins.mjs --watch",
-    "build": "pnpm run clean && tsc -p tsconfig.build.json && pnpm run build:plugins && vite build",
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && pnpm run build:plugins && vite build && node scripts/build-react-runtime.mjs",
     "build:plugin-api": "tsc -p tsconfig.plugin-api.json",
     "build:plugin-api-package": "tsc -p tsconfig.plugin-api.json --outDir packages/pi-web-plugin-api/dist",
     "build:plugins": "pnpm run build:plugin-api && tsc -p tsconfig.plugins.json && node scripts/build-plugins.mjs",

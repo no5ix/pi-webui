@@ -123,7 +123,8 @@ const packageVersion = typeof parsedPackage === "object" && parsedPackage !== nu
  * emitted as stable, unhashed entries in the client build and named to the browser by an import map,
  * with URLs relative to the document the way `base: "./"` makes every other client asset resolve. One
  * React per page is the point: a plugin that brought its own would mount a second reconciler over the
- * same DOM.
+ * same DOM. The entries are emitted after this build by `scripts/build-react-runtime.mjs`: the client
+ * bundler cannot see a plugin's import, and a tree-shaken entry ships as calls with no exports.
  */
 const pluginReactModules = ["plugin-react", "plugin-react-hooks", "jsx-runtime"] as const;
 
@@ -155,7 +156,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve("src/client/index.html"),
-        ...Object.fromEntries(pluginReactModules.map((name) => [name, resolve(`src/${name}.ts`)])),
       },
       output: {
         entryFileNames(chunk) {

@@ -1291,3 +1291,55 @@ exits 0, the document entry is `assets/index-CI_1cBpv.js`, the three stable entr
 Browser evidence: not run. No page has loaded a React-contributing plugin through the map. That is
 the mermaid migration (`renderReact` through the fence host that already landed), and the runtime
 claim stays build-level until it is driven on the 8505 stack at desktop 1440 and mobile 393x850.
+
+## Addendum — a plugin draws in the browser, and the shipped React runtime was not what the tests saw
+
+Commits: `fdff8427` (Mermaid fence through the React host, shared drawing core, plugin-build TSX and
+JSX), `88d317fe` (ESLint covers `.tsx`, `eslint-plugin-react-hooks`, the findings fixed at source),
+and the runtime emit below.
+
+Mermaid split into a drawing core that returns SVG text and two presenters: Lit appends a figure,
+React returns a figure element. One drawer instance is shared by both presenters, so a page cannot
+render one diagram under two ids. A refusal (no source, a diagram that does not parse, Mermaid not
+installed) throws at the core, and the React host keeps the plain code block while the draw is in
+flight and when it is refused — the same contract the Lit path implements.
+
+**The defect the browser found.** The published entries shipped tree-shaken:
+`dist/client/jsx-runtime.js` was `p("jsx"),p("jsxs"),p("Fragment")` with no `export` statement,
+because the client bundler evaluated them as entries whose exports nobody in the app graph reached
+(`preserveEntrySignatures: "strict"` is ignored by the current bundler). A plugin's
+`import { jsx } from "@gang-of-beads/pi-web/jsx-runtime"` therefore failed to **link**: the plugin
+module was fetched, evaluated to nothing, and the fence fell back to plain code with no console
+error and no failed request. The unit suite could not see this — Vitest aliases those specifiers to
+the source modules, so it tested the contract, not the shipped artifact.
+
+Fixed at the build, not in the plugin: `scripts/build-react-runtime.mjs` emits the three published
+modules with the same esbuild rule the plugin build uses, after `vite build`, and refuses a shipped
+file that does not export every published name. `pnpm run build` died on that guard the first time
+it ran (the parser missed minified `}export{`), which is the loud-precondition behaviour the
+repository asks for. `src/client/src/react/pluginReactRuntime.ts` now reads the published modules
+back after install and reports a missing member on the console, which also keeps their exports live
+inside the app graph.
+
+Browser evidence — Chrome 157.0.8103.79, production build, isolated session daemon and data dir on
+free ports, seeded sessions (valid fence, unparseable fence, no fence), driver
+`.pi/browser/verify-mermaid-react.mjs`, screenshots `.pi/browser/evidence/`: **17 checks pass, exit
+0** at desktop 1440x900 and mobile 393x850. Import map present with the three specifiers; all three
+published modules load and export the names a plugin writes; the published runtime is the module a
+plugin imports (`useMemo` and `useState` are identical by reference, React 19.3.1); no `react-dom`
+module fetched; the Mermaid plugin module loaded from the page; one `figure.pi-web-mermaid` holding
+one `svg`; the Mermaid engine fetched lazily, only on the first fence; an unparseable diagram falls
+back to the plain code block; an ordinary fence stays a code block; switching sessions leaves no
+stale diagram, switching back draws once, and a reload redraws; zero console errors and zero failed
+requests; `scrollWidth` 393 at 393x850.
+
+Not verified, and recorded as such: the settings-driven plugin enable/disable and theme-switch flows
+were not driven in this browser pass. The two independent review passes AGENTS.md asks for did not
+complete in this session — six review lanes were launched and all six failed as infrastructure
+failures (one 30-minute timeout, two credential refusals on a pinned route, two 15-minute timeouts,
+one script-API error), each leaving no report. The risky hunks were reviewed by hand against the
+behaviour-preserving claim; that is one pass, not two, and the next session should re-run the review
+over `fdff8427` and `88d317fe` with a working model route.
+
+Verification for this entry: `pnpm run verify` (recorded below), `pnpm run build` exit 0,
+`node scripts/build-react-runtime.mjs` prints the published name counts, and the browser probe above.
