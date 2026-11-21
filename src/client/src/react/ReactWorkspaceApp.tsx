@@ -21,6 +21,7 @@ import { useWorkspaceFiles } from "./useWorkspaceFiles";
 import { WorkspaceFilesPanel } from "./WorkspaceFilesPanel";
 import { WorkspaceUnsavedDialog } from "./WorkspaceFileDialogs";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
+import { useAppliedTheme } from "./useAppliedTheme";
 import { ReactPluginDialogLayer } from "./ReactPluginDialogLayer";
 import { usePluginRegistry } from "./usePluginRegistry";
 import { SessionActionsMenu } from "./SessionActionsMenu";
@@ -54,6 +55,7 @@ export function ReactWorkspaceApp() {
   }, [data.undoAvailable, data.undoSessionAction]);
   const selectedMachineId = data.state.selectedMachine?.id ?? "local";
   const pluginRuntime = usePluginRegistry({ machineId: selectedMachineId });
+  const appliedTheme = useAppliedTheme(pluginRuntime.registry, selectedMachineId, pluginRuntime.revision);
   const selectedSessionActionPending = data.selectedSession !== undefined && sessionActionIsPending(data.instantActions, selectedMachineId, data.selectedSession.id);
   const selectedMachineHealth = data.state.machineStatuses[selectedMachineId];
   const machineConnectionMessage = data.machineReadIssue ?? (data.state.machinesLoad !== "loaded" ? data.state.error : "");
@@ -742,7 +744,7 @@ export function ReactWorkspaceApp() {
       onDiscard={discardThenScopeChange}
       onCancel={() => { if (!scopeChangeBusy) { setPendingScopeChange(undefined); setScopeChangeError(undefined); } }}
     />
-    <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} pluginFailures={pluginRuntime.failures}/>
+    <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} pluginFailures={pluginRuntime.failures} theme={appliedTheme}/>
     <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} {...(addProjectTarget?.initialPath === undefined ? {} : { initialPath: addProjectTarget.initialPath })} {...(addProjectTarget?.pickerNotice === undefined ? {} : { pickerNotice: addProjectTarget.pickerNotice })} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
     <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>
   </div>;

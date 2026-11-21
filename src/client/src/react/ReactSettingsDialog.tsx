@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Machine } from "../api";
-import { NATIVE_THEME_CHOICES, applyNativeThemeById, readStoredThemePreference, serializedThemePreference, writeStoredThemePreference } from "../theme";
-import { CORE_BUILTIN_DARK_THEME_ID } from "../builtinDarkTheme";
 import type { QualifiedContributionId } from "../plugins/types";
-import type { PaintScope } from "../themePaint";
+import type { AppliedTheme } from "./useAppliedTheme";
 import { McpSettingsPanel } from "./McpSettingsPanel";
 import { isMutationDeadline, mutationDeadlineNotice, runWithinDeadline } from "./settings/settingsMutation";
 import { NotificationsSettingsPanel } from "./NotificationsSettingsPanel";
@@ -42,15 +40,16 @@ export interface ReactSettingsDialogProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly pluginFailures?: readonly string[];
+  /** The app's theme surface: what is offered, what is worn, and how to change it. The app owns painting. */
+  readonly theme: AppliedTheme;
 }
 
-export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }: ReactSettingsDialogProps) {
+export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [], theme }: ReactSettingsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [page, setPage] = useState<Page>("General");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const [themePreference, setThemePreference] = useState(() => readStoredThemePreference() ?? { themeId: CORE_BUILTIN_DARK_THEME_ID, auto: false });
   const [machineName, setMachineName] = useState("");
   const [machineUrl, setMachineUrl] = useState("");
   const [machineToken, setMachineToken] = useState("");
@@ -137,15 +136,17 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
             </> : <p>Configuration is not available yet.</p>}
           </section>}
           {page === "Appearance" && <section>
-            <label>Theme<select value={themePreference.themeId} onChange={event => {
-              const preference = { themeId: event.target.value as QualifiedContributionId, auto: false };
-              const serialized = serializedThemePreference(preference);
-              if (applyNativeThemeById(preference.themeId, { preference: serialized, followsSystem: false } satisfies PaintScope)) {
-                writeStoredThemePreference(preference);
-                setThemePreference(preference);
-              }
-            }}>{NATIVE_THEME_CHOICES.map(theme => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
-            <p>Theme changes are saved in this browser and applied immediately.</p>
+            <label>Theme<select
+              value={theme.preference.themeId}
+              onChange={(event) => theme.select(event.target.value as QualifiedContributionId)}
+            >{theme.choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select></label>
+            <label className="settings-check"><input
+              type="checkbox"
+              checked={theme.preference.auto}
+              onChange={(event) => theme.setAuto(event.target.checked)}
+            />Follow the system light / dark preference</label>
+            {theme.failure === undefined ? null : <p className="settings-notice settings-notice--warning" role="status">{theme.failure}</p>}
+            <p>Theme changes are saved in this browser and applied immediately. Plugin themes are offered with the machine that loads them.</p>
           </section>}
           {page === "Notifications" && <NotificationsSettingsPanel busy={busy} run={run} />}
           {page === "Pi Packages" && <PackagesSettingsPanel

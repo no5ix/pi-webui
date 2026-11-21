@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CORE_MATERIAL_DARK_THEME_ID } from "../nativeDarkTheme";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import type { ReactSettingsDialogProps } from "./ReactSettingsDialog";
 import type { PiPackageMutationResponse, PiSkillInfo, PiSkillSetEnabledResponse, PiSkillsResponse } from "../api";
@@ -56,6 +57,14 @@ const data: ReactSettingsDialogProps["data"] = {
   removeMachine: vi.fn(() => Promise.resolve()),
 };
 
+const theme: ReactSettingsDialogProps["theme"] = {
+  preference: { themeId: CORE_MATERIAL_DARK_THEME_ID, auto: false },
+  choices: [{ id: CORE_MATERIAL_DARK_THEME_ID, name: "Material Dark (native)", colorScheme: "dark", description: "Built-in.", source: "native" }],
+  failure: undefined,
+  select: vi.fn(() => true),
+  setAuto: vi.fn(),
+};
+
 describe("React Settings dialog", () => {
   beforeEach(() => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -79,7 +88,7 @@ describe("React Settings dialog", () => {
   });
 
   it("opens as a named modal with all required settings pages and loads live settings", async () => {
-    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose: vi.fn(), theme })); await Promise.resolve(); });
     const dialog = container.querySelector("dialog");
     expect(dialog?.hasAttribute("open")).toBe(true);
     expect(dialog?.getAttribute("aria-labelledby")).toBe("rw-settings-title");
@@ -91,7 +100,7 @@ describe("React Settings dialog", () => {
 
   it("changes pages and returns close requests to the owner", async () => {
     const onClose = vi.fn();
-    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose })); await Promise.resolve(); });
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose, theme })); await Promise.resolve(); });
     const appearance = [...container.querySelectorAll(".rw-settings-nav button")].find(button => button.textContent === "Appearance");
     expect(appearance).toBeDefined();
     await act(async () => { appearance?.dispatchEvent(new MouseEvent("click", { bubbles: true })); await Promise.resolve(); });
@@ -110,7 +119,7 @@ describe("React Settings dialog", () => {
       settingsProjectId: "p1",
       settingsScopeKey: scopeKeyOf("p1"),
     };
-    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn(), theme })); await Promise.resolve(); });
     const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
     await act(async () => { skills?.click(); await Promise.resolve(); });
     expect(container.textContent).toContain("release-notes");
@@ -124,7 +133,7 @@ describe("React Settings dialog", () => {
       settingsProjectId: "p1",
       settingsScopeKey: scopeKeyOf("p1"),
     };
-    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn(), theme })); await Promise.resolve(); });
     const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
     await act(async () => { skills?.click(); await Promise.resolve(); });
     expect(container.textContent).not.toContain("release-notes");
@@ -138,7 +147,7 @@ describe("React Settings dialog", () => {
       settings: { loading: false, scopeKey: scopeKeyOf(undefined), error: failure },
       settingsScopeKey: scopeKeyOf(undefined),
     };
-    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data: scoped, open: true, onClose: vi.fn(), theme })); await Promise.resolve(); });
     const skills = [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].find(button => button.textContent === "Skills");
     await act(async () => { skills?.click(); await Promise.resolve(); });
     const mentions = [...container.querySelectorAll(".rw-settings-content *")].filter(node => node.childElementCount === 0 && node.textContent === failure).length;
@@ -147,7 +156,7 @@ describe("React Settings dialog", () => {
   });
 
   it("searches the settings pages by label and reports a query that matches nothing", async () => {
-    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose: vi.fn() })); await Promise.resolve(); });
+    await act(async () => { root.render(createElement(ReactSettingsDialog, { data, open: true, onClose: vi.fn(), theme })); await Promise.resolve(); });
     const search = container.querySelector<HTMLInputElement>(".rw-settings-search");
     expect(search).not.toBeNull();
     const nav = () => [...container.querySelectorAll<HTMLButtonElement>(".rw-settings-nav button")].map(button => button.textContent);

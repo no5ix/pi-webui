@@ -2,8 +2,19 @@
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CORE_MATERIAL_DARK_THEME_ID } from "../nativeDarkTheme";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
+import type { ReactSettingsDialogProps } from "./ReactSettingsDialog";
 import { useReactWorkspaceData, type ReactWorkspaceData } from "./useReactWorkspaceData";
+
+const appliedThemeStub: ReactSettingsDialogProps["theme"] = {
+  preference: { themeId: CORE_MATERIAL_DARK_THEME_ID, auto: false },
+  choices: [{ id: CORE_MATERIAL_DARK_THEME_ID, name: "Material Dark (native)", colorScheme: "dark", description: "Built-in.", source: "native" }],
+  failure: undefined,
+  select: () => true,
+  setAuto: () => undefined,
+};
+
 
 const STAMP = "2026-01-01T00:00:00.000Z";
 const autoToc = { id: "prj-auto-toc", name: "auto-toc", path: "/repo/auto-toc", createdAt: STAMP };
@@ -101,7 +112,7 @@ async function settingsHarness(scenario: Scenario, open = true): Promise<Harness
     const [openNow, setOpenNow] = useState(open);
     setOpen = setOpenNow;
     latest = useReactWorkspaceData();
-    return createElement(ReactSettingsDialog, { data: latest, open: openNow, onClose: () => { setOpenNow(false); } });
+    return createElement(ReactSettingsDialog, { data: latest, open: openNow, onClose: () => { setOpenNow(false); }, theme: appliedThemeStub });
   }
   const container = document.createElement("div");
   document.body.append(container);
