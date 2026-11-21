@@ -315,15 +315,6 @@ export interface PiWebComponentStatus {
   error?: string;
 }
 
-export interface PiWebReleaseStatus {
-  packageName: string;
-  latestVersion?: string;
-  updateAvailable: boolean;
-  checkedAt?: string;
-  skipped?: boolean;
-  error?: string;
-}
-
 export interface PiWebStatusMessage {
   id: string;
   severity: PiWebStatusSeverity;
@@ -342,67 +333,15 @@ export interface PiWebVersionResponse {
 }
 
 export interface PiWebStatusResponse extends PiWebVersionResponse {
-  release: PiWebReleaseStatus;
   commands: {
-    update?: string;
     restart?: string;
     restartWeb?: string;
     restartSessiond?: string;
     status?: string;
   };
   messages: PiWebStatusMessage[];
-  /** The machine's user-scope pi packages and their newest versions; absent from a PI WEB that does not report them, which says nothing about updates. */
-  piPackages?: PiPackageUpdates;
 }
 
-/** How a pi package source names its code: a registry package, a repository, or a path on the machine. */
-export type PiPackageSourceKind = "npm" | "git" | "local";
-
-/**
- * One package's update fact. `newer` and `current` compare the installed version with the newest
- * the source allows; `checking` waits for its source's first answer; `pinned` sources fix their
- * version and are not queried; `local` paths cannot be asked; `missing` is configured but not
- * installed yet; `failed` carries the check's own words.
- */
-export type PiPackageUpdateState = "newer" | "current" | "checking" | "pinned" | "local" | "missing" | "failed";
-
-/** A PI WEB process that loads server plugins: the web/API process or the session daemon. */
-export type PiPackageServerProcess = "web" | "sessiond";
-
-export interface PiPackageUpdate {
-  source: string;
-  displayName: string;
-  kind: PiPackageSourceKind;
-  installed?: string;
-  available?: string;
-  state: PiPackageUpdateState;
-  error?: string;
-  /** The processes that load a PI WEB server plugin the installed package brings; each needs a restart after an update. */
-  serverPluginProcesses: PiPackageServerProcess[];
-}
-
-/**
- * Whether the machine listed its packages, or why there is nothing to compare: it skips update
- * checks, it has no active agent profile, or listing failed. A reader that does not know the value
- * reads the whole block as not reported, never as "none installed".
- */
-export type PiPackageListing = "listed" | "skipped" | "no-profile" | "failed";
-
-/**
- * The pi package update check of one machine, for its active agent profile's user scope.
- * `checking` is true while a check runs; `checkedAt` is absent until one finished. `listingError`
- * is a failed listing in the machine's own words. `unreadable` names the entries the reading page
- * could not read, such as a state a newer machine adds, so each still shows as a package; a machine
- * never sends it.
- */
-export interface PiPackageUpdates {
-  listing: PiPackageListing;
-  checkedAt?: string;
-  checking: boolean;
-  listingError?: string;
-  packages: PiPackageUpdate[];
-  unreadable?: string[];
-}
 
 /**
  * Every custom property a theme may set.

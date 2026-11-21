@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { isRelativeSpecifier, moduleSpecifiers, staticModuleSpecifiers } from "../scripts/pluginModuleSpecifiers.mjs";
+import { isHostReactSpecifier, isRelativeSpecifier, moduleSpecifiers, staticModuleSpecifiers } from "../scripts/pluginModuleSpecifiers.mjs";
 
 /**
  * npm on this platform. Windows ships it as the npm.cmd shim, and since Node 20 spawning a .cmd
@@ -12,13 +12,16 @@ import { isRelativeSpecifier, moduleSpecifiers, staticModuleSpecifiers } from ".
 const npm = process.platform === "win32" ? { command: "npm.cmd", shell: true } : { command: "npm", shell: false };
 
 /**
- * A browser plugin entry is served raw and loaded by the page. There is no
- * import map and no bundler in between, so a bare specifier that survives the
- * build is a module the browser cannot resolve: the plugin simply never
- * activates, and the surface it contributed is missing with nothing to say
- * why. The build bundles every entry (P7 slice a); this pins
- * that the shipped entries carry nothing unresolvable - walking the whole
- * graph, because an extensionless relative import resolves for a bundler and
+ * A browser plugin entry is served raw and loaded by the page. The page's
+ * import map names the React the workspace publishes, and the build bundles
+ * every entry (P7 slice a), so a bare specifier that survives the build is a
+ * module the browser cannot resolve: the plugin simply never activates, and
+ * the surface it contributed is missing with nothing to say why. The published
+ * React specifiers are the documented exception - the import map resolves them,
+ * and a plugin that carried its own React would mount a second reconciler over
+ * the page. This pins that the shipped entries carry nothing else
+ * unresolvable, by walking the whole graph, because an extensionless relative
+ * import resolves for a bundler and
  * 404s for a browser, which is how the voice plugin shipped unloadable. Side-effect
  * imports count too: `import "./element.js"` pulling in "lit" left the background-runs
  * entry unbundled, and the plugin never activated while this test passed.
@@ -90,6 +93,7 @@ describe("shipped browser plugin entries", () => {
         continue;
       }
       for (const specifier of moduleSpecifiers(source)) {
+        if (isHostReactSpecifier(specifier)) continue;
         if (!isRelativeSpecifier(specifier)) {
           unresolvable.push(`${file}: ${specifier}`);
           continue;
@@ -105,7 +109,7 @@ describe("shipped browser plugin entries", () => {
     const entries = await browserEntries();
     const importing: string[] = [];
     for (const entry of entries) {
-      const imports = staticModuleSpecifiers(await readFile(entry, "utf8"));
+      const imports = staticModuleSpecifiers(await readFile(entry, "utf8")).filter((specifier) => !isHostReactSpecifier(specifier));
       if (imports.length > 0) importing.push(`${entry.slice(distRoot.length + 1)}: ${imports.join(", ")}`);
     }
 

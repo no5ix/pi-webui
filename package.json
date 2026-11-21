@@ -1,6 +1,6 @@
 {
   "name": "@gang-of-beads/pi-web",
-  "version": "2.202611.0",
+  "version": "2.202611.1",
   "description": "Web UI for persistent Pi Coding Agent sessions in real workspaces.",
   "license": "MIT",
   "author": "Gang of Beads",
@@ -14,6 +14,21 @@
     "./server-plugin-api": {
       "types": "./dist/server-plugin-api.d.ts",
       "import": "./dist/server-plugin-api.js"
+    },
+    "./plugin-react": {
+      "types": "./dist/plugin-react.d.ts",
+      "import": "./dist/plugin-react.js",
+      "default": "./dist/plugin-react.js"
+    },
+    "./plugin-react-hooks": {
+      "types": "./dist/plugin-react-hooks.d.ts",
+      "import": "./dist/plugin-react-hooks.js",
+      "default": "./dist/plugin-react-hooks.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/jsx-runtime.d.ts",
+      "import": "./dist/jsx-runtime.js",
+      "default": "./dist/jsx-runtime.js"
     }
   },
   "typesVersions": {
@@ -23,6 +38,15 @@
       ],
       "server-plugin-api": [
         "dist/server-plugin-api.d.ts"
+      ],
+      "plugin-react": [
+        "dist/plugin-react.d.ts"
+      ],
+      "plugin-react-hooks": [
+        "dist/plugin-react-hooks.d.ts"
+      ],
+      "jsx-runtime": [
+        "dist/jsx-runtime.d.ts"
       ]
     }
   },
@@ -46,7 +70,10 @@
     "CONTRIBUTING.md",
     "docs/assets",
     "plugin-api.d.ts",
-    "server-plugin-api.d.ts"
+    "server-plugin-api.d.ts",
+    "plugin-react.d.ts",
+    "plugin-react-hooks.d.ts",
+    "jsx-runtime.d.ts"
   ],
   "scripts": {
     "dev": "bash scripts/dev.sh",
@@ -55,7 +82,7 @@
     "dev:server": "pnpm run dev:web",
     "dev:client": "vite --host 127.0.0.1",
     "dev:plugins": "node scripts/build-plugins.mjs --watch",
-    "build": "pnpm run clean && tsc -p tsconfig.build.json && pnpm run build:plugins && vite build",
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && pnpm run build:plugins && vite build && node scripts/build-react-runtime.mjs",
     "build:plugin-api": "tsc -p tsconfig.plugin-api.json",
     "build:plugin-api-package": "tsc -p tsconfig.plugin-api.json --outDir packages/pi-web-plugin-api/dist",
     "build:plugins": "pnpm run build:plugin-api && tsc -p tsconfig.plugins.json && node scripts/build-plugins.mjs",
@@ -64,12 +91,13 @@
     "typecheck:plugin-api": "tsc -p tsconfig.plugin-api.browser.json && tsc -p tsconfig.plugin-api.server.json",
     "typecheck:cached": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/pi-web/typecheck.tsbuildinfo",
     "knip": "knip",
-    "lint": "eslint \"src/**/*.ts\" \"extensions/**/*.ts\" \"pi-web-plugins/**/*.ts\" vite.config.ts vitest.config.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"extensions/**/*.ts\" \"pi-web-plugins/**/*.{ts,tsx}\" vite.config.ts vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "verify:static": "pnpm run typecheck && pnpm run lint && pnpm run knip",
     "verify": "pnpm run verify:static && pnpm test",
     "start": "tsx src/server/index.ts",
     "start:sessiond": "pnpm run build:plugins && tsx src/server/sessiond.ts",
+    "start:sessiond:prebuilt": "tsx src/server/sessiond.ts",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "pnpm run build",
     "pack:dry": "pnpm pack --dry-run --config.ignore-scripts=true",
@@ -82,7 +110,10 @@
     "docker:verify:start": "./docker/pi-web-docker --dev start",
     "docker:verify:stop": "./docker/pi-web-docker --dev stop",
     "docker:verify:status": "./docker/pi-web-docker --dev status",
-    "prod": "pnpm run build && bash scripts/prod.sh"
+    "prod": "pnpm run build && bash scripts/prod.sh",
+    "dev:react": "PI_WEB_REACT_UI=1 bash scripts/dev.sh",
+    "dev:react:client": "PI_WEB_REACT_UI=1 vite --host 127.0.0.1 --port ${PI_WEB_DEV_REACT_PORT:-8506} --strictPort",
+    "build:react": "PI_WEB_REACT_UI=1 vite build"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -101,6 +132,7 @@
     "@fastify/compress": "^9.0.0",
     "@fastify/static": "^10.1.2",
     "@fastify/websocket": "^11.3.0",
+    "@lezer/highlight": "^1.2.3",
     "@types/ws": "^8.18.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
@@ -110,6 +142,8 @@
     "marked": "^18.0.6",
     "mermaid": "^12.2.0",
     "morphdom": "^2.7.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "undici": "^8.12.3",
     "ws": "^8.21.0"
   },
@@ -118,14 +152,17 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
-    "@earendil-works/pi-agent-core": "^1.5.0",
-    "@earendil-works/pi-ai": "^1.5.0",
-    "@earendil-works/pi-coding-agent": "^1.5.0",
-    "@earendil-works/pi-tui": "^1.5.0",
+    "@earendil-works/pi-agent-core": "^1.5.2",
+    "@earendil-works/pi-ai": "^1.5.2",
+    "@earendil-works/pi-coding-agent": "^1.5.2",
+    "@earendil-works/pi-tui": "^1.5.2",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.13.3",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^17.7.0",
     "happy-dom": "^21.0.4",
     "knip": "^6.25.0",
@@ -151,10 +188,10 @@
   "homepage": "https://github.com/Gang-of-Beads/pi-web",
   "packageManager": "pnpm@12.8.1",
   "peerDependencies": {
-    "@earendil-works/pi-agent-core": "^1.5.0",
-    "@earendil-works/pi-ai": "^1.5.0",
-    "@earendil-works/pi-coding-agent": "^1.5.0",
-    "@earendil-works/pi-tui": "^1.5.0"
+    "@earendil-works/pi-agent-core": "^1.5.2",
+    "@earendil-works/pi-ai": "^1.5.2",
+    "@earendil-works/pi-coding-agent": "^1.5.2",
+    "@earendil-works/pi-tui": "^1.5.2"
   },
   "keywords": [
     "pi-package",

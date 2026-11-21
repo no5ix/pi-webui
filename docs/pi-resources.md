@@ -177,6 +177,15 @@ and switching it off takes the whole package out; the panel says which of the tw
 Switching a package off does not uninstall it: nothing is deleted, and the package updates as usual.
 To take a package out of the machine, remove it.
 
+After a package update:
+
+- Running sessions keep the old version until you type `/reload` in them; new sessions use the new one.
+- A package that brings a PI WEB server plugin needs a restart of the process that loads that plugin,
+  then a tab reload: the session daemon, or the web server for a plugin declared `runs: "web"` or
+  `"both"`. The panel names the process for that package.
+- A package that adds a model provider needs a session daemon restart. PI WEB cannot detect this, so
+  the panel always reminds you.
+
 ## On a registered machine
 
 Skills, MCP servers, and Pi packages belong to the machine that runs Pi, so each panel acts on the

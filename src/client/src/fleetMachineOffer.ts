@@ -3,20 +3,19 @@ import { installationRestartRefusal, installationRestartState } from "../../shar
 
 /**
  * Which of a Settings → Machines row's keys the machine itself would act on, read from its own
- * PI WEB status. A second PI WEB on the same account refuses Restart and an inherited Update
- * (the services installed for this user run another PI WEB), so the row drew keys the server only
- * refused. The row decides by the server's own rule (`installationRestartState` in
- * `shared/serviceRestart.ts`) and says the server's own reason in place of a withheld key.
+ * PI WEB status. A second PI WEB on the same account refuses Restart (the services installed for
+ * this user run another PI WEB), so the row drew a key the server only refused. The row decides by
+ * the server's own rule (`installationRestartState` in `shared/serviceRestart.ts`) and says the
+ * server's own reason in place of a withheld key.
  *
- * While the machine's status is on its way the row has no keys, so it never offers one its server
+ * While the machine's status is on its way the row has no key, so it never offers one its server
  * would refuse. A machine that reports no service state - an older one, Windows, Docker, a host
- * without a service manager - or whose status could not be read keeps both keys: its server still
- * decides when one is pressed.
+ * without a service manager - or whose status could not be read keeps its key: its server still
+ * decides when it is pressed.
  */
 export interface FleetMachineOffer {
   readonly restart: boolean;
-  readonly update: boolean;
-  /** Why a key is withheld, in the words the Updates page and the Settings field use; empty when nothing is withheld or no reason is given. */
+  /** Why the key is withheld, in the words the row shows; empty when nothing is withheld or no reason is given. */
   readonly notes: readonly string[];
 }
 
@@ -28,15 +27,12 @@ export type FleetStatusRead =
 
 export const FLEET_STATUS_READING: FleetStatusRead = { kind: "reading" };
 
-const UNREPORTED: FleetMachineOffer = { restart: true, update: true, notes: [] };
-const READING: FleetMachineOffer = { restart: false, update: false, notes: [] };
-
-/** The update command a status does not offer can be saved in this PI WEB's Settings, which the server does not gate. */
-const UPDATE_NOTE = "Save an update command in Settings to update from here.";
+const UNREPORTED: FleetMachineOffer = { restart: true, notes: [] };
+const READING: FleetMachineOffer = { restart: false, notes: [] };
 
 /**
  * `undefined`: no read was asked for, because the machine is not reachable. The offer then withholds
- * nothing; the row's reachability is what disables its keys.
+ * nothing; the row's reachability is what disables its key.
  */
 export function fleetMachineOffer(read: FleetStatusRead | undefined): FleetMachineOffer {
   if (read === undefined || read.kind === "unread") return UNREPORTED;
@@ -46,27 +42,24 @@ export function fleetMachineOffer(read: FleetStatusRead | undefined): FleetMachi
 
 /**
  * Restart is offered where the installation's state, by the rule the server refuses with, is
- * confirmed, and its refusal is the row's note; the update only where the status offers its command.
+ * confirmed, and its refusal is the row's note.
  */
 function offerOfStatus(status: PiWebStatusResponse): FleetMachineOffer {
   const states = [status.components.web.serviceRestart, status.components.sessiond.serviceRestart].filter((state) => state !== undefined);
   if (states.length === 0) return UNREPORTED;
   const installation = installationRestartState(states);
-  const command = status.commands.update;
-  const update = command !== undefined && command !== "";
   const restartNote = installationRestartRefusal[installation];
   return {
     restart: installation === "confirmed",
-    update,
-    notes: [...(restartNote === undefined ? [] : [restartNote]), ...(update ? [] : [UPDATE_NOTE])],
+    notes: restartNote === undefined ? [] : [restartNote],
   };
 }
 
 /**
- * The machines "Update every machine" or "Restart every machine" sends, from the reachable machines
- * its caller passes: those whose row offers the operation, so a bulk run never sends one the row
- * withholds or cannot reach. `undefined` while any row's status is still being read: the bulk key
- * waits for every row to know its keys.
+ * The machines "Restart every machine" sends, from the reachable machines its caller passes: those
+ * whose row offers the operation, so a bulk run never sends one the row withholds or cannot reach.
+ * `undefined` while any row's status is still being read: the bulk key waits for every row to know
+ * its keys.
  */
 export function fleetBulkTargets(machineIds: readonly string[], statuses: Readonly<Record<string, FleetStatusRead>>, operation: PiWebFleetOperation): readonly string[] | undefined {
   if (machineIds.some((machineId) => statuses[machineId]?.kind === "reading")) return undefined;

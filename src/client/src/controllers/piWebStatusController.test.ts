@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Machine, PiWebReleaseStatus, PiWebStatusResponse } from "../api";
+import type { Machine, PiWebStatusResponse } from "../api";
 import { initialAppState, type AppState } from "../appState";
 import { PI_WEB_STATUS_FRESH_MS, PiWebStatusController, type PiWebStatusControllerDependencies } from "./piWebStatusController";
 
@@ -39,30 +39,6 @@ describe("PiWebStatusController.read: one read of a machine's status for every r
     expect(harness.piWebStatus.mock.calls.map((call) => call[0])).toEqual(["local", "local", "remote-a"]);
   });
 
-  it("keeps a forced check's answer when a read that left before it lands after it", async () => {
-    const harness = createHarness();
-    const older = createDeferred<PiWebStatusResponse>();
-    harness.piWebStatus.mockReturnValueOnce(older.promise);
-    harness.checkForUpdates.mockResolvedValue(status("forced"));
-
-    const onItsWay = harness.controller.read("local");
-    await harness.controller.checkForUpdates();
-    older.resolve(status("older"));
-    await onItsWay;
-    const next = await harness.controller.read("local");
-
-    expect({ next: next.generatedAt, reads: harness.piWebStatus.mock.calls.length }).toEqual({ next: "forced", reads: 1 });
-  });
-
-  it("serves a forced check's answer to the next reader instead of asking again", async () => {
-    const harness = createHarness();
-    harness.checkForUpdates.mockResolvedValue(status("forced"));
-
-    await harness.controller.checkForUpdates();
-    const read = await harness.controller.read("local");
-
-    expect({ read: read.generatedAt, reads: harness.piWebStatus.mock.calls.length }).toEqual({ read: "forced", reads: 0 });
-  });
 });
 
 describe("PiWebStatusController", () => {
@@ -76,64 +52,6 @@ describe("PiWebStatusController", () => {
     expect(harness.state().piWebStatus?.generatedAt).toBe("remote");
   });
 
-  it("does not let an older periodic response overwrite a forced response", async () => {
-    const harness = createHarness();
-    const regular = createDeferred<PiWebStatusResponse>();
-    const forced = createDeferred<PiWebStatusResponse>();
-    harness.piWebStatus.mockReturnValue(regular.promise);
-    harness.checkForUpdates.mockReturnValue(forced.promise);
-
-    const regularRequest = harness.controller.refresh();
-    const forcedRequest = harness.controller.checkForUpdates();
-    forced.resolve(status("forced"));
-    await forcedRequest;
-    regular.resolve(status("regular"));
-    await regularRequest;
-
-    expect(harness.state().piWebStatus?.generatedAt).toBe("forced");
-  });
-
-  it("deduplicates forced checks and suppresses periodic refresh while one is pending", async () => {
-    const harness = createHarness();
-    const forced = createDeferred<PiWebStatusResponse>();
-    harness.checkForUpdates.mockReturnValue(forced.promise);
-
-    const first = harness.controller.checkForUpdates();
-    const second = harness.controller.checkForUpdates();
-    await harness.controller.refresh();
-
-    expect(second).toBe(first);
-    expect(harness.checkForUpdates).toHaveBeenCalledOnce();
-    expect(harness.piWebStatus).not.toHaveBeenCalled();
-
-    forced.resolve(status("forced"));
-    await first;
-  });
-
-  it("does not apply a response or error after the selected machine changes", async () => {
-    const harness = createHarness("remote-a");
-    const forced = createDeferred<PiWebStatusResponse>();
-    harness.checkForUpdates.mockReturnValue(forced.promise);
-
-    const request = harness.controller.checkForUpdates();
-    harness.selectMachine("remote-b");
-    forced.resolve(status("remote-a", { error: "registry unavailable" }));
-    await expect(request).resolves.toBeUndefined();
-
-    expect(harness.state().piWebStatus).toBeUndefined();
-  });
-
-  it.each([
-    [{ error: "registry unavailable" }, "PI WEB update check failed: registry unavailable"],
-    [{ skipped: true }, "PI WEB update check was skipped"],
-  ] as const)("applies status and rejects an unsuccessful manual check", async (release, message) => {
-    const harness = createHarness();
-    harness.checkForUpdates.mockResolvedValue(status("checked", release));
-
-    await expect(harness.controller.checkForUpdates()).rejects.toThrow(message);
-
-    expect(harness.state().piWebStatus?.generatedAt).toBe("checked");
-  });
 
   it("clears current status and reports periodic refresh failures", async () => {
     const harness = createHarness();
@@ -151,17 +69,15 @@ describe("PiWebStatusController", () => {
 function createHarness(machineId = "local", now?: () => number) {
   let state: AppState = { ...initialAppState(), selectedMachine: machine(machineId) };
   const piWebStatus = vi.fn<StatusApi["piWebStatus"]>();
-  const checkForUpdates = vi.fn<StatusApi["checkForUpdates"]>();
   const onRefreshError = vi.fn<(machineId: string, error: unknown) => void>();
   const controller = new PiWebStatusController(
     () => state,
     (patch) => { state = { ...state, ...patch }; },
-    { api: { piWebStatus, checkForUpdates }, onRefreshError, ...(now === undefined ? {} : { now }) },
+    { api: { piWebStatus }, onRefreshError, ...(now === undefined ? {} : { now }) },
   );
   return {
     controller,
     piWebStatus,
-    checkForUpdates,
     onRefreshError,
     state: () => state,
     setStatus: (piWebStatusValue: PiWebStatusResponse) => { state = { ...state, piWebStatus: piWebStatusValue }; },
@@ -180,7 +96,7 @@ function machine(id: string): Machine {
   };
 }
 
-function status(generatedAt: string, release: Partial<PiWebReleaseStatus> = {}): PiWebStatusResponse {
+function status(generatedAt: string): PiWebStatusResponse {
   return {
     packageName: "@gang-of-beads/pi-web",
     generatedAt,
@@ -188,7 +104,6 @@ function status(generatedAt: string, release: Partial<PiWebReleaseStatus> = {}):
       web: { component: "web", label: "Web/UI", stale: false, available: true },
       sessiond: { component: "sessiond", label: "Session daemon", stale: false, available: true },
     },
-    release: { packageName: "@gang-of-beads/pi-web", updateAvailable: false, ...release },
     commands: {},
     messages: [],
   };

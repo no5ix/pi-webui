@@ -119,6 +119,7 @@ export class MachineController {
     private readonly setState: SetState,
     private readonly updateUrl: UpdateUrl,
     private readonly projects: Pick<ProjectController, "loadProjects">,
+    private readonly onRosterStatus: (unanswered: Unanswered | undefined) => void = () => undefined,
   ) {
     this.roster = new ScopedResource<typeof ROSTER, Machine[]>({
       keyId: () => ROSTER,
@@ -126,7 +127,10 @@ export class MachineController {
       retryCapMs: QUIET_WINDOW_MS,
     });
     this.roster.watch(ROSTER);
-    this.roster.subscribe(() => { this.mirror(); });
+    this.roster.subscribe(() => {
+      this.mirror();
+      this.onRosterStatus(this.unanswered());
+    });
   }
 
   /**

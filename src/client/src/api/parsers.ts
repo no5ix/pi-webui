@@ -9,7 +9,7 @@ import { parseSessionStep } from "./sessionStepParser";
 import type { PendingRestart, ServerVersionFacts, StaleProcess } from "../versionSkew";
 import { parseScreenLines, parseScreenWidth, parseSelectedLine } from "./screenLinesParser";
 import { PI_WEB_PLUGIN_LIFECYCLE_VERSION, PROJECT_TRUST_DEFAULTS, EXTENSION_DIALOG_EDITOR_MAX_LENGTH, EXTENSION_DIALOG_ID_MAX_LENGTH, EXTENSION_DIALOG_INPUT_MAX_LENGTH,
-  EXTENSION_DIALOG_SCREEN_MAX_LINES, EXTENSION_DIALOG_PROSE_MAX_LENGTH, EXTENSION_DIALOG_TEXT_MAX_LENGTH, SESSION_NOTIFICATION_LIMIT, SESSION_NOTIFICATION_MESSAGE_BYTES, SESSION_UNREAD_CATALOG_ID_MAX_LENGTH, SESSION_UNREAD_COMPLETED_AT_MAX_LENGTH, SESSION_UNREAD_CWD_MAX_LENGTH, SESSION_UNREAD_LIMIT, SESSION_UNREAD_SESSION_ID_MAX_LENGTH, type ArchiveSessionsResponse, type PendingExtensionDialog, type AuthProviderOption, type AuthProviderStatus, type AuthProvidersResponse, type AuthStatusSource, type AuthType, type CommandOption, type CommandResult, type DeleteWorkspaceFileResponse, type FoldedMarkdown, type FoldedMarkdownSection, type ExtensionDialogAnswer, type ExtensionDialogCloseReason, type ExtensionDialogCloseResponse, type ExtensionDialogKind, type ExtensionDialogOutcome, type ExtensionDialogScreen, type FileContentResponse, type FileSuggestion, type FileTreeEntry, type FileTreeResponse, type GlobalSessionEvent, type Machine, type MachineHealth, type MachineKind, type MachineRuntime, type MachineStatus, type MessagePage, type ModelSelectionResponse, type MoveWorkspaceFileResponse, type OAuthFlowState, type PiWebCapability, type PiWebComponentStatus, type PiWebConfigEnvOverrides, type PiWebConfigResponse, type PiWebConfigValues, type PiWebDeprecatedAgentInput, type PiWebInstallationInfo, type PiWebPluginConfigMap, type PiWebPluginInfo, type PiWebPluginsResponse, type PiWebPluginScope, type PiPackageListing, type PiPackageServerProcess, type PiPackageSourceKind, type PiPackageUpdate, type PiPackageUpdates, type PiPackageUpdateState, type PiWebReleaseStatus, type PiWebRuntimeComponent, type PiWebRuntimeResponse, type PiWebServiceComponent, type PiWebServiceRestartState, type PiWebShortcutConfig, type PiWebStatusMessage, type PiWebStatusResponse, type PiWebStatusSeverity, type Project, type QueuedSessionMessage, type SavedPromptAttachment, type SessionBulkArchiveResponse, type SessionBulkDeleteArchivedResponse, type SessionBulkFailure, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupProjectSummary, type SessionCleanupThresholds, type SessionCleanupTotals, type SessionInfo, type SessionModel, type WorkspaceTrustResponse, type SessionModelCatalogResponse, type SessionModelCatalogEntry, type SessionNotification, type SessionNotificationClearReason, type SessionNotificationDismissThrough, type SessionNotificationInboxDelta, type SessionNotificationInboxEvent, type SessionNotificationDismissResponse, type SessionNotificationInboxSnapshot, type SessionNotificationSeverity, type SessionNotificationSummary, type PluginSurfacePresence, type SessionStatus, type SessionStatusCatalogSnapshot, type InterruptedRunInfo, type InterruptedRunSnapshot, type SessionStreamSnapshot, type SessionStreamSync, type SessionTranscriptTail, type SessionUiEvent, type SessionUnreadAcknowledgeResponse, type SessionUnreadCatalogSnapshot, type SessionUnreadEvent, type SessionUnreadSummary, type SlashCommand, type TerminalCommandRun, type TerminalCommandRunStatus, type TerminalInfo, type TerminalUiEvent, type WorkspaceChangedUiEvent, type PinsChangedUiEvent, type PluginsChangedUiEvent, type ThinkingLevelsResponse, type WriteWorkspaceFileResponse, type Workspace, type WorkspaceEffectiveConfig } from "../../../shared/apiTypes";
+  EXTENSION_DIALOG_SCREEN_MAX_LINES, EXTENSION_DIALOG_PROSE_MAX_LENGTH, EXTENSION_DIALOG_TEXT_MAX_LENGTH, SESSION_NOTIFICATION_LIMIT, SESSION_NOTIFICATION_MESSAGE_BYTES, SESSION_UNREAD_CATALOG_ID_MAX_LENGTH, SESSION_UNREAD_COMPLETED_AT_MAX_LENGTH, SESSION_UNREAD_CWD_MAX_LENGTH, SESSION_UNREAD_LIMIT, SESSION_UNREAD_SESSION_ID_MAX_LENGTH, type ArchiveSessionsResponse, type PendingExtensionDialog, type AuthProviderOption, type AuthProviderStatus, type AuthProvidersResponse, type AuthStatusSource, type AuthType, type CommandOption, type CommandResult, type DeleteWorkspaceFileResponse, type FoldedMarkdown, type FoldedMarkdownSection, type ExtensionDialogAnswer, type ExtensionDialogCloseReason, type ExtensionDialogCloseResponse, type ExtensionDialogKind, type ExtensionDialogOutcome, type ExtensionDialogScreen, type FileContentResponse, type FileSuggestion, type FileTreeEntry, type FileTreeResponse, type GlobalSessionEvent, type Machine, type MachineHealth, type MachineKind, type MachineRuntime, type MachineStatus, type MessagePage, type ModelSelectionResponse, type MoveWorkspaceFileResponse, type OAuthFlowState, type PiWebCapability, type PiWebComponentStatus, type PiWebConfigEnvOverrides, type PiWebConfigResponse, type PiWebConfigValues, type PiWebDeprecatedAgentInput, type PiWebInstallationInfo, type PiWebPluginConfigMap, type PiWebPluginInfo, type PiWebPluginsResponse, type PiWebPluginScope, type PiWebRuntimeComponent, type PiWebRuntimeResponse, type PiWebServiceComponent, type PiWebServiceRestartState, type PiWebShortcutConfig, type PiWebStatusMessage, type PiWebStatusResponse, type PiWebStatusSeverity, type Project, type QueuedSessionMessage, type SavedPromptAttachment, type SessionBulkArchiveResponse, type SessionBulkDeleteArchivedResponse, type SessionBulkFailure, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupProjectSummary, type SessionCleanupThresholds, type SessionCleanupTotals, type SessionInfo, type SessionModel, type WorkspaceTrustResponse, type SessionModelCatalogResponse, type SessionModelCatalogEntry, type SessionNotification, type SessionNotificationClearReason, type SessionNotificationDismissThrough, type SessionNotificationInboxDelta, type SessionNotificationInboxEvent, type SessionNotificationDismissResponse, type SessionNotificationInboxSnapshot, type SessionNotificationSeverity, type SessionNotificationSummary, type PluginSurfacePresence, type SessionStatus, type SessionStatusCatalogSnapshot, type InterruptedRunInfo, type InterruptedRunSnapshot, type SessionStreamSnapshot, type SessionStreamSync, type SessionTranscriptTail, type SessionUiEvent, type SessionUnreadAcknowledgeResponse, type SessionUnreadCatalogSnapshot, type SessionUnreadEvent, type SessionUnreadSummary, type SlashCommand, type TerminalCommandRun, type TerminalCommandRunStatus, type TerminalInfo, type TerminalUiEvent, type WorkspaceChangedUiEvent, type PinsChangedUiEvent, type PluginsChangedUiEvent, type ThinkingLevelsResponse, type WriteWorkspaceFileResponse, type Workspace, type WorkspaceEffectiveConfig } from "../../../shared/apiTypes";
 import { parseMachineStatusSnapshot, type MachineStatusSnapshot, type MachineStatusUiEvent } from "../../../shared/machineStatus";
 import type { ExtensionNoticeLevel, FileContentMediaType, JsonValue, MachineConnection, PiPackageInfo, PiPackageMutationAction, PiPackageMutationResponse, PiPackageScope, PiPackagesResponse, SessionActivity, SessionStartupProgressEvent, SessionsRevisionResponse, SessionTreeForkResult, SessionTreeNavigateResult, SessionTreeNode, SessionTreeNodeKind, SessionTreeSnapshot, WorkspaceProviderDiagnostic, WorkspaceProviderDiagnosticCode, WorkspaceProviderResolution, WorkspaceProviderResolutionStatus, WorkspaceProviderTier } from "../../../shared/apiTypes";
 import type { CommandResultState, OperationAppliedOutcome, OperationBatchAnswer, OperationResult, OperationStanding } from "../../../shared/apiTypes";
@@ -1888,7 +1888,7 @@ export function parsePiWebFleetReport(value: unknown): PiWebFleetReport {
 export function parsePiWebFleetRunResponse(value: unknown): PiWebFleetRunResponse {
   const record = requireRecord(value);
   const operation = requireString(record, "operation");
-  if (operation !== "restart" && operation !== "update") throw new Error("Invalid fleet operation");
+  if (operation !== "restart") throw new Error("Invalid fleet operation");
   return { operation, hub: parseFleetIdentity(record["hub"]), outcomes: arrayOf(parseFleetOutcome)(record["outcomes"]) };
 }
 
@@ -1962,7 +1962,6 @@ function parsePiWebConfigValues(value: unknown, reading: PluginConfigReading): P
     ...optionalField("environmentFacts", optionalBoolean(record, "environmentFacts")),
     ...optionalField("piBuiltInExtensions", optionalBoolean(record, "piBuiltInExtensions")),
     ...optionalField("extensionDialogsTimeoutMs", optionalNumber(record, "extensionDialogsTimeoutMs")),
-    ...optionalField("updateCommand", optionalString(record, "updateCommand")),
   };
 }
 
@@ -2087,7 +2086,17 @@ function parsePiWebConfigEnvOverrides(value: unknown): PiWebConfigEnvOverrides {
 
 export function parsePiPackagesResponse(value: unknown): PiPackagesResponse {
   const record = requireRecord(value);
-  return { packages: arrayOf(parsePiPackageInfo)(record["packages"]) };
+  const projectTrusted = parseOptionalBoolean(record["projectTrusted"], "projectTrusted");
+  const projectScopeRead = parseOptionalBoolean(record["projectScopeRead"], "projectScopeRead");
+  return {
+    packages: arrayOf(parsePiPackageInfo)(record["packages"]),
+    ...optionalField("globalConfigPath", optionalString(record, "globalConfigPath")),
+    ...optionalField("projectId", optionalString(record, "projectId")),
+    ...optionalField("projectPath", optionalString(record, "projectPath")),
+    ...optionalField("projectConfigPath", optionalString(record, "projectConfigPath")),
+    ...optionalField("projectTrusted", projectTrusted),
+    ...optionalField("projectScopeRead", projectScopeRead),
+  };
 }
 
 export function parsePiPackageMutationResponse(value: unknown): PiPackageMutationResponse {
@@ -2104,7 +2113,7 @@ export function parsePiPackageMutationResponse(value: unknown): PiPackageMutatio
     ...optionalField("removed", removed),
     ...optionalField("enabled", enabled),
     ...optionalField("requiresReload", requiresReload),
-    packages: arrayOf(parsePiPackageInfo)(record["packages"]),
+    ...parsePiPackagesResponse(value),
   };
 }
 
@@ -2184,7 +2193,7 @@ const PI_MCP_TRANSPORTS = ["stdio", "http"] as const;
 const PI_MCP_CONFIGURED_STATES = ["enabled", "disabled", "invalid"] as const;
 const PI_MCP_EXPOSURES = ["codemode", "deferred", "direct", "hidden"] as const;
 const PI_MCP_PROBE_STATES = ["unprobed", "reachable", "unreachable", "needs-auth"] as const;
-const PI_MCP_MUTATION_ACTIONS = ["set-enabled", "remove", "test"] as const;
+const PI_MCP_MUTATION_ACTIONS = ["set-enabled", "remove", "test", "save"] as const;
 
 /**
  * Skills as this machine discovered them, with PI WEB's saved preferences applied.
@@ -2302,6 +2311,7 @@ export function parsePiMcpMutationResponse(value: unknown): PiMcpMutationRespons
     name: requireString(record, "name"),
     ...optionalField("enabled", parseOptionalBoolean(record["enabled"], "enabled")),
     ...optionalField("removed", parseOptionalBoolean(record["removed"], "removed")),
+    ...optionalField("added", parseOptionalBoolean(record["added"], "added")),
     ...optionalField("probe", probe),
     requiresReload: requireBoolean(record, "requiresReload"),
   };
@@ -2536,88 +2546,11 @@ export function parsePiWebStatusResponse(value: unknown): PiWebStatusResponse {
     packageName: requireString(record, "packageName"),
     generatedAt: requireString(record, "generatedAt"),
     components: parsePiWebComponents(record["components"]),
-    release: parsePiWebReleaseStatus(record["release"]),
     commands: parsePiWebCommands(record["commands"]),
     messages: arrayOf(parsePiWebStatusMessage)(record["messages"]),
-    ...optionalField("piPackages", lenientPiPackageUpdates(record["piPackages"])),
   };
 }
 
-/**
- * A malformed block, or a listing this page does not know (a reason a newer machine adds), is
- * dropped rather than failing the status: absent reads as "not reported", never as "no updates".
- */
-function lenientPiPackageUpdates(value: unknown): PiPackageUpdates | undefined {
-  if (value === undefined) return undefined;
-  try {
-    const record = requireRecord(value);
-    const listing = requireString(record, "listing");
-    if (!isPiPackageListing(listing)) return undefined;
-    const entries = parseUnknownArray(record["packages"]).map(lenientPiPackageUpdate);
-    const unreadable = entries.flatMap((entry) => ("unreadable" in entry ? [entry.unreadable] : []));
-    return {
-      listing,
-      ...optionalField("checkedAt", optionalString(record, "checkedAt")),
-      checking: requireBoolean(record, "checking"),
-      ...optionalField("listingError", optionalString(record, "listingError")),
-      packages: entries.flatMap((entry) => ("update" in entry ? [entry.update] : [])),
-      ...(unreadable.length === 0 ? {} : { unreadable }),
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-const UNNAMED_PI_PACKAGE = "Unnamed package";
-
-/** An entry this page cannot read, such as a state a newer machine adds, is kept by its name, so the package still shows. */
-function lenientPiPackageUpdate(value: unknown): { readonly update: PiPackageUpdate } | { readonly unreadable: string } {
-  try {
-    return { update: parsePiPackageUpdate(value) };
-  } catch {
-    const displayName: unknown = isRecord(value) ? value["displayName"] : undefined;
-    return { unreadable: typeof displayName === "string" && displayName !== "" ? displayName : UNNAMED_PI_PACKAGE };
-  }
-}
-
-const PI_PACKAGE_LISTINGS: ReadonlySet<string> = new Set<PiPackageListing>(["listed", "skipped", "no-profile", "failed"]);
-
-function isPiPackageListing(value: string): value is PiPackageListing {
-  return PI_PACKAGE_LISTINGS.has(value);
-}
-
-const PI_PACKAGE_UPDATE_STATES: ReadonlySet<string> = new Set<PiPackageUpdateState>(["newer", "current", "checking", "pinned", "local", "missing", "failed"]);
-const PI_PACKAGE_SOURCE_KINDS: ReadonlySet<string> = new Set<PiPackageSourceKind>(["npm", "git", "local"]);
-const PI_PACKAGE_SERVER_PROCESSES: ReadonlySet<string> = new Set<PiPackageServerProcess>(["web", "sessiond"]);
-
-function parsePiPackageUpdate(value: unknown): PiPackageUpdate {
-  const record = requireRecord(value);
-  const state = requireString(record, "state");
-  const kind = requireString(record, "kind");
-  if (!isPiPackageUpdateState(state) || !isPiPackageSourceKind(kind)) throw new Error("Invalid pi package update");
-  return {
-    source: requireString(record, "source"),
-    displayName: requireString(record, "displayName"),
-    kind,
-    ...optionalField("installed", optionalString(record, "installed")),
-    ...optionalField("available", optionalString(record, "available")),
-    state,
-    ...optionalField("error", optionalString(record, "error")),
-    serverPluginProcesses: Array.isArray(record["serverPluginProcesses"]) ? record["serverPluginProcesses"].filter(isPiPackageServerProcess) : [],
-  };
-}
-
-function isPiPackageServerProcess(value: unknown): value is PiPackageServerProcess {
-  return typeof value === "string" && PI_PACKAGE_SERVER_PROCESSES.has(value);
-}
-
-function isPiPackageUpdateState(value: string): value is PiPackageUpdateState {
-  return PI_PACKAGE_UPDATE_STATES.has(value);
-}
-
-function isPiPackageSourceKind(value: string): value is PiPackageSourceKind {
-  return PI_PACKAGE_SOURCE_KINDS.has(value);
-}
 
 export function parsePiWebRuntimeResponse(value: unknown): PiWebRuntimeResponse {
   const record = requireRecord(value);
@@ -2721,22 +2654,9 @@ function optionalPiWebInstallationInfo(value: unknown): PiWebInstallationInfo | 
   };
 }
 
-function parsePiWebReleaseStatus(value: unknown): PiWebReleaseStatus {
-  const record = requireRecord(value);
-  return {
-    packageName: requireString(record, "packageName"),
-    ...optionalField("latestVersion", optionalString(record, "latestVersion")),
-    updateAvailable: requireBoolean(record, "updateAvailable"),
-    ...optionalField("checkedAt", optionalString(record, "checkedAt")),
-    ...(record["skipped"] === true ? { skipped: true } : {}),
-    ...optionalField("error", optionalString(record, "error")),
-  };
-}
-
 function parsePiWebCommands(value: unknown): PiWebStatusResponse["commands"] {
   const record = requireRecord(value);
   return {
-    ...optionalField("update", optionalString(record, "update")),
     ...optionalField("restart", optionalString(record, "restart")),
     ...optionalField("restartWeb", optionalString(record, "restartWeb")),
     ...optionalField("restartSessiond", optionalString(record, "restartSessiond")),
@@ -2813,10 +2733,12 @@ export function parseSessionTreeSnapshot(value: unknown): SessionTreeSnapshot {
   if (nodeIds.size !== nodes.length) throw new Error("Duplicate session tree node id");
   const activeLeafId = requireNullableString(record, "activeLeafId");
   if (activeLeafId !== null && !nodeIds.has(activeLeafId)) throw new Error("Invalid session tree activeLeafId");
+  const defaultSelectionId = optionalNonEmptyString(record, "defaultSelectionId");
   return {
     nodes,
     activeLeafId,
     activePathIds: arrayOfNonBlankString(record["activePathIds"], "activePathIds"),
+    ...(defaultSelectionId === undefined ? {} : { defaultSelectionId }),
   };
 }
 

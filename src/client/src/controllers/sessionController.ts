@@ -3772,10 +3772,16 @@ export class SessionController {
       await this.api.runCommand({ id: session.id, cwd: session.cwd }, `/name ${trimmed}`, machineId);
       return true;
     } catch (error) {
-      this.applySessionName(session.id, previous);
+      if (this.sessionName(session.id) === trimmed) this.applySessionName(session.id, previous);
       this.failedFor(session, error);
       return false;
     }
+  }
+
+  private sessionName(sessionId: string): string | undefined {
+    const state = this.getState();
+    return state.sessions.find((session) => session.id === sessionId)?.name
+      ?? (state.selectedSession?.id === sessionId ? state.selectedSession.name : undefined);
   }
 
   private applySessionName(sessionId: string, name: string | undefined) {

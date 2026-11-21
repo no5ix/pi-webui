@@ -4,6 +4,8 @@ import { interactiveSurfaceStyles } from "../shared";
 import { settingsControlStyles } from "./settingsControlStyles";
 import type { NotificationAvailability } from "../../notifications/taskNotifications";
 import { NTFY_EVENT_FIELDS, type NtfyConfig, type NtfyStatus } from "../../../../shared/ntfy";
+import { NOTIFICATION_AVAILABILITY_SENTENCES, NOTIFICATION_AVAILABILITY_WORDS, TOPIC_STORED_PLACEHOLDER, describeNtfyFailure, ntfyDraftFromConfig, ntfyDraftToConfig, type NtfyDraft } from "../../notifications/ntfyForm";
+import { isIOS, isInstalledApp } from "../../browserProfile";
 
 /**
  * Device notifications, on this browser and on the reader's phone.
@@ -54,7 +56,7 @@ export class SettingsNotificationsPanel extends LitElement {
     this.busy = true;
     const availability = await onToggle(wanted);
     this.busy = false;
-    this.answer = AVAILABILITY_WORDS[availability];
+    this.answer = NOTIFICATION_AVAILABILITY_WORDS[availability];
     this.requestUpdate();
   }
 
@@ -110,7 +112,7 @@ export class SettingsNotificationsPanel extends LitElement {
    */
   private renderNtfy(): TemplateResult {
     const status = this.ntfy;
-    const draft = this.ntfyDraft ?? draftFrom(status?.config);
+    const draft = this.ntfyDraft ?? ntfyDraftFromConfig(status?.config);
     return html`
       <div class="ntfy">
         <h3>ntfy</h3>
@@ -187,7 +189,7 @@ export class SettingsNotificationsPanel extends LitElement {
     this.ntfyError = "";
     this.ntfyAnswer = undefined;
     try {
-      await onSave(draftToConfig(draft), write);
+      await onSave(ntfyDraftToConfig(draft), write);
       this.ntfyAnswer = write.clearTopic === true
         ? "Saved. The topic is gone: notices stop until you type a new one."
         : "Saved. The next event uses these settings.";
@@ -217,7 +219,7 @@ export class SettingsNotificationsPanel extends LitElement {
     this.ntfyError = "";
     this.ntfyAnswer = "Sending…";
     try {
-      const outcome = await onTest(draftToConfig(draft));
+      const outcome = await onTest(ntfyDraftToConfig(draft));
       // The notice went to the boxes, which is what the reader asked about; the answer says so, because
       // a channel that works and a channel that is saved are two facts and the reader needs both.
       this.ntfyAnswer = outcome.delivered
@@ -231,7 +233,7 @@ export class SettingsNotificationsPanel extends LitElement {
   }
 
   private availabilitySentence(): string {
-    return AVAILABILITY_SENTENCES[this.availability];
+    return NOTIFICATION_AVAILABILITY_SENTENCES[this.availability];
   }
 
   static override styles = [interactiveSurfaceStyles, settingsControlStyles, css`
@@ -266,86 +268,6 @@ export class SettingsNotificationsPanel extends LitElement {
   `];
 }
 
-const AVAILABILITY_WORDS: Record<NotificationAvailability, string> = {
-  unsupported: "This browser does not offer web notifications.",
-  insecure: "This page is not served over HTTPS, so the browser will not offer notifications.",
-  unregistered: "The page's notification service is not registered on this browser.",
-  prompt: "The browser will ask for permission when the switch is turned on.",
-  denied: "The browser has blocked notifications for this site. Allow them in the browser's site settings, then turn the switch on.",
-  granted: "This browser allows notifications.",
-};
-
-const AVAILABILITY_SENTENCES: Record<NotificationAvailability, string> = {
-  unsupported: "This browser does not offer web notifications.",
-  insecure: "Notifications need HTTPS: this page is served over a plain http address the browser will not notify from.",
-  unregistered: "Notifications are allowed, but the page's notification service is not registered here.",
-  prompt: "This browser has not been asked yet. Turning the switch on asks it.",
-  denied: "This browser blocks notifications for this site. Unblock them in its site settings first.",
-  granted: "This browser allows notifications from PI WEB.",
-};
-
-/** What the panel edits, in the shape a form holds it: every field a string or a switch. */
-interface NtfyDraft {
-  enabled: boolean;
-  serverUrl: string;
-  topic: string;
-  /** The address a tap opens: this PI WEB, as the device that got the notice reaches it. Empty means the notice gets no tap target. */
-  clickUrlBase: string;
-  onCompleted: boolean;
-  onFailed: boolean;
-  onAskUser: boolean;
-}
-
-const TOPIC_STORED_PLACEHOLDER = "•••••• stored";
-
-const DEFAULT_DRAFT: NtfyDraft = {
-  enabled: false,
-  serverUrl: "",
-  topic: "",
-  clickUrlBase: "",
-  onCompleted: true,
-  onFailed: true,
-  onAskUser: true,
-};
-
-function draftFrom(config: NtfyConfig | undefined): NtfyDraft {
-  if (config === undefined) return { ...DEFAULT_DRAFT };
-  return {
-    enabled: config.enabled === true,
-    serverUrl: config.serverUrl ?? "",
-    topic: "",
-    clickUrlBase: config.clickUrlBase ?? "",
-    onCompleted: config.onCompleted === true,
-    onFailed: config.onFailed === true,
-    onAskUser: config.onAskUser === true,
-  };
-}
-
-/**
- * The draft as a write.
- *
- * An empty topic box writes no `topic` at all, which is how the server knows to keep the stored one.
- * An empty server box writes the default, so a reader who turns the channel on without thinking about
- * the server gets `https://ntfy.sh` - what ntfy's own documentation calls the public server.
- */
-function draftToConfig(draft: NtfyDraft): NtfyConfig {
-  const topic = draft.topic.trim();
-  const clickUrlBase = draft.clickUrlBase.trim();
-  return {
-    enabled: draft.enabled,
-    serverUrl: draft.serverUrl.trim() === "" ? DEFAULT_SERVER_URL : draft.serverUrl.trim(),
-    ...(topic === "" ? {} : { topic }),
-    // A tap target is only worth sending when the reader named one: the daemon must not guess the
-    // address a phone should open, and a notice pointed at the wrong address is a notice that goes nowhere.
-    ...(clickUrlBase === "" ? {} : { clickUrlBase }),
-    onCompleted: draft.onCompleted,
-    onFailed: draft.onFailed,
-    onAskUser: draft.onAskUser,
-  };
-}
-
-const DEFAULT_SERVER_URL = "https://ntfy.sh";
-
 export interface NtfyTestOutcome {
   readonly delivered: boolean;
   readonly attempts: number;
@@ -355,39 +277,6 @@ export interface NtfyTestOutcome {
 function inputValue(event: Event): string {
   const target = event.target;
   return target instanceof HTMLInputElement ? target.value : "";
-}
-
-/**
- * A failure the panel reports.
- *
- * The server's own validation and delivery messages are written for the reader, so they are the words
- * shown. A transport failure is not - it names an address this page is talking to, not ntfy - so it
- * becomes the sentence about the settings not being saved, which is the fact the reader can act on.
- */
-function describeNtfyFailure(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/Failed to fetch|NetworkError|Load failed/iu.test(message)) return "The browser could not reach PI WEB to complete this request. Check the connection and try again.";
-  return message;
-}
-
-/**
- * Running as an installed web app.
- *
- * iOS reports `display-mode: standalone` in its ordinary Safari tab as well, so that test alone
- * hides the "add to Home Screen" hint exactly where it is needed; iOS is asked the question it
- * answers truthfully - `navigator.standalone`, true only when the app was launched from its icon.
- */
-function isInstalledApp(): boolean {
-  if (typeof navigator === "undefined") return false;
-  if (isIOS()) return Reflect.get(navigator, "standalone") === true;
-  return window.matchMedia("(display-mode: standalone)").matches;
-}
-
-/** iPhone and iPad, told apart from a Mac by the platform plus the pointer, as iOS reports itself. */
-function isIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/u.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 declare global {

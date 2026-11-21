@@ -19,7 +19,7 @@ import { isWorkspaceIdentityMiss, sendWorkspaceRequestError } from "../shared/wo
 import { loadEffectiveProjectUploadsConfig, loadEffectiveProjectPathAccess } from "./workspaces/projectPiWebConfig.js";
 import { listDirectorySuggestions } from "../shared/projects/directorySuggestions.js";
 import { ProjectFolderNameError, readProjectFolder } from "./projectFolderListing.js";
-import { PROJECT_FOLDER_NAME_REFUSED_CODE, type PiPackageMutationResponse, type PiPackageUpdates } from "../../shared/apiTypes.js";
+import { PROJECT_FOLDER_NAME_REFUSED_CODE } from "../../shared/apiTypes.js";
 import { SessionDaemonClient } from "../shared/sessiondClient/sessionDaemonClient.js";
 import { loadServerPluginRecoveryConfig } from "../../serverPluginRecovery.js";
 import { registerSessionProxyRoutes, type SessionProxyDaemon } from "./sessionProxyRoutes.js";
@@ -46,13 +46,11 @@ import { registerPiSkillsRoutes } from "./piSkillsRoutes.js";
 import { createActiveProfilePiMcpService, type PiMcpService } from "./piMcpService.js";
 import { registerPiMcpRoutes } from "./piMcpRoutes.js";
 import { createSettingsProjectResolver } from "../shared/resources/settingsProjectResolver.js";
-import { createPiPackageUpdateCheck, type PiPackageUpdateCheck } from "./piPackageUpdateCheck.js";
 import { registerSessionPinRoutes } from "./sessionPinRoutes.js";
 import { registerNtfyRoutes } from "./notifications/ntfyRoutes.js";
 import { daemonSessionListing, daemonSessionLocate, registerSessionBoardRoutes, type SessionBoardSources } from "./sessionBoardRoutes.js";
 import { nudgeChange } from "../shared/sessiondClient/changeNudge.js";
 import { forgottenPin, SessionPinStore, sessionPinStorePath } from "../shared/storage/sessionPinStore.js";
-import { createPiWebStatusCache, type PiWebStatusCache } from "./piWebStatusCache.js";
 import { getPiWebRuntime, getPiWebStatus, getPiWebVersionStatus, installationRestartCheck } from "../shared/piWebStatus.js";
 import {
   ActiveAgentProfileAccessError,
@@ -60,9 +58,8 @@ import {
   SessionDaemonActiveAgentProfileProvider,
   type ActiveAgentProfileProvider,
 } from "./activeAgentProfileProvider.js";
-import { registerFleetRoutes } from "./updates/fleetRoutes.js";
-import { createRestartService, registerRestartRoutes } from "./updates/restartRoutes.js";
-import { createSelfUpdateService, registerSelfUpdateRoutes } from "./updates/selfUpdateRoutes.js";
+import { registerFleetRoutes } from "./service/fleetRoutes.js";
+import { createRestartService, registerRestartRoutes } from "./service/restartRoutes.js";
 import { registerMachineProxyRoutes } from "./machines/machineProxyRoutes.js";
 import { registerPluginBackendProxyRoutes } from "./plugins/pluginBackendProxyRoutes.js";
 import { registerPluginOperationProxyRoutes } from "./plugins/pluginOperationProxyRoutes.js";
@@ -93,11 +90,8 @@ export interface AppDependencies {
   piPackages?: PiPackageService;
   piSkills?: PiSkillsService;
   piMcp?: PiMcpService;
-  /** The pi package update check behind the status; one that asks npm and git when omitted. */
-  piPackageUpdates?: PiPackageUpdateCheck;
   sessionPins?: SessionPinStore;
   machineAccess?: MachineAccessStore;
-  piWebStatusCache?: PiWebStatusCache;
   config?: PiWebConfigService;
   clientDist?: string | false;
   logger?: FastifyServerOptions["logger"];
@@ -254,52 +248,6 @@ function reconcilePluginsOnWrite(config: PiWebConfigService, apply: () => Promis
   };
 }
 
-function invalidatePiWebStatusOnWrite(config: PiWebConfigService, statusCache: Pick<PiWebStatusCache, "invalidate">): PiWebConfigService {
-  return {
-    read: () => config.read(),
-    write: async (nextConfig, serverSettingsUpdates) => {
-      const response = await config.write(nextConfig, serverSettingsUpdates);
-      statusCache.invalidate();
-      return response;
-    },
-  };
-}
-
-const FIRST_PACKAGE_CHECK_DELAY_MS = 60_000;
-
-function readPiPackageUpdates(check: PiPackageUpdateCheck, agentDir: string | undefined, force: boolean): Promise<PiPackageUpdates> {
-  if (agentDir === undefined) return Promise.resolve({ listing: "no-profile", checking: false, packages: [] });
-  return check.status(agentDir, { force });
-}
-
-/**
- * A package install, removal or update changes what the status reports, so the kept package listing
- * and the cached status are dropped once the change settles. A change that rejects may already have
- * touched the profile (npm wrote some packages, then failed), so a rejection invalidates too.
- */
-function invalidatePiWebStatusOnPackageChange(service: PiPackageService, changed: () => void): PiPackageService {
-  const thenInvalidate = async (change: Promise<PiPackageMutationResponse>): Promise<PiPackageMutationResponse> => {
-    try {
-      return await change;
-    } finally {
-      changed();
-    }
-  };
-  return {
-    list: () => service.list(),
-    install: (source) => thenInvalidate(service.install(source)),
-    remove: (source, scope) => thenInvalidate(service.remove(source, scope)),
-    update: (source) => thenInvalidate(source === undefined ? service.update() : service.update(source)),
-    setEnabled: (source, scope, enabled) => thenInvalidate(service.setEnabled(source, scope, enabled)),
-  };
-}
-
-/**
- * A plugin asset asked for with its package revision (`?v=`) is content-addressed: the revision is
- * a hash over the whole plugin package, so any change to a served file gives it a new one. The
- * browser may keep it for good, so a relaunch on a slow link does not download every plugin again
- * before the session opens.
- */
 const REVISIONED_PLUGIN_ASSET_CACHE = "private, max-age=31536000, immutable";
 
 /**
@@ -376,27 +324,6 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     configProvider: readCatalogConfig,
     agentDirProvider: () => desiredPluginAgentDir(agentProfileProvider, configService),
   });
-  const piPackageUpdates = deps.piPackageUpdates ?? createPiPackageUpdateCheck({ onChecked: () => { piWebStatusCache.invalidate(); } });
-  const piWebStatusCache: PiWebStatusCache = deps.piWebStatusCache ?? createPiWebStatusCache(
-    async ({ force }) => {
-      const activeAgentProfile = await agentProfileProvider.getActiveAgentProfile();
-      const profile = activeAgentProfile.status === "available" ? activeAgentProfile.profile : undefined;
-      const piPackages = await readPiPackageUpdates(piPackageUpdates, profile?.dir, force).catch((error: unknown) => {
-        app.log.warn({ err: error }, "Could not read this machine's pi packages for the update check");
-        return undefined;
-      });
-      return getPiWebStatus(sessionDaemon, {
-        forceReleaseCheck: force,
-        ...(profile === undefined ? {} : { activeAgentProfile: profile }),
-        ...(piPackages === undefined ? {} : { piPackages }),
-      });
-    },
-    { onError: (error) => { app.log.warn({ err: error }, "failed to refresh PI WEB status cache"); } },
-  );
-  const piPackages = invalidatePiWebStatusOnPackageChange(deps.piPackages ?? createActiveProfilePiPackageService(agentProfileProvider), () => {
-    piPackageUpdates.forgetListings();
-    piWebStatusCache.invalidate();
-  });
   const settingsProjects = (agentDir: string) => createSettingsProjectResolver({
     agentDir,
     projects: {
@@ -406,15 +333,9 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
       },
     },
   });
+  const piPackages = deps.piPackages ?? createActiveProfilePiPackageService(agentProfileProvider, settingsProjects);
   const piSkills = deps.piSkills ?? createActiveProfilePiSkillsService(agentProfileProvider, settingsProjects);
   const piMcp = deps.piMcp ?? createActiveProfilePiMcpService(agentProfileProvider, settingsProjects);
-  const firstPackageCheck = setTimeout(() => {
-    piWebStatusCache.get().catch((error: unknown) => { app.log.warn({ err: error }, "The first pi package update check could not start"); });
-  }, FIRST_PACKAGE_CHECK_DELAY_MS);
-  firstPackageCheck.unref();
-  app.addHook("onClose", (_instance, done) => { clearTimeout(firstPackageCheck); done(); });
-
-
   app.get("/pi-web-plugins/manifest.json", async (_request, reply) => withProfileDependency(reply, () => piWebPlugins.manifest()));
 
   app.get<{ Params: { pluginId: string; "*": string } }>("/pi-web-plugins/:pluginId/*", async (request, reply) => {
@@ -429,9 +350,10 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     });
   });
 
-  app.get<{ Querystring: { refresh?: string } }>("/api/pi-web/status", async (request) => request.query.refresh === "1"
-    ? piWebStatusCache.refresh({ force: true })
-    : piWebStatusCache.get());
+  app.get("/api/pi-web/status", async () => {
+    const activeAgentProfile = await agentProfileProvider.getActiveAgentProfile();
+    return getPiWebStatus(sessionDaemon, activeAgentProfile.status === "available" ? { activeAgentProfile: activeAgentProfile.profile } : {});
+  });
   app.get("/api/pi-web/version", async () => {
     const activeAgentProfile = await agentProfileProvider.getActiveAgentProfile();
     return getPiWebVersionStatus(sessionDaemon, activeAgentProfile.status === "available" ? { activeAgentProfile: activeAgentProfile.profile } : {});
@@ -459,11 +381,10 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
     await webServerPluginRuntime?.reconcile();
     await askDaemonToReconcilePlugins(sessionDaemon);
   }, (error) => { app.log.warn({ err: error }, "A plugin toggle could not be applied live; it takes effect after a restart"); });
-  const invalidatingConfigService = invalidatePiWebStatusOnWrite(reconcilingConfigService, piWebStatusCache);
-  registerConfigRoutes(app, invalidatingConfigService);
+  registerConfigRoutes(app, reconcilingConfigService);
   if (configService.writeTheme !== undefined) registerSharedThemeRoute(app, configService.writeTheme);
   if (configService.writeNtfy !== undefined) registerNtfyConfigRoute(app, configService.writeNtfy);
-  registerLocalMachineConfigRoutes(app, invalidatingConfigService);
+  registerLocalMachineConfigRoutes(app, reconcilingConfigService);
   registerLocalProjectRoutes(app, projects, workspaces, "/api", { config: configService });
   registerLocalProjectRoutes(app, projects, workspaces, "/api/machines/local", { config: configService });
   const sessionBoardSources: SessionBoardSources = {
@@ -581,14 +502,12 @@ export async function buildApp(deps: AppDependencies = {}): Promise<FastifyInsta
 
   registerMachinePluginProxyRoutes(app, machines);
   // One service instance per concern, shared by the single-machine routes and
-  // the fleet fan-out, so "update this machine" and "update every machine"
+  // the fleet fan-out, so "restart this machine" and "restart every machine"
   // cannot drift into two different local behaviours.
   const installation = () => installationRestartCheck(sessionDaemon);
   const restartService = createRestartService(app.log, installation);
-  const selfUpdateService = createSelfUpdateService(app.log, installation);
-  registerSelfUpdateRoutes(app, { selfUpdate: selfUpdateService });
   registerRestartRoutes(app, { restart: restartService });
-  registerFleetRoutes(app, machines, { restart: restartService, selfUpdate: selfUpdateService });
+  registerFleetRoutes(app, machines, { restart: restartService });
 
   registerMachineProxyRoutes(app, machines);
 

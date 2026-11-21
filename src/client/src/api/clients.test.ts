@@ -20,7 +20,6 @@ function piWebStatusResponse() {
       web: { component: "web", label: "PI WEB", available: true, stale: false },
       sessiond: { component: "sessiond", label: "PI WEB Session Daemon", available: true, stale: false },
     },
-    release: { packageName: "@gang-of-beads/pi-web", updateAvailable: false },
     commands: {},
     messages: [],
   };
@@ -61,7 +60,7 @@ describe("machine-scoped runtime API", () => {
   it("requests an uncached update check through the local status route", async () => {
     const fetchMock = stubJsonFetch(piWebStatusResponse());
 
-    await piWebApi.checkForUpdates();
+    await piWebApi.refreshStatus();
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchCall(fetchMock, 0)[0]).toBe("https://pi.example.test/api/pi-web/status?refresh=1");
@@ -71,7 +70,7 @@ describe("machine-scoped runtime API", () => {
   it("requests an uncached update check through the selected machine route", async () => {
     const fetchMock = stubJsonFetch(piWebStatusResponse());
 
-    await piWebApi.checkForUpdates("remote a");
+    await piWebApi.refreshStatus("remote a");
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchCall(fetchMock, 0)[0]).toBe("https://pi.example.test/api/machines/remote%20a/pi-web/status?refresh=1");
@@ -147,10 +146,10 @@ describe("Pi package API", () => {
     ]);
 
     await expect(piPackagesApi.packages()).resolves.toEqual({ packages });
-    await piPackagesApi.install("npm:@acme/new-tools");
-    await piPackagesApi.remove("../project-tools", "project");
-    await piPackagesApi.update("npm:@acme/tools");
-    await piPackagesApi.update();
+    await piPackagesApi.install({ source: "npm:@acme/new-tools" });
+    await piPackagesApi.remove({ source: "../project-tools", scope: "project", projectId: "p-1" });
+    await piPackagesApi.update({ source: "npm:@acme/tools" });
+    await piPackagesApi.update({});
     await expect(piPackagesApi.setEnabled({ source: "npm:@acme/tools", scope: "user", enabled: false })).resolves.toMatchObject({ action: "set-enabled", enabled: false, requiresReload: true });
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
@@ -163,9 +162,31 @@ describe("Pi package API", () => {
     ]);
     expect(fetchCall(fetchMock, 1)[1]?.method).toBe("POST");
     expect(JSON.parse(requestBody(fetchCall(fetchMock, 1)[1]))).toEqual({ source: "npm:@acme/new-tools" });
-    expect(JSON.parse(requestBody(fetchCall(fetchMock, 2)[1]))).toEqual({ source: "../project-tools", scope: "project" });
+    expect(JSON.parse(requestBody(fetchCall(fetchMock, 2)[1]))).toEqual({ source: "../project-tools", scope: "project", projectId: "p-1" });
     expect(JSON.parse(requestBody(fetchCall(fetchMock, 3)[1]))).toEqual({ source: "npm:@acme/tools" });
-    expect(fetchCall(fetchMock, 4)[1]?.body).toBeUndefined();
+    expect(JSON.parse(requestBody(fetchCall(fetchMock, 4)[1]))).toEqual({});
+  });
+
+  /**
+   * A project scope travels as an id, never as a path: the machine that answers owns the project
+   * store, and on a remote machine the project's folders are that machine's. The list asks with the
+   * project in the query, and a project write carries the id in the body.
+   */
+  it("names the project a package read and write belong to", async () => {
+    const packages = [{ source: "../project-tools", scope: "project", filtered: false, disabled: false, enabled: true }];
+    const fetchMock = stubSequenceFetch([
+      jsonResponse({ packages, projectId: "p 1", projectPath: "/srv/repo", projectTrusted: true, projectScopeRead: true }),
+      jsonResponse({ action: "install", source: "../project-tools", scope: "project", projectId: "p 1", packages }),
+    ]);
+
+    await expect(piPackagesApi.packages({ machineId: "remote a", projectId: "p 1" })).resolves.toMatchObject({ projectScopeRead: true, projectId: "p 1" });
+    await piPackagesApi.install({ source: "../project-tools", scope: "project", projectId: "p 1" }, "remote a");
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://pi.example.test/api/machines/remote%20a/pi-packages?projectId=p+1",
+      "https://pi.example.test/api/machines/remote%20a/pi-packages/install",
+    ]);
+    expect(JSON.parse(requestBody(fetchCall(fetchMock, 1)[1]))).toEqual({ source: "../project-tools", scope: "project", projectId: "p 1" });
   });
 
   it("uses machine-scoped Pi package-management routes when a machine id is provided", async () => {
@@ -178,11 +199,11 @@ describe("Pi package API", () => {
       jsonResponse({ action: "update", packages }),
     ]);
 
-    await expect(piPackagesApi.packages("local")).resolves.toEqual({ packages });
-    await expect(piPackagesApi.packages("remote a")).resolves.toEqual({ packages });
-    await piPackagesApi.install("npm:@acme/new-tools", "remote a");
-    await piPackagesApi.remove("../project-tools", undefined, "remote a");
-    await piPackagesApi.update(undefined, "remote a");
+    await expect(piPackagesApi.packages({ machineId: "local" })).resolves.toEqual({ packages });
+    await expect(piPackagesApi.packages({ machineId: "remote a" })).resolves.toEqual({ packages });
+    await piPackagesApi.install({ source: "npm:@acme/new-tools" }, "remote a");
+    await piPackagesApi.remove({ source: "../project-tools" }, "remote a");
+    await piPackagesApi.update({}, "remote a");
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       "https://pi.example.test/api/machines/local/pi-packages",
@@ -193,7 +214,7 @@ describe("Pi package API", () => {
     ]);
     expect(JSON.parse(requestBody(fetchCall(fetchMock, 2)[1]))).toEqual({ source: "npm:@acme/new-tools" });
     expect(JSON.parse(requestBody(fetchCall(fetchMock, 3)[1]))).toEqual({ source: "../project-tools" });
-    expect(fetchCall(fetchMock, 4)[1]?.body).toBeUndefined();
+    expect(JSON.parse(requestBody(fetchCall(fetchMock, 4)[1]))).toEqual({});
   });
 });
 

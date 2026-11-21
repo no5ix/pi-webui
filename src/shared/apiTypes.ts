@@ -14,17 +14,10 @@ import type {
   MachineKind,
   MoveWorkspaceFileOptions,
   MoveWorkspaceFileResponse,
-  PiPackageListing,
-  PiPackageServerProcess,
-  PiPackageSourceKind,
-  PiPackageUpdate,
-  PiPackageUpdates,
-  PiPackageUpdateState,
   PiWebComponentStatus,
   PiWebDockerMode,
   PiWebInstallationInfo,
   PiWebInstallationKind,
-  PiWebReleaseStatus,
   PiWebServiceComponent,
   PiWebServiceRestartState,
   PiWebStatusMessage,
@@ -55,17 +48,10 @@ export type {
   MachineKind,
   MoveWorkspaceFileOptions,
   MoveWorkspaceFileResponse,
-  PiPackageListing,
-  PiPackageServerProcess,
-  PiPackageSourceKind,
-  PiPackageUpdate,
-  PiPackageUpdates,
-  PiPackageUpdateState,
   PiWebComponentStatus,
   PiWebDockerMode,
   PiWebInstallationInfo,
   PiWebInstallationKind,
-  PiWebReleaseStatus,
   PiWebServiceComponent,
   PiWebServiceRestartState,
   PiWebStatusMessage,
@@ -242,12 +228,6 @@ export interface PiWebConfigValues {
   maxUploadBytes?: number;
   /** What the web and session daemon logs record, and how much of them stays on disk. */
   logging?: PiWebLoggingConfig;
-  /**
-   * The command that updates this machine's PI WEB and restarts it, run by the
-   * Updates page's Update button. Wins over the services' PI_WEB_UPDATE_COMMAND
-   * and over the command PI WEB derives from the install method; empty is none.
-   */
-  updateCommand?: string;
   /** Tiles per row in the Navigate lists, per layout; see PiWebListTilesConfig. */
   listTiles?: PiWebListTilesConfig;
   /**
@@ -406,29 +386,70 @@ export interface PiPackageInfo {
   enabled: boolean;
 }
 
+/**
+ * Pi's configured packages, for one machine and one project.
+ *
+ * A package row's `scope` says which of pi's two settings files carries it, and the response says
+ * which files were read: `projectScopeRead` is false when no project was named, when the project is
+ * unknown to the machine, or when the project is not trusted — and in every one of those cases the
+ * read reports no project rows at all, so a reader never calls the server process's own folder
+ * "the project" and never calls an unread scope an empty one. `globalConfigPath` and
+ * `projectConfigPath` name the files a write on that scope goes to.
+ */
 export interface PiPackagesResponse {
   packages: PiPackageInfo[];
+  globalConfigPath?: string;
+  /** The project the project-scope rows belong to, as the machine resolved it. */
+  projectId?: string;
+  projectPath?: string;
+  projectConfigPath?: string;
+  projectTrusted?: boolean;
+  /** False when the project scope was not read, so a reader never calls an absence an empty. */
+  projectScopeRead?: boolean;
 }
 
+/** A packages read: the project whose own packages belong in the answer, by id. */
+export interface PiPackagesListRequest {
+  projectId?: string;
+}
+
+/**
+ * Installing a Pi package, in the scope the request names.
+ *
+ * `scope: "project"` is pi's own local install (`installAndPersist(source, { local: true })`) into
+ * the named project's `.pi/settings.json`, and needs `projectId`; anything else is pi's default,
+ * machine-wide location.
+ */
 export interface PiPackageInstallRequest {
   source: string;
+  scope?: PiPackageScope;
+  /** Required with `scope: "project"`: the project whose settings receive the package. */
+  projectId?: string;
 }
 
 export interface PiPackageRemoveRequest {
   source: string;
-  /** Optional known scope from a listed package; not an install-location picker. */
+  /** The scope the listed row was read from; the server removes it from that file only. */
   scope?: PiPackageScope;
+  /** Required with `scope: "project"`. */
+  projectId?: string;
 }
 
 export interface PiPackageUpdateRequest {
-  /** Omit to update all configured Pi packages. */
+  /** Omit to update all configured Pi packages this machine can reach. */
   source?: string;
+  /** The scope the updated row was read from, so the machine resolves a project's source. */
+  scope?: PiPackageScope;
+  /** Required with `scope: "project"`. */
+  projectId?: string;
 }
 
 export interface PiPackageSetEnabledRequest {
   source: string;
   scope: PiPackageScope;
   enabled: boolean;
+  /** Required with `scope: "project"`. */
+  projectId?: string;
 }
 
 export type PiPackageMutationAction = "install" | "remove" | "update" | "set-enabled";
@@ -695,11 +716,55 @@ export interface PiMcpTestRequest {
   projectId?: string;
 }
 
+/**
+ * One MCP server as the panel writes it.
+ *
+ * A draft carries the values the person typing owns — a command, its arguments, a URL. It never needs
+ * a value PI WEB hides: a save over an existing entry keeps every key the draft leaves out, merged by
+ * the machine that owns the file, so a header or environment value travels browser → file and never
+ * file → browser.
+ */
+export interface PiMcpServerDraft {
+  type?: "stdio" | "http" | "streamable-http";
+  /** stdio only. */
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  /** Sent as a whole: a key the draft omits is a key the entry no longer sets. */
+  env?: Record<string, string>;
+  /** http only. */
+  url?: string;
+  /** Sent as a whole, like `env`. */
+  headers?: Record<string, string>;
+  enabled?: boolean;
+  exposure?: PiMcpExposure;
+  /** Seconds. */
+  timeout?: number;
+  description?: string;
+  /**
+   * pi's own keys PI WEB has no field for (`oauth`, `auth`, a transport's extras) pass through to pi's
+   * validator, which is the rule for them. The index signature is what makes a request's record and
+   * this type the same shape, so the route hands the config on without a cast.
+   */
+  [key: string]: unknown;
+}
+
+export interface PiMcpSaveRequest {
+  name: string;
+  config: PiMcpServerDraft;
+  /** The entry to write: its definition, or this project's override of a global server. */
+  target: PiMcpWriteKind;
+  projectId?: string;
+  scope?: PiMcpScope;
+}
+
 export interface PiMcpMutationResponse extends PiMcpListResponse {
-  action: "set-enabled" | "remove" | "test";
+  action: "set-enabled" | "remove" | "test" | "save";
   name: string;
   enabled?: boolean;
   removed?: boolean;
+  /** A save that wrote a server the scope did not have before. */
+  added?: boolean;
   probe?: PiMcpProbe;
   /** A running session keeps the connections it opened: the change reaches it after a reload. */
   requiresReload: boolean;
@@ -1786,9 +1851,10 @@ export interface SessionStatus {
    */
   lastRunDurationMs?: number;
   /**
-   * The timestamp of the session's leaf entry, the newest on its current branch (B28). A session
-   * list orders by when a session last changed; carried on every status frame, it moves a row when
-   * the run ends instead of at the next whole read of the list. Absent from a daemon that predates it.
+   * The newest non-cache-warming entry timestamp on the current branch (B28). Carried on status
+   * frames so real activity moves a row without waiting for a whole-list read; warming usage is
+   * still billed but does not make a conversation recent. Absent when the branch timestamp is
+   * unknown or the daemon predates this field.
    */
   lastActivityAt?: string;
   /**
@@ -1979,6 +2045,12 @@ export interface SessionTreeSnapshot {
   activeLeafId: string | null;
   /** Root-to-leaf IDs for explicit, non-color-only active-path rendering. */
   activePathIds: string[];
+  /**
+   * The entry /tree selects when it opens: the active leaf, or, when cache-warming records end the
+   * branch, the most recent real entry before them (owner, 2026-11-12). Absent from an older
+   * machine, which selects the active leaf.
+   */
+  defaultSelectionId?: string;
 }
 
 export const SESSION_TREE_CUSTOM_INSTRUCTIONS_MAX_LENGTH = 10_000;
@@ -1990,7 +2062,7 @@ export type SessionTreeSummaryChoice =
 
 export interface SessionTreeNavigateRequest {
   targetId: string;
-  /** Leaf shown when the navigator opened; null is valid for an empty/root position. */
+  /** Captured leaf; only cache-warming descendants preserve it. Null is valid at an empty/root position. */
   expectedLeafId: string | null;
   summary: SessionTreeSummaryChoice;
 }
@@ -2001,7 +2073,7 @@ export type SessionTreeNavigateResult =
 
 export interface SessionTreeForkRequest {
   entryId: string;
-  /** Leaf shown when the navigator opened; null is valid for an empty/root position. */
+  /** Captured leaf; only cache-warming descendants preserve it. Null is valid at an empty/root position. */
   expectedLeafId: string | null;
 }
 
@@ -2325,7 +2397,7 @@ export interface SessionSubsessionsSnapshot {
 }
 
 /** A fleet operation runs on the machines the answering server knows. */
-export type PiWebFleetOperation = "restart" | "update";
+export type PiWebFleetOperation = "restart";
 
 export interface PiWebFleetMachineIdentity {
   readonly machineId: string;
@@ -2364,17 +2436,3 @@ export interface PiWebFleetRunResponse {
   readonly outcomes: readonly PiWebFleetTargetOutcome[];
 }
 
-/**
- * @deprecated No longer produced by PI WEB: the self-update status endpoint was removed.
- * @public Kept only so code that imports the type keeps compiling.
- */
-export interface PiWebSelfUpdateStatus {
-  readonly enabled: boolean;
-  readonly current: string;
-  readonly latest: string | undefined;
-  readonly available: boolean;
-  readonly branch: string | undefined;
-  readonly checkedAt: string;
-  /** Human reason when updates are not supported here. */
-  readonly disabledReason?: string;
-}

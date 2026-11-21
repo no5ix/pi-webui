@@ -9,13 +9,15 @@ import { effectivePiWebConfig, piWebTlsConfig } from "./src/config.ts";
 
 const { config } = effectivePiWebConfig();
 const apiPort = config.port ?? 8504;
-const apiOrigin = `${piWebTlsConfig() === undefined ? "http" : "https"}://localhost:${String(apiPort)}`;
+const configuredApiHost = config.host ?? "127.0.0.1";
+const apiHost = configuredApiHost.includes(":") && !configuredApiHost.startsWith("[") ? `[${configuredApiHost}]` : configuredApiHost;
+const apiOrigin = `${piWebTlsConfig() === undefined ? "http" : "https"}://${apiHost}:${String(apiPort)}`;
 // Tailscale Serve takes the served port on the tailnet interface, so the development server keeps to
 // loopback: binding every interface on 8505 is refused with EADDRINUSE once `tailscale serve` is
 // running, and the serve proxy forwards to http://127.0.0.1:8505, which is exactly where this listener
 // belongs. The rule is documented for production installs too (docs/faq.md, "With Tailscale Serve").
 const devHost = "127.0.0.1";
-const devPort = 8505;
+const devPort = process.env["PI_WEB_REACT_UI"] === "1" ? Number(process.env["PI_WEB_DEV_REACT_PORT"] ?? 8506) : 8505;
 /**
  * Host names the development server answers, beyond what the config lists.
  *
@@ -112,8 +114,37 @@ function devDocsPlugin(): Plugin {
 const parsedPackage: unknown = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const packageVersion = typeof parsedPackage === "object" && parsedPackage !== null && "version" in parsedPackage && typeof parsedPackage.version === "string" ? parsedPackage.version : "";
 
+/**
+ * The React runtime a plugin compiles against, published by the page.
+ *
+ * A plugin's JSX is compiled with `@gang-of-beads/pi-web` as its JSX import source, and its hooks come
+ * from `@gang-of-beads/pi-web/plugin-react-hooks`, so a plugin module loaded by URL needs those
+ * specifiers to resolve — the page has no bundler between the module and the browser. They are
+ * emitted as stable, unhashed entries in the client build and named to the browser by an import map,
+ * with URLs relative to the document the way `base: "./"` makes every other client asset resolve. One
+ * React per page is the point: a plugin that brought its own would mount a second reconciler over the
+ * same DOM. The entries are emitted after this build by `scripts/build-react-runtime.mjs`: the client
+ * bundler cannot see a plugin's import, and a tree-shaken entry ships as calls with no exports.
+ */
+const pluginReactModules = ["plugin-react", "plugin-react-hooks", "jsx-runtime"] as const;
+
+function pluginReactRuntimePlugin(): Plugin {
+  return {
+    name: "pi-web-plugin-react-runtime",
+    transformIndexHtml(html) {
+      const imports: Record<string, string> = {};
+      for (const name of pluginReactModules) imports[`@gang-of-beads/pi-web/${name}`] = `./${name}.js`;
+      return {
+        html,
+        tags: [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify({ imports }), injectTo: "head-prepend" }],
+      };
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [devDocsPlugin()],
+  plugins: [devDocsPlugin(), pluginReactRuntimePlugin()],
+  appType: process.env["PI_WEB_REACT_UI"] === "1" ? "spa" : "mpa",
   define: {
     __PI_WEB_CLIENT_VERSION__: JSON.stringify(packageVersion),
   },
@@ -123,7 +154,14 @@ export default defineConfig({
     outDir: "../../dist/client",
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        index: resolve("src/client/index.html"),
+      },
       output: {
+        entryFileNames(chunk) {
+          const name = typeof chunk.name === "string" ? chunk.name : "";
+          return pluginReactModules.some((candidate) => name.startsWith(candidate)) ? "[name].js" : "assets/[name]-[hash].js";
+        },
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           if (id.includes("@codemirror/legacy-modes")) return "vendor-editor-legacy";

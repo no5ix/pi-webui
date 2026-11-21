@@ -22,26 +22,27 @@ const npm = process.platform === "win32" ? { command: "npm.cmd", shell: true } :
  */
 
 /**
- * The updates plugin bundles its own copy of lit, so the tarball carries one
- * self-contained ESM file - built here rather than read out of `dist`, which
- * a fresh checkout does not have when the test suite runs.
+ * The fixture plugin bundles to one self-contained ESM file - built here rather
+ * than read out of `dist`, which a fresh checkout does not have when the test
+ * suite runs. Its package name deliberately differs from the plugin id it
+ * registers, so a pass proves the catalog reads the manifest, not the folder.
  */
-async function bundleThemesPlugin(): Promise<string> {
-  const source = resolve("pi-web-plugins", "updates", "pi-web-plugin.ts");
-  const staging = mkdtempSync(join(tmpdir(), "pi-web-updates-build-"));
+async function bundleFixturePlugin(): Promise<string> {
+  const source = resolve("pi-web-plugins", "info", "pi-web-plugin.ts");
+  const staging = mkdtempSync(join(tmpdir(), "pi-web-plugin-build-"));
   const outfile = join(staging, "pi-web-plugin.js");
   await build({ entryPoints: [source], bundle: true, format: "esm", outfile, logLevel: "silent" });
   return outfile;
 }
 
 async function packagedPluginRoot(): Promise<string> {
-  const built = await bundleThemesPlugin();
+  const built = await bundleFixturePlugin();
   const staging = mkdtempSync(join(tmpdir(), "pi-web-plugin-package-"));
   const packageDir = join(staging, "package");
   mkdirSync(packageDir, { recursive: true });
   writeFileSync(join(packageDir, "pi-web-plugin.js"), readFileSync(built), "utf8");
   writeFileSync(join(packageDir, "package.json"), JSON.stringify({
-    name: "@gang-of-beads/pi-web-updates",
+    name: "@gang-of-beads/pi-web-info",
     version: "0.0.1",
     type: "module",
     files: ["pi-web-plugin.js"],
@@ -51,7 +52,7 @@ async function packagedPluginRoot(): Promise<string> {
 
   const agentDir = join(staging, "agent");
   mkdirSync(join(agentDir, "npm"), { recursive: true });
-  writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: ["npm:@gang-of-beads/pi-web-updates"] }), "utf8");
+  writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: ["npm:@gang-of-beads/pi-web-info"] }), "utf8");
   execFileSync(npm.command, ["init", "-y", "--silent"], { cwd: join(agentDir, "npm"), stdio: "ignore", shell: npm.shell });
   execFileSync(npm.command, ["install", "--silent", "--no-audit", "--no-fund", join(packageDir, tarball)], { cwd: join(agentDir, "npm"), stdio: "ignore", shell: npm.shell });
   return agentDir;
@@ -65,7 +66,7 @@ describe("a plugin installed as a package", () => {
     const snapshot = await catalog.snapshot();
     const themes = snapshot.plugins.find((plugin) => plugin.id === "themes");
 
-    expect(themes?.packageRoot).toContain(join("node_modules", "@gang-of-beads", "pi-web-updates"));
+    expect(themes?.packageRoot).toContain(join("node_modules", "@gang-of-beads", "pi-web-info"));
     expect(themes?.browserModule?.path).toBe("pi-web-plugin.js");
     expect(snapshot.diagnostics).toEqual([]);
   });

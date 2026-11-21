@@ -13,6 +13,9 @@ export default defineConfig({
       // dist emit that may not exist in a clean checkout.
       "@gang-of-beads/pi-web/plugin-api": fileURLToPath(new URL("./src/plugin-api.ts", import.meta.url)),
       "@gang-of-beads/pi-web/server-plugin-api": fileURLToPath(new URL("./src/server-plugin-api.ts", import.meta.url)),
+      "@gang-of-beads/pi-web/plugin-react": fileURLToPath(new URL("./src/plugin-react.ts", import.meta.url)),
+      "@gang-of-beads/pi-web/plugin-react-hooks": fileURLToPath(new URL("./src/plugin-react-hooks.ts", import.meta.url)),
+      "@gang-of-beads/pi-web/jsx-runtime": fileURLToPath(new URL("./src/jsx-runtime.ts", import.meta.url)),
     },
   },
   test: {

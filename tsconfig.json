@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -28,11 +29,15 @@
     ],
     "paths": {
       "@gang-of-beads/pi-web/plugin-api": ["./src/plugin-api.ts"],
+      "@gang-of-beads/pi-web/plugin-react": ["./src/plugin-react.ts"],
+      "@gang-of-beads/pi-web/plugin-react-hooks": ["./src/plugin-react-hooks.ts"],
+      "@gang-of-beads/pi-web/jsx-runtime": ["./src/jsx-runtime.ts"],
       "@gang-of-beads/pi-web/server-plugin-api": ["./src/server-plugin-api.ts"]
     }
   },
   "include": [
     "src/**/*.ts",
+    "src/**/*.tsx",
     "vite.config.ts",
     "vitest.config.ts",
     "extensions/**/*.ts",

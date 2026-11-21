@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { PiMcpRemoveRequest, PiMcpScope, PiMcpSetEnabledRequest, PiMcpTestRequest, PiMcpWriteKind } from "../../shared/apiTypes.js";
+import type { PiMcpRemoveRequest, PiMcpSaveRequest, PiMcpScope, PiMcpSetEnabledRequest, PiMcpTestRequest, PiMcpWriteKind } from "../../shared/apiTypes.js";
 import { ActiveAgentProfileAccessError } from "./activeAgentProfileProvider.js";
 import { PiMcpRequestError, PiMcpServerErrorNotFound, type PiMcpService } from "./piMcpService.js";
 import { McpConfigWriteError } from "../shared/resources/mcpConfig.js";
@@ -57,6 +57,14 @@ export function registerPiMcpRoutes(app: FastifyInstance, service: PiMcpService,
       return sendPiMcpError(reply, error);
     }
   });
+
+  app.post<{ Body: unknown }>(`${routePrefix}/pi-mcp/save`, async (request, reply) => {
+    try {
+      return await service.save(parseSaveRequest(request.body));
+    } catch (error) {
+      return sendPiMcpError(reply, error);
+    }
+  });
 }
 
 function normalizeRoutePrefix(prefix: string): string {
@@ -79,6 +87,20 @@ function parseRemoveRequest(body: unknown): PiMcpRemoveRequest {
 function parseTestRequest(body: unknown): PiMcpTestRequest {
   const fields = parseServerRequest(body);
   return { name: fields.name, ...fields.project };
+}
+
+/**
+ * A save: the name, the entry it aims at, and the config the person typing wrote.
+ *
+ * The config is passed through as the record it is, because pi's own validator is the rule for it
+ * (`validateMcpServerConfig` in the service) and it explains a problem in pi's words. A body that is
+ * not an object, or a config that is, gets refused here, so the service never sees a non-record.
+ */
+function parseSaveRequest(body: unknown): PiMcpSaveRequest {
+  const fields = parseServerRequest(body);
+  const config = fields["config"];
+  if (!isRecord(config)) throw new PiMcpRequestValidationError("An MCP save must carry the server's config object");
+  return { name: fields.name, config: { ...config }, ...parseWriteFields(fields, "editable"), ...fields.project };
 }
 
 /** The entry a write aims at, as the body words it: `target` for a new browser, `scope` for an old one. */

@@ -29,7 +29,7 @@ export interface MovedSelection {
 }
 
 export interface ProjectControllerDependencies {
-  api?: Pick<typeof defaultApi, "projects" | "addProject" | "reorderProjects" | "setWorkspaceTrust">;
+  api?: Pick<typeof defaultApi, "projects" | "addProject" | "reorderProjects" | "workspaces" | "setWorkspaceTrust">;
   clock?: ResourceClock;
   /** Called whenever a listing changes phase or value, so the app row can re-decide. */
   onListingChange?: () => void;
@@ -47,7 +47,7 @@ const FACT_WORDS = new Map<ReadFact["kind"], string>([
 ]);
 
 export class ProjectController {
-  private readonly api: Pick<typeof defaultApi, "projects" | "addProject" | "reorderProjects" | "setWorkspaceTrust">;
+  private readonly api: Pick<typeof defaultApi, "projects" | "addProject" | "reorderProjects" | "workspaces" | "setWorkspaceTrust">;
   /** The projects of each machine, read until answered (B48). This controller is its only writer. */
   private readonly listings: ScopedResource<string, Project[]>;
   private watched: { machineId: string; release: () => void } | undefined;
@@ -182,9 +182,10 @@ export class ProjectController {
     try {
       project = await this.api.addProject(path.trim(), undefined, create, machineId);
       this.listings.update(machineId, (listed) => withAddedProject(listed, project));
-      if (selectedMachineId(this.getState()) !== machineId) return undefined;
-      this.setState({ projects: withAddedProject(this.getState().projects, project) });
-      await this.workspaces.selectProject(project);
+      if (selectedMachineId(this.getState()) === machineId) {
+        this.setState({ projects: withAddedProject(this.getState().projects, project) });
+        await this.workspaces.selectProject(project);
+      }
     } catch (error) {
       return addProjectFailureMessage(error);
     }
@@ -199,8 +200,9 @@ export class ProjectController {
    * of reading as a failed add (review of the project trust menus).
    */
   private async applyTrustChoice(project: Project, trusted: boolean, machineId: string): Promise<string | undefined> {
-    const mainWorkspace = this.getState().workspaces.find((workspace) => workspace.projectId === project.id && workspace.isMain);
     try {
+      const workspaces = await this.api.workspaces(project.id, machineId);
+      const mainWorkspace = workspaces.find((workspace) => workspace.isMain);
       if (mainWorkspace === undefined) throw new Error("its main workspace is not listed");
       await this.api.setWorkspaceTrust(project.id, mainWorkspace.id, trusted, machineId);
       return undefined;

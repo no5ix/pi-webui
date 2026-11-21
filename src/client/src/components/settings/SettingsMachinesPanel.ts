@@ -36,7 +36,7 @@ export class SettingsMachinesPanel extends LitElement {
   @property({ type: Boolean }) fleetLoading = false;
   @property({ attribute: false }) fleetError?: string;
   @property({ attribute: false }) onRefreshFleet?: () => void | Promise<void>;
-  @property({ attribute: false }) onRunFleet?: (operation: "restart" | "update", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
+  @property({ attribute: false }) onRunFleet?: (operation: "restart", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
 
   // Reactive: the rename form only exists between these two assignments, so a
   // plain field left the Rename button looking dead - the click landed and
@@ -65,7 +65,7 @@ export class SettingsMachinesPanel extends LitElement {
           ?loading=${this.fleetLoading}
           .error=${this.fleetError}
           .onRefresh=${() => this.onRefreshFleet?.()}
-          .onRun=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.onRunFleet?.(operation, machineIds) ?? Promise.resolve(undefined)}
+          .onRun=${(operation: "restart", machineIds?: readonly string[]) => this.onRunFleet?.(operation, machineIds) ?? Promise.resolve(undefined)}
         ></settings-fleet-section>
       </settings-panel-frame>
     `;

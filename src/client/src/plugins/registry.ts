@@ -4,7 +4,7 @@ import { pluginsPath } from "../api/clients";
 import type { PluginFleet } from "../../../shared/pluginApiTypes";
 import { PluginFactBus, type PluginFactKind, type PluginFactPayloads } from "./pluginFacts";
 import { askPlugin, askPluginOr, pluginPageDrawFailure } from "./pluginContainment";
-import type { ActivityNoteContribution, QualifiedActivityNoteContribution, ListActionContribution, ListKind, ListLabelContribution, ListItem, ListSection, ListSectionContribution, QualifiedListActionContribution, QualifiedListLabelContribution, QualifiedListSectionContribution, SessionSectionContribution, SessionSectionSubject, ComposerContribution, NavSectionContribution, QualifiedNavSectionContribution, PluginHostUi, PluginSettings, MessageRendererContribution, QualifiedMessageRendererContribution, CodeFenceRendererContribution, QualifiedCodeFenceRendererContribution, ToolRendererContribution, QualifiedToolRendererContribution, MessageActionContribution, QualifiedMessageActionContribution, PluginLifecycleEvent, PluginLifecycleEventKind, PluginLifecycleListener, QualifiedSettingsSectionContribution, SettingsSectionContribution, PiWebPluginRegistration, PluginAction, QualifiedComposerContribution, PluginRuntimeContext, QualifiedContributionId, QualifiedPluginAction, ReservedActionId, QualifiedThemeContribution, QualifiedThemePairContribution, QualifiedWorkspaceLabelContribution, QualifiedWorkspacePanelContribution, GlobalPanelContext, GlobalPanelContribution, QualifiedGlobalPanelContribution, ThemeContribution, ThemePairContribution, WorkspaceLabelContext, WorkspaceLabelContribution, WorkspaceLabelItem, WorkspaceHost, WorkspacePanelContext, WorkspacePanelContribution, WorkspacePluginBinding } from "./types";
+import type { ActivityNoteContribution, QualifiedActivityNoteContribution, ListActionContribution, ListKind, ListLabelContribution, ListItem, ListSection, ListSectionContribution, QualifiedListActionContribution, QualifiedListLabelContribution, QualifiedListSectionContribution, SessionSectionContribution, SessionSectionSubject, ComposerContribution, NavSectionContribution, QualifiedNavSectionContribution, PluginHostUi, PluginReactHostUi, PluginSettings, MessageRendererContribution, QualifiedMessageRendererContribution, CodeFenceRendererContribution, QualifiedCodeFenceRendererContribution, ToolRendererContribution, QualifiedToolRendererContribution, MessageActionContribution, QualifiedMessageActionContribution, PluginLifecycleEvent, PluginLifecycleEventKind, PluginLifecycleListener, QualifiedSettingsSectionContribution, SettingsSectionContribution, PiWebPluginRegistration, PluginAction, QualifiedComposerContribution, PluginRuntimeContext, QualifiedContributionId, QualifiedPluginAction, ReservedActionId, QualifiedThemeContribution, QualifiedThemePairContribution, QualifiedWorkspaceLabelContribution, QualifiedWorkspacePanelContribution, GlobalPanelContext, GlobalPanelContribution, QualifiedGlobalPanelContribution, ThemeContribution, ThemePairContribution, WorkspaceLabelContext, WorkspaceLabelContribution, WorkspaceLabelItem, WorkspaceHost, WorkspacePanelContext, WorkspacePanelContribution, WorkspacePluginBinding } from "./types";
 
 function eventHasKind<K extends PluginLifecycleEventKind>(event: PluginLifecycleEvent, kind: K): event is Extract<PluginLifecycleEvent, { kind: K }> {
   return event.kind === kind;
@@ -72,14 +72,16 @@ export class PluginRegistry {
   private readonly openPage: ((pageId: QualifiedContributionId) => void) | undefined;
 
   private readonly ui: PluginHostUi | undefined;
+  private readonly reactUi: PluginReactHostUi | undefined;
   private readonly fleet: PluginFleetSource | undefined;
   private readonly facts = new PluginFactBus({ "machine.reachability-changed": (listening) => { this.fleet?.watchReachability(listening); } });
 
-  constructor(hostServices?: { fetchJson?: (path: string, init?: { method?: string; body?: unknown }) => Promise<unknown>; readPiWebStatus?: (machineId: string) => Promise<unknown>; ui?: PluginHostUi; openPage?: (pageId: QualifiedContributionId) => void; fleet?: PluginFleetSource }) {
+  constructor(hostServices?: { fetchJson?: (path: string, init?: { method?: string; body?: unknown }) => Promise<unknown>; readPiWebStatus?: (machineId: string) => Promise<unknown>; ui?: PluginHostUi; reactUi?: PluginReactHostUi; openPage?: (pageId: QualifiedContributionId) => void; fleet?: PluginFleetSource }) {
     this.fetchJson = hostServices?.fetchJson;
     this.readPiWebStatus = hostServices?.readPiWebStatus;
     this.openPage = hostServices?.openPage;
     this.ui = hostServices?.ui;
+    this.reactUi = hostServices?.reactUi;
     this.fleet = hostServices?.fleet;
   }
   private readonly listeners = new Map<PluginLifecycleEventKind, { pluginId: string; listener: (event: PluginLifecycleEvent) => void }[]>();
@@ -123,6 +125,7 @@ export class PluginRegistry {
           callOperation: (operation: string, input?: unknown) => this.callPluginOperation(pluginOperationPath(registration.machineId, sourcePluginId, operation), input),
         }),
         ...(this.ui === undefined ? {} : { ui: this.ui }),
+        ...(this.reactUi === undefined ? {} : { reactUi: this.reactUi }),
         ...(readPiWebStatus === undefined ? {} : { readPiWebStatus: () => readPiWebStatus(statusMachineId) }),
         ...(this.openPage === undefined ? {} : { openPage: this.openPage }),
         on: <K extends PluginLifecycleEventKind>(kind: K, listener: PluginLifecycleListener<K>) => this.subscribe(runtimePluginId, kind, listener),

@@ -17,7 +17,7 @@ describe("settings-dialog Pi package orchestration", () => {
     dialog.machine = remoteMachine;
 
     const loadPromise = callDialogPromise(dialog, "loadPackagesForTarget");
-    expect(packagesSpy.mock.calls).toEqual([["remote-a"]]);
+    expect(packagesSpy.mock.calls).toEqual([[{ machineId: "remote-a" }]]);
     expect(getDialogProperty(dialog, "packageLoading")).toBe(true);
 
     dialog.machine = secondRemoteMachine;
@@ -41,7 +41,7 @@ describe("settings-dialog Pi package orchestration", () => {
 
     const installPromise = callDialogPromise(dialog, "installPiPackage", "npm:@acme/new-tools");
 
-    expect(installSpy.mock.calls).toEqual([["npm:@acme/new-tools", "remote-a"]]);
+    expect(installSpy.mock.calls).toEqual([[{ source: "npm:@acme/new-tools" }, "remote-a"]]);
     expect(getDialogProperty(dialog, "saving")).toBe(true);
     expect(getDialogProperty(dialog, "packageOperation")).toEqual({ kind: "install", source: "npm:@acme/new-tools" });
 
@@ -66,7 +66,7 @@ describe("settings-dialog Pi package orchestration", () => {
 
     await callDialogPromise(dialog, "updatePiPackage");
 
-    expect(updateSpy.mock.calls).toEqual([[undefined, "local"]]);
+    expect(updateSpy.mock.calls).toEqual([[{}, "local"]]);
     expect(pluginsSpy.mock.calls).toEqual([[]]);
     expect(getDialogProperty(dialog, "packagesResponse")).toEqual({ packages: updatedPackages });
     expect(getDialogProperty(dialog, "pluginsResponse")).toBe(refreshedPlugins);

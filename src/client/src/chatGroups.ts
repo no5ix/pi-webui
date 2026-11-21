@@ -133,3 +133,33 @@ export function tryAppendGroupChatMessage(
   const tailGroups = groupChatMessages(tailMessages, tailStartIndex);
   return [...prefix, ...tailGroups];
 }
+
+
+/** Compactly describe a run of assistant/tool transcript activity for the React workspace. */
+export function summarizeReactActivity(messages: readonly ChatLine[]): string {
+  let thinking = 0;
+  let toolCalls = 0;
+  let toolResults = 0;
+  let bash = 0;
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      for (const part of message.parts) {
+        if (part.type === "thinking") thinking += 1;
+        if (part.type === "toolCall" || part.type === "toolExecution") toolCalls += 1;
+      }
+    }
+    if (message.role === "tool") {
+      for (const part of message.parts) {
+        if (part.type === "toolResult") toolResults += 1;
+      }
+    }
+    if (message.role === "bash") bash += 1;
+  }
+  const labels: string[] = [];
+  const counted = (count: number, singular: string, plural: string) => `${String(count)} ${count === 1 ? singular : plural}`;
+  if (thinking > 0) labels.push(counted(thinking, "thinking", "thinkings"));
+  if (toolCalls > 0) labels.push(counted(toolCalls, "tool call", "tool calls"));
+  if (toolResults > 0) labels.push(counted(toolResults, "tool result", "tool results"));
+  if (bash > 0) labels.push(counted(bash, "bash command", "bash commands"));
+  return labels.length > 0 ? labels.join(", ") : summarizeChatGroup([...messages]);
+}

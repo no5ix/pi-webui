@@ -10,6 +10,9 @@
   },
   "include": [
     "src/plugin-api.ts",
+    "src/plugin-react.ts",
+    "src/plugin-react-hooks.ts",
+    "src/jsx-runtime.ts",
     "src/server-plugin-api.ts"
   ]
 }

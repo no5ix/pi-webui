@@ -119,4 +119,26 @@ describe("browser plugin backend helper", () => {
       vi.useRealTimers();
     }
   });
+
+  it("uses an operation-specific deadline when one is supplied", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => Promise.resolve(new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => { controller.error(new DOMException("aborted", "AbortError")); }, { once: true });
+        },
+      }), { status: 200 })));
+      let settled = false;
+      const result = requestPluginBackend(target, "git.mutate", null, 13_000).then(
+        () => { settled = true; return { state: "resolved" as const }; },
+        (reason: unknown) => { settled = true; return { state: "rejected" as const, reason }; },
+      );
+      await vi.advanceTimersByTimeAsync(12_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toMatchObject({ state: "rejected", reason: { message: "The server did not answer within 13s." } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

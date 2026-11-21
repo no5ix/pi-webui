@@ -101,5 +101,6 @@ function sendPiSkillsError(reply: FastifyReply, error: unknown): FastifyReply {
       : error instanceof ActiveAgentProfileAccessError
         ? 503
         : 500;
+  if (status === 500) reply.log.error({ err: error }, "pi skills request failed");
   return reply.code(status).send({ error: errorMessage(error) });
 }

@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { isRelativeSpecifier, moduleSpecifiers, staticModuleSpecifiers } from "./pluginModuleSpecifiers.mjs";
+import { HOST_REACT_SPECIFIERS, isHostReactSpecifier, isRelativeSpecifier, moduleSpecifiers, staticModuleSpecifiers } from "./pluginModuleSpecifiers.mjs";
+
+describe("isHostReactSpecifier", () => {
+  it("accepts the three specifiers the page's import map resolves, and nothing else", () => {
+    expect(HOST_REACT_SPECIFIERS).toEqual([
+      "@gang-of-beads/pi-web/plugin-react",
+      "@gang-of-beads/pi-web/plugin-react-hooks",
+      "@gang-of-beads/pi-web/jsx-runtime",
+    ]);
+    expect(isHostReactSpecifier("@gang-of-beads/pi-web/jsx-runtime")).toBe(true);
+    expect(isHostReactSpecifier("react")).toBe(false);
+    expect(isHostReactSpecifier("react/jsx-runtime")).toBe(false);
+    expect(isHostReactSpecifier("./jsx-runtime.js")).toBe(false);
+  });
+});
 
 describe("staticModuleSpecifiers", () => {
   it("names what a file loads before it runs, not its lazy imports", () => {

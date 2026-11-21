@@ -18,7 +18,7 @@ PI WEB runs as two processes: a long-lived **session daemon** (`pi-web-sessiond`
 
 - **Node.js 22.19.0 or newer** and npm, set up so `npm install -g` works without `sudo`. A version manager (nvm, fnm, mise) or Homebrew gives you that. A distribution's packaged Node.js installs global packages into a system folder, and `npm install -g` then fails with `EACCES`; either use a version manager, or point npm at a folder you own with `npm config set prefix ~/.local` and put `~/.local/bin` on your login-shell `PATH`. Do not run the installer with `sudo`: the services would be installed for root.
 - **On Linux, python3, make and a C++ compiler.** npm builds the terminal's native module (`node-pty`) during the install, because it has no prebuilt binary for Linux. Install them first: `sudo apt install build-essential python3` (Debian, Ubuntu), `sudo dnf install gcc-c++ make python3` (Fedora). Without them `npm install -g` still completes and `pi-web run` works, but without terminals (sessions keep working), and `pi-web doctor` warns about the missing module; the curl installer and `pi-web install` refuse until the module loads. macOS uses the prebuilt binary. On Termux, see [Termux (Android)](#termux-android).
-- **Pi Coding Agent 1.5.0 or newer**, configured for your user so the `pi` command works. npm installs the Pi SDK packages PI WEB runs sessions on as its peer dependencies; `pi-web doctor` also expects the `pi` command on your login-shell `PATH`.
+- **Pi Coding Agent 1.5.2 or newer**, configured for your user so the `pi` command works. npm installs the Pi SDK packages PI WEB runs sessions on as its peer dependencies; `pi-web doctor` also expects the `pi` command on your login-shell `PATH`.
 - A login shell (bash, zsh or fish) whose `PATH` exposes Node.js, npm, Pi, git and every tool your agents need.
 - For `pi-web install`: a per-user service manager, systemd on Linux, launchd on macOS, termux-services on [Termux](#termux-android), or Task Scheduler on Windows (see [Windows](#windows) for its requirements). On Linux the user's systemd needs a session bus; minimal Debian and Ubuntu images leave it out, and the install preflight then fails with `Failed to connect to bus`. Install it with `sudo apt install dbus-user-session`, then start it with `systemctl --user start dbus.socket`.
 
@@ -169,10 +169,10 @@ pi-web install --at-boot
 
 - The two tasks start when Windows starts, as your account, without a stored password (Task Scheduler's **Run whether user is logged on or not** with **Do not store password**).
 - The install needs PowerShell opened as administrator, and your account needs the **Log on as a batch job** right, which administrator accounts have. It runs its preflight checks as such a task, so it reports either missing requirement before it changes anything.
-- The tasks run with your full administrator rights, and so do PI WEB's terminals and agents: Windows does not limit tasks that run without a sign-in, as it limits an ordinary PowerShell window. For that reason `pi-web stop`, `start`, `restart`, `uninstall` and `install` need PowerShell opened as administrator, and refuse in an ordinary window before they change anything. To restart, the Updates page and `pi-web restart` in a PI WEB terminal also work, and `pi-web uninstall` works in a PI WEB terminal. `pi-web status`, `logs` and `doctor` work in any window. Any program running as your account, even in an ordinary window, can use PI WEB's tasks and files to get full administrator rights without a UAC prompt; use `--at-boot` only where that is acceptable.
+- The tasks run with your full administrator rights, and so do PI WEB's terminals and agents: Windows does not limit tasks that run without a sign-in, as it limits an ordinary PowerShell window. For that reason `pi-web stop`, `start`, `restart`, `uninstall` and `install` need PowerShell opened as administrator, and refuse in an ordinary window before they change anything. To restart, `pi-web restart` in a PI WEB terminal also works, and `pi-web uninstall` works in a PI WEB terminal. `pi-web status`, `logs` and `doctor` work in any window. Any program running as your account, even in an ordinary window, can use PI WEB's tasks and files to get full administrator rights without a UAC prompt; use `--at-boot` only where that is acceptable.
 - Without a stored password the services, and the terminals and agents they run, have no network credentials: mapped drives and network shares are not available to them as you. Local files and outbound connections, such as model APIs and Tailscale, work. They run without a desktop.
 - A later `pi-web install` keeps the start mode, unless you uninstalled. Switching the mode with `--at-boot` or `--at-log-on` is refused in a PI WEB terminal. `pi-web status` and `pi-web doctor` show the installed mode; `pi-web doctor` checks the tasks' context only from PowerShell opened as administrator, and elsewhere reports that check as not verified.
-- `pi-web install --at-boot` also registers the `PI WEB restart (<user>)` and `PI WEB uninstall (<user>)` tasks, which a restart or uninstall started inside PI WEB, or from the Updates page, starts. If one of them is missing, `pi-web install` from PowerShell opened as administrator registers it again.
+- `pi-web install --at-boot` also registers the `PI WEB restart (<user>)` and `PI WEB uninstall (<user>)` tasks, which a restart or uninstall started inside PI WEB starts. If one of them is missing, `pi-web install` from PowerShell opened as administrator registers it again.
 - A PC that sleeps stops serving; set its power options so it stays awake if PI WEB must stay reachable.
 
 To start PI WEB when you sign in again, run `pi-web install --at-log-on` from PowerShell opened as administrator outside PI WEB while you are signed in to Windows; it also removes the restart and uninstall tasks when they are not running.
@@ -249,7 +249,7 @@ Options: `dataDir` (default `~/.pi-web`), `configPath` (default `~/.config/pi-we
 The module differs from `pi-web install` in these ways:
 
 - **PATH.** The services start `pi-web-sessiond` and `pi-web-server` directly, not through a login shell. Sessions, the bash tool and terminals inherit the session daemon's environment, so they see only the service manager's `PATH`. Put the `PATH` your agents need (git, node, pi, build tools) in `programs.pi-web.environment.PATH`.
-- **Declarative settings.** With `settings` set, Home Manager writes the config file as a read-only link into the Nix store. Saving from Settings (plugin toggles, path access, uploads, logs, update command) then fails with a "could not save its config file" error. Leave `settings` unset to keep a writable config file that Settings manages. To keep some keys declarative anyway, leave `settings` unset and merge those keys into the file on every switch; the merged keys win and Settings keeps saving everything else. A key that holds a secret belongs in a file your secrets tool renders outside the Nix store, merged the same way.
+- **Declarative settings.** With `settings` set, Home Manager writes the config file as a read-only link into the Nix store. Saving from Settings (plugin toggles, path access, uploads, logs) then fails with a "could not save its config file" error. Leave `settings` unset to keep a writable config file that Settings manages. To keep some keys declarative anyway, leave `settings` unset and merge those keys into the file on every switch; the merged keys win and Settings keeps saving everything else. A key that holds a secret belongs in a file your secrets tool renders outside the Nix store, merged the same way.
 
   ```nix
   home.activation.piWebConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -296,17 +296,17 @@ To keep it running and start it again when it exits, run `pi-web run` under a pr
 
 - **One copy.** Run a single instance; two session daemons on one data directory corrupt it (see [One session daemon per data directory](#one-session-daemon-per-data-directory)).
 - **The stop signal goes to `pi-web run` only.** It passes the signal on to both processes and lets the session daemon drain in-flight agent runs. A manager that signals every process in the tree stops the agents before the drain.
-- **Time for the drain.** Allow the drain (60 seconds by default, `PI_WEB_SHUTDOWN_DRAIN_MS`) plus 10 seconds before a forced kill.
+- **Time for the drain and credentials.** Allow the drain (60 seconds by default, `PI_WEB_SHUTDOWN_DRAIN_MS`) plus at least 20 seconds before a forced kill. A standard SDK OAuth refresh already in progress can need up to 15 seconds to finish and save its replacement token after cancellation; custom providers or slow shutdown hooks can require more time.
 
 With PM2, whose defaults signal the whole process tree and kill after 1.6 seconds:
 
 ```bash
-pm2 start pi-web --name pi-web --interpreter none --no-treekill --kill-timeout 70000 -- run
+pm2 start pi-web --name pi-web --interpreter none --no-treekill --kill-timeout 80000 -- run
 ```
 
 `--interpreter none` makes PM2 run the `pi-web` command itself; without it, PM2 loads the script into its own Node.js wrapper, where `pi-web` does not start and PM2 still reports it online. PM2's default fork mode with one instance is what `pi-web run` needs; do not start it in cluster mode or with `-i`. If you change `PI_WEB_SHUTDOWN_DRAIN_MS`, change `--kill-timeout` by the same amount.
 
-With supervisord, set `stopwaitsecs=70` in the program's section (its default is 10 seconds) and leave `stopasgroup` and `killasgroup` off, as they are by default.
+With supervisord, set `stopwaitsecs=80` in the program's section (its default is 10 seconds) and leave `stopasgroup` and `killasgroup` off, as they are by default.
 
 ## Run in a container
 
@@ -349,7 +349,7 @@ CMD ["pi-web", "run"]
 
 The `node` user (uid 1000) runs PI WEB and must be able to write the volumes: a new Docker volume copies the ownership of `/data` and `/workspace` from the image, a Kubernetes volume needs `securityContext.fsGroup: 1000`, and a bind mount needs `chown 1000:1000` on the host directory.
 
-Without the build tools the install still completes, and PI WEB runs without terminals: no shells, and nothing that runs in one, such as the Updates page's update and restart buttons and a workspace removal that runs a command. Sessions keep working. The final stage links the `pi` command that comes with PI WEB onto `PATH`, where agents and `pi-web doctor` look for it. Add the tools your agents need to the final stage.
+Without the build tools the install still completes, and PI WEB runs without terminals: no shells, and nothing that runs in one, such as a workspace removal that runs a command. Sessions keep working. The final stage links the `pi` command that comes with PI WEB onto `PATH`, where agents and `pi-web doctor` look for it. Add the tools your agents need to the final stage.
 
 ### Persistent storage
 
@@ -384,7 +384,7 @@ A platform's HTTP and TCP probes connect to the container's own address, not to 
 - **Liveness:** the same command with `/manifest.webmanifest`, which the web/API serves whatever the session daemon is doing. Do not use the daemon's health for liveness: a long drain or a slow start would get the container killed mid-run.
 
 HTTP and TCP probes on the web port work only when it listens beyond loopback (`PI_WEB_HOST=0.0.0.0`, with the exposure that brings; see [Bind and publish](#bind-and-publish)).
-- **Grace period:** set the platform's stop timeout to at least the drain plus 10 seconds: 30 seconds with the image above, 70 with the default drain of 60 seconds (Docker's default stop timeout is 10 seconds, Kubernetes' 30). Or lower `PI_WEB_SHUTDOWN_DRAIN_MS`. A run cut short by a forced stop is reported when the daemon starts again.
+- **Grace period:** set the platform's stop timeout to at least the drain plus 20 seconds: 40 seconds with the image above, 80 with the default drain of 60 seconds (Docker's default stop timeout is 10 seconds, Kubernetes' 30). This also leaves time for an in-progress SDK OAuth refresh to save its replacement token; custom providers or slow shutdown hooks can require more time. Or lower `PI_WEB_SHUTDOWN_DRAIN_MS`, keeping the credential-saving allowance. A run cut short by a forced stop is reported when the daemon starts again.
 
 ### Bind and publish
 
@@ -425,14 +425,14 @@ The command builds the production assets and then runs the compiled session daem
 - `--host` (default `127.0.0.1`) and `--port` (default `8504`) apply only when the install creates the config file. Once it exists, edit `host` and `port` in the config file or in **Settings → General** instead.
 - `--config PATH` uses another global config file (default `$XDG_CONFIG_HOME/pi-web/config.json`, or `~/.config/pi-web/config.json`) and records it in the services as `PI_WEB_CONFIG`.
 - `--at-boot` and `--at-log-on`, on Windows only, choose whether the tasks [start at boot](#start-at-boot-without-signing-in) or when you sign in (the default). A later install keeps the installed choice.
-- `--dev`, run from a PI WEB checkout, installs the development services instead: a session daemon that runs from the checkout without reloading, and one service for the web/API server and the Vite UI, which reload when the code changes. The UI is then at <http://127.0.0.1:8505>; it listens on every interface (`0.0.0.0`) without authentication, so use `--dev` only on a network you trust. The Updates page and **Settings → Machines** offer no restart or update for the development services, because their PI WEB processes run under `pnpm` and cannot confirm they are the services' own. Restart them with `pi-web restart` from the checkout, and update with `git pull --ff-only && pnpm install --frozen-lockfile` followed by `pi-web restart`.
+- `--dev`, run from a PI WEB checkout, installs the development services instead: a session daemon that runs from the checkout without reloading, and one service for the web/API server and the Vite UI, which reload when the code changes. The UI is then at <http://127.0.0.1:8505>; it listens on every interface (`0.0.0.0`) without authentication, so use `--dev` only on a network you trust. **Settings → Machines** offers no restart for the development services, because their PI WEB processes run under `pnpm` and cannot confirm they are the services' own. Restart them with `pi-web restart` from the checkout, and update with `git pull --ff-only && pnpm install --frozen-lockfile` followed by `pi-web restart`.
 
 ### What `pi-web install` writes
 
 - **Service definitions:** `~/.config/systemd/user/pi-web-sessiond.service` and `pi-web.service` (and `pi-web-ui-dev.service` with `--dev`) on Linux; `~/Library/LaunchAgents/com.pi-web.sessiond.plist` and `com.pi-web.web.plist` (and `com.pi-web.ui-dev.plist`) on macOS; the `run` scripts in `$PREFIX/var/service/pi-web-sessiond` and `pi-web` (and `pi-web-ui-dev`) plus the boot script `~/.termux/boot/pi-web-services` on Termux; the `PI WEB session daemon (<user>)` and `PI WEB server (<user>)` scheduled tasks and their launchers in `%LOCALAPPDATA%\pi-web\services` on Windows, and with `--at-boot` also the `PI WEB restart (<user>)` and `PI WEB uninstall (<user>)` tasks.
 - **Logs:** on macOS, Termux and Windows the services write to `~/.pi-web/logs`; on Linux their output goes to the journal.
 - **Out-of-memory policy:** on Linux the session daemon unit sets `OOMPolicy=continue`, as does the [Home Manager module](#home-manager-module)'s. When the kernel's out-of-memory killer ends a program an agent started, the session daemon and its other sessions keep running. It needs systemd 243 or later; older systemd ignores the setting. An existing install gets it the next time `pi-web install` runs; `npm install -g` and `pi-web restart` leave the unit as it is.
-- **Recorded environment:** a service manager does not inherit your shell's environment. The installer records `PI_WEB_LOG_DIR`, `PI_WEB_CONFIG` when `--config` is given, and `PI_WEB_UPDATE_COMMAND` when it is set in the installing shell. Other variables are not captured.
+- **Recorded environment:** a service manager does not inherit your shell's environment. The installer records `PI_WEB_LOG_DIR` and `PI_WEB_CONFIG` when `--config` is given. Other variables are not captured.
 - **Command overrides:** set `PI_WEB_SERVER_EXEC` or `PI_WEB_SESSIOND_EXEC` when you run `pi-web install` to start the services with your own command instead of `pi-web-server` or `pi-web-sessiond`.
 
 ## Session daemon ownership and restarts
@@ -468,7 +468,7 @@ pi-web-sessiond   # terminal 1
 pi-web-server     # terminal 2, same environment
 ```
 
-Set `PI_WEB_CONFIG` to a separate file as well, or both instances share plugin, path-access and other settings. `pi-web install` manages one instance per user. The Updates page offers **Restart web** and **Restart session daemon** only to a process the installed service started itself (on systemd, launchd and termux-services; a session daemon that does not report which service it runs under counts as started by its service when the web/API process is). **Restart** in **Settings → Machines** needs both, and an update command a second instance inherits as `PI_WEB_UPDATE_COMMAND` from the installed services is not offered either. A second instance started by hand therefore says to restart it the way it was started instead of restarting the installed one; an update command saved in its own config is still offered. The development services get no restart or update button either; see `--dev` under [CLI reference](#cli-reference). Containers sharing a volume are instances too; see [Run in a container](#one-session-daemon-per-data-directory).
+Set `PI_WEB_CONFIG` to a separate file as well, or both instances share plugin, path-access and other settings. `pi-web install` manages one instance per user. **Settings → Machines** offers a restart only to a process the installed service started itself (on systemd, launchd and termux-services; a session daemon that does not report which service it runs under counts as started by its service when the web/API process is). A second instance started by hand therefore says to restart it the way it was started instead of restarting the installed one. The development services get no restart button either; see `--dev` under [CLI reference](#cli-reference). Containers sharing a volume are instances too; see [Run in a container](#one-session-daemon-per-data-directory).
 
 Processes spawned inside PI WEB inherit the daemon's `PI_WEB_*` values and `PI_WEB_SESSION=1`, so an instance started from inside a session with those inherited values fails at startup instead of taking over the running one.
 
@@ -493,7 +493,7 @@ Hosts that share a directory also need the session daemon socket off the shared 
 
 On a network volume the lease needs every host to see the owner's heartbeat within 30 seconds, so mount it with attribute caching of 10 seconds or less (`actimeo=10`, or `noac`, on NFS); with a longer cache, two daemons can each go on reading their own claim.
 
-Give the daemon time to finish its drain when the platform stops it: allow the drain (60 seconds by default, `PI_WEB_SHUTDOWN_DRAIN_MS`) plus 10 seconds, so 70 seconds by default. The bundled Docker setup sets this as its `stop_grace_period`; its [README](../docker/README.md#sharing-runtime-and-development-state) says how an existing install picks it up. With `docker run`, pass `--stop-timeout 70`; on Kubernetes, set `terminationGracePeriodSeconds: 70`. If you raise or lower the drain, change these by the same amount.
+Give the daemon time to finish its drain and save pending credentials when the platform stops it: allow the drain (60 seconds by default, `PI_WEB_SHUTDOWN_DRAIN_MS`) plus at least 20 seconds, so 80 seconds by default. The bundled Docker setup sets this as its `stop_grace_period`; its [README](../docker/README.md#sharing-runtime-and-development-state) says how an existing install picks it up. With `docker run`, pass `--stop-timeout 80`; on Kubernetes, set `terminationGracePeriodSeconds: 80`. If you raise or lower the drain, change these by the same amount; custom providers or slow shutdown hooks can require a larger allowance.
 
 Let startup, readiness and liveness probes allow for the wait after a crash: the 30 second lease, the 1 second check and the daemon's own startup, about 60 seconds in all. A probe that restarts the container sooner starts the 30 seconds over every time, and the container never recovers.
 
@@ -503,8 +503,7 @@ Every daemon that mounts the volume must run a PI WEB version with this check: a
 
 ## Update
 
-- **npm global install:** `npm install -g @gang-of-beads/pi-web --allow-scripts=node-pty`, then `pi-web restart`. The Updates page offers the same update (with the flag when npm knows it) where systemd, launchd or termux-services runs PI WEB; on Linux without systemd and on Windows it says how to update instead. If the `node-pty` build fails during the update, the update still completes and PI WEB restarts without terminals; `pi-web doctor` warns about it. On Windows, stop the services first; see [Windows](#windows).
-- **Your own update command:** set `updateCommand` in **Settings → General → Updates** (or `PI_WEB_UPDATE_COMMAND` in the services) and the Updates page runs it; see [Updates](config.md#updates).
+- **npm global install:** `npm install -g @gang-of-beads/pi-web --allow-scripts=node-pty`, then `pi-web restart`. Where systemd, launchd or termux-services runs PI WEB, `pi-web restart` restarts the services once the packages are in place; on Linux without systemd and on Windows restart them the way they were started. If the `node-pty` build fails during the update, the update still completes and PI WEB restarts without terminals; `pi-web doctor` warns about it. On Windows, stop the services first; see [Windows](#windows).
 - **Nix:** upgrade the profile or switch your Home Manager configuration to a newer tag, then restart the services.
 - **Container:** deploy an image with the newer package; see [Run in a container](#check-and-update).
 - **Git checkout:** pull, run `pnpm install --frozen-lockfile` (and `pnpm run build` if you run the built server), then restart the web/API server and the session daemon.

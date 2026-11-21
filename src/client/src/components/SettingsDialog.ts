@@ -102,7 +102,7 @@ export class SettingsDialog extends LitElement {
   @property({ type: Boolean }) fleetLoading = false;
   @property({ attribute: false }) fleetError?: string;
   @property({ attribute: false }) onRefreshFleet?: () => void | Promise<void>;
-  @property({ attribute: false }) onRunFleet?: (operation: "restart" | "update", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
+  @property({ attribute: false }) onRunFleet?: (operation: "restart", machineIds?: readonly string[]) => Promise<PiWebFleetRunResponse | undefined>;
   @property({ attribute: false }) onNavigate?: (section: SettingsSection) => void;
   @property({ attribute: false }) pluginSections: readonly QualifiedSettingsSectionContribution[] = [];
   @property({ attribute: false }) pluginRuntimeContext?: PluginRuntimeContext;
@@ -200,6 +200,15 @@ export class SettingsDialog extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("machine")) {
+      /**
+       * A package response belongs to the machine it was read from. The rows carry install/remove/update
+       * actions, so the moment the reader picks another machine they act on a machine no longer on
+       * screen. Nothing is shown for the new machine until it answers.
+       */
+      this.packagesResponse = undefined;
+      this.packageError = "";
+    }
     if (changed.has("instantActions") || changed.has("machine")) {
       const target = this.packageTarget();
       this.packageRemovals.update(target.id, instantHiddenIds("remove-package", target.id, this.instantActions), () => this.loadPackagesForTarget(target, "keep"), () => { this.requestUpdate(); });
@@ -402,7 +411,7 @@ export class SettingsDialog extends LitElement {
           ?fleetLoading=${this.fleetLoading}
           .fleetError=${this.fleetError}
           .onRefreshFleet=${() => this.onRefreshFleet?.()}
-          .onRunFleet=${(operation: "restart" | "update", machineIds?: readonly string[]) => this.onRunFleet?.(operation, machineIds) ?? Promise.resolve(undefined)}
+          .onRunFleet=${(operation: "restart", machineIds?: readonly string[]) => this.onRunFleet?.(operation, machineIds) ?? Promise.resolve(undefined)}
         ></settings-machines-panel>
       `;
     }
@@ -544,7 +553,6 @@ export class SettingsDialog extends LitElement {
         .onSave=${(config: PiWebConfigValues) => this.saveConfig(config)}
         .onSaveMachineConfig=${(config: PiWebConfigValues) => this.saveMachineAccessConfig(config)}
         .onSaveMachineLogging=${(config: PiWebConfigValues) => this.saveMachinePatch(config, "log settings")}
-        .onSaveMachineUpdateCommand=${(config: PiWebConfigValues) => this.saveMachinePatch(config, "the update command")}
         .reveal=${this.reveal}
         .onRevealed=${() => { this.onRevealed?.(); }}
         ?accessGate=${this.accessGate}
@@ -705,7 +713,7 @@ export class SettingsDialog extends LitElement {
     this.packageError = "";
     if (message === "clear") this.packageMessage = "";
     try {
-      const result = await loadPiPackagesData(target, (targetId) => piPackagesApi.packages(targetId));
+      const result = await loadPiPackagesData(target, (targetId) => piPackagesApi.packages({ machineId: targetId }));
       if (!this.isCurrentPackageLoad(requestSeq, target)) return;
 
       this.packagesResponse = result.packagesResponse;
@@ -946,7 +954,7 @@ export class SettingsDialog extends LitElement {
 
   private async installPiPackage(source: string): Promise<void> {
     const target = this.packageTarget();
-    await this.runPiPackageMutation({ kind: "install", source }, "install Pi package", target, () => piPackagesApi.install(source, target.id));
+    await this.runPiPackageMutation({ kind: "install", source }, "install Pi package", target, () => piPackagesApi.install({ source }, target.id));
   }
 
   private removePiPackage(source: string, scope: PiPackageScope): void {
@@ -955,7 +963,7 @@ export class SettingsDialog extends LitElement {
 
   private async updatePiPackage(source?: string): Promise<void> {
     const target = this.packageTarget();
-    await this.runPiPackageMutation(source === undefined ? { kind: "update-all" } : { kind: "update", source }, "update Pi packages", target, () => piPackagesApi.update(source, target.id));
+    await this.runPiPackageMutation(source === undefined ? { kind: "update-all" } : { kind: "update", source }, "update Pi packages", target, () => piPackagesApi.update(source === undefined ? {} : { source }, target.id));
   }
 
   /**

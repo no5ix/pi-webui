@@ -1,0 +1,41 @@
+/**
+ * The React surface's palette, projected from the theme the app paints.
+ *
+ * `theme.ts`'s `applyNativeTheme` is the app's one theme applier: it writes a theme's `--pi-*` tokens
+ * inline on `<html>`, sets `color-scheme`, and names the theme in `data-pi-web-theme`. The React
+ * components read `--rw-*`, so this file maps one to the other: the React surface follows the theme the
+ * applier chose, including the four native looks and any plugin theme, and changing the theme in
+ * Appearance repaints it. An independent React palette is what made the Appearance control look dead -
+ * it painted tokens this stylesheet never consulted.
+ *
+ * Each mapping keeps its previous literal as the fallback, so the page before the first paint (and a
+ * theme that omits a token) still answers with the look this file shipped before. `color-mix` derives
+ * the chrome separations - window, header, strong line - from the theme's own text and border ramps,
+ * the way `theme.ts` derives its ladder stops, so a surface stays one step off its background in every
+ * theme instead of carrying a fixed grey that only reads on one.
+ */
+:root {
+  --rw-font: var(--pi-font-ui, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --rw-bg: var(--pi-bg, #191a20);
+  --rw-window: color-mix(in srgb, var(--pi-bg, #191a20) 90%, var(--pi-text, #f0eff4));
+  --rw-panel: var(--pi-surface-panel, #1d1e25);
+  --rw-header: color-mix(in srgb, var(--pi-surface-panel, #1d1e25) 92%, var(--pi-text, #f0eff4));
+  --rw-card: var(--pi-surface-card, #272831);
+  --rw-input: var(--pi-surface, #292a33);
+  --rw-composer: var(--pi-surface-panel, #25262f);
+  --rw-hover: var(--pi-surface-hover, #2e303b);
+  --rw-selected: var(--pi-surface-active, #383747);
+  --rw-user: var(--pi-msg-user-bg, #343345);
+  --rw-line: var(--pi-border, #343641);
+  --rw-border-strong: color-mix(in srgb, var(--pi-border, #343641) 55%, var(--pi-text, #f0eff4));
+  --rw-text: var(--pi-text, #f0eff4);
+  --rw-text-secondary: var(--pi-text-secondary, #d0cfda);
+  --rw-muted: var(--pi-muted, #a3a3b2);
+  --rw-accent: var(--pi-accent, #c5b5ff);
+  --rw-accent-soft: var(--pi-accent-soft, #38334f);
+  --rw-accent-line: var(--pi-accent-border, #63578c);
+  --rw-warning: var(--pi-warning, #e7b56e);
+  --rw-success: var(--pi-success, #71d394);
+  --rw-danger: var(--pi-danger, #f28b82);
+  color-scheme: dark;
+}

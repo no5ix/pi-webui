@@ -54,6 +54,21 @@ describe("SessionController.renameSession", () => {
     expect(state().error).toContain("daemon down");
   });
 
+  it("keeps a newer realtime alias when an older rename request fails", async () => {
+    let rejectRename: (error: Error) => void = () => undefined;
+    const runCommand = vi.fn<RunCommand>(() => new Promise((_resolve, reject) => { rejectRename = reject; }));
+    const named = { ...oldSession, name: "Original" };
+    const { controller, state } = harness(runCommand, named);
+
+    const pending = controller.renameSession(named, "Attempted");
+    controller.applyGlobalEvent({ type: "session.name", sessionId: named.id, name: "Changed elsewhere" });
+    rejectRename(new Error("daemon down"));
+    await pending;
+
+    expect(state().sessions[0]?.name).toBe("Changed elsewhere");
+    expect(state().selectedSession?.name).toBe("Changed elsewhere");
+  });
+
   it("makes the alias the display label and a search hit", () => {
     const renamed = { ...oldSession, name: "Mobile UX sweep", firstMessage: "hello there" };
 

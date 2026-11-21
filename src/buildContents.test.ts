@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -110,11 +110,17 @@ describe("production build contents", () => {
     expect(metadata["exports"]).toEqual({
       "./plugin-api": { types: "./dist/plugin-api.d.ts", import: "./dist/plugin-api.js", default: "./dist/plugin-api.js" },
       "./server-plugin-api": { types: "./dist/server-plugin-api.d.ts", import: "./dist/server-plugin-api.js" },
+      "./plugin-react": { types: "./dist/plugin-react.d.ts", import: "./dist/plugin-react.js", default: "./dist/plugin-react.js" },
+      "./plugin-react-hooks": { types: "./dist/plugin-react-hooks.d.ts", import: "./dist/plugin-react-hooks.js", default: "./dist/plugin-react-hooks.js" },
+      "./jsx-runtime": { types: "./dist/jsx-runtime.d.ts", import: "./dist/jsx-runtime.js", default: "./dist/jsx-runtime.js" },
     });
     expect(metadata["typesVersions"]).toEqual({
       "*": {
         "plugin-api": ["dist/plugin-api.d.ts"],
         "server-plugin-api": ["dist/server-plugin-api.d.ts"],
+        "plugin-react": ["dist/plugin-react.d.ts"],
+        "plugin-react-hooks": ["dist/plugin-react-hooks.d.ts"],
+        "jsx-runtime": ["dist/jsx-runtime.d.ts"],
       },
     });
   });
@@ -191,8 +197,8 @@ interface BundledServerPlugin {
 async function createCleanPluginBuildFixture(fixtureRoot: string): Promise<void> {
   await mkdir(join(fixtureRoot, "scripts"), { recursive: true });
   await Promise.all([
-    cp(join(repoRoot, "src"), join(fixtureRoot, "src"), { recursive: true }),
-    cp(join(repoRoot, "pi-web-plugins"), join(fixtureRoot, "pi-web-plugins"), { recursive: true }),
+    cp(join(repoRoot, "src"), join(fixtureRoot, "src"), { recursive: true, filter: (sourcePath) => basename(sourcePath) !== ".DS_Store" }),
+    cp(join(repoRoot, "pi-web-plugins"), join(fixtureRoot, "pi-web-plugins"), { recursive: true, filter: (sourcePath) => basename(sourcePath) !== ".DS_Store" }),
     copyFile(join(repoRoot, "package.json"), join(fixtureRoot, "package.json")),
     copyFile(join(repoRoot, "tsconfig.json"), join(fixtureRoot, "tsconfig.json")),
     copyFile(join(repoRoot, "tsconfig.plugins.json"), join(fixtureRoot, "tsconfig.plugins.json")),

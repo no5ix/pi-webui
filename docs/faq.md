@@ -102,7 +102,7 @@ Version managers often initialize only in interactive shells. Some, including `f
 
 ## Terminals are unavailable: `node-pty` cannot load `pty.node`
 
-Terminals need `node-pty`'s native module; sessions do not, and keep working without it. On Linux npm builds the module from source during the install, which needs python3, make and a C++ compiler (`sudo apt install build-essential python3` on Debian and Ubuntu, `sudo dnf install gcc-c++ make python3` on Fedora). Without them npm leaves `node-pty` out and still completes the install; PI WEB then has no shells, and nothing that runs in one either, such as the Updates page's update and restart buttons and a workspace removal that runs a command. npm 12 also blocks dependency install scripts unless they are approved, so the module can be missing although npm reported success. Install the build tools, then reinstall with approval limited to `node-pty`:
+Terminals need `node-pty`'s native module; sessions do not, and keep working without it. On Linux npm builds the module from source during the install, which needs python3, make and a C++ compiler (`sudo apt install build-essential python3` on Debian and Ubuntu, `sudo dnf install gcc-c++ make python3` on Fedora). Without them npm leaves `node-pty` out and still completes the install; PI WEB then has no shells, and nothing that runs in one either, such as a workspace removal that runs a command. npm 12 also blocks dependency install scripts unless they are approved, so the module can be missing although npm reported success. Install the build tools, then reinstall with approval limited to `node-pty`:
 
 ```bash
 npm install -g @gang-of-beads/pi-web --allow-scripts=node-pty

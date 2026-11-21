@@ -37,10 +37,6 @@ export function machineLoggingPatchFromDraft(draft: MachineLoggingDraft): { ok: 
 }
 
 /** The Updates card's patch: the command as typed, trimmed; empty saves none. */
-export function updateCommandPatchFromDraft(draft: string): PiWebConfigValues {
-  return { updateCommand: draft.trim() };
-}
-
 export function emptyGatewayServerConfigDraft(): GatewayServerConfigDraft {
   return { host: "", port: "", allowedHostsMode: "list", allowedHostsText: "" };
 }

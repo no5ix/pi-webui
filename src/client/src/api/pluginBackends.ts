@@ -54,6 +54,7 @@ export async function requestPluginBackend(
   target: PluginBackendRequestTarget,
   operation: string,
   input: JsonValue,
+  timeoutMs?: number,
 ): Promise<JsonValue> {
   const revision = requirePluginBackendRevision(target.backendRevision);
   const clonedInput = cloneBoundedPluginBackendJson(input, "Plugin backend request input");
@@ -71,7 +72,7 @@ export async function requestPluginBackend(
     }, async (response) => {
       reportTransportReachable(pluginBackendRequestUrl(target, operation), { machineId: target.machineId });
       return { response, text: await readBoundedResponseText(response) };
-    });
+    }, timeoutMs);
   } catch (error) {
     if (isTransportFailure(error)) throw new HttpError(describeError(error), 0, target.machineId, undefined, undefined, transportClaimOf(error));
     throw error;

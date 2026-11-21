@@ -3,7 +3,9 @@ import type {
   PiMcpListResponse,
   PiMcpMutationResponse,
   PiMcpProbe,
+  PiMcpSaveRequest,
   PiMcpScope,
+  PiMcpServerDraft,
   PiMcpServerInfo,
   PiMcpSetEnabledRequest,
   PiMcpRemoveRequest,
@@ -13,12 +15,14 @@ import type {
   PiMcpWriteTarget,
 } from "../../shared/apiTypes.js";
 import {
+  addMcpServerConfig,
   globalMcpConfigPath,
   redactMcpUrl,
   loadMcpConfig,
   projectMcpConfigPath,
   removeMcpServerConfig,
   updateMcpServerConfig,
+  validateMcpServerConfig,
   type McpServerConfig,
   type McpServerConfigPatch,
   type McpServerEntry,
@@ -56,6 +60,8 @@ export interface McpConfigPort {
   /** `override` adds the entry as a project override of a global server, pi's own rule. */
   patch(configPath: string, name: string, patch: McpServerConfigPatch, options?: { override?: boolean }): Promise<void>;
   remove(configPath: string, name: string): Promise<boolean>;
+  /** Writes one whole entry; true when the file already defined that name. */
+  add(configPath: string, name: string, config: McpServerConfig): Promise<boolean>;
 }
 
 export interface McpProbePort {
@@ -73,6 +79,7 @@ export interface PiMcpService {
   setEnabled(request: PiMcpSetEnabledRequest): Promise<PiMcpMutationResponse>;
   remove(request: PiMcpRemoveRequest): Promise<PiMcpMutationResponse>;
   test(request: PiMcpTestRequest): Promise<PiMcpMutationResponse>;
+  save(request: PiMcpSaveRequest): Promise<PiMcpMutationResponse>;
 }
 
 /**
@@ -128,6 +135,47 @@ export class DefaultPiMcpService implements PiMcpService {
       const removed = await this.config.remove(target.path, name);
       return { ...this.describe(await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted), scopeContext), action: "remove", name, removed, requiresReload: true };
     });
+  }
+
+  /**
+   * Writes one server's config, creating it or replacing what the scope already had.
+   *
+   * A draft is merged over the entry that exists, and the merge is validated as one config before the
+   * file opens. That is what lets the panel edit a server whose secrets it cannot read: the keys the
+   * draft leaves out keep the values the file already had, so a hidden header value survives an edit
+   * without ever reaching the browser.
+   */
+  async save(request: PiMcpSaveRequest): Promise<PiMcpMutationResponse> {
+    const name = requireName(request.name);
+    const kind = requireWriteKind(request.target, request.scope);
+    const scopeContext = await this.scope(request.projectId);
+    requireTrustedProject(scopeContext);
+    return await this.enqueueMutation(async () => {
+      const read = await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted);
+      const entry = findEntry(read, name);
+      const target = saveTarget(read, entry, kind, scopeContext);
+      requireLegacyScope(request.scope, target.scope);
+      const validated = validateMcpServerConfig(name, mergeMcpDraft(request.config, entry?.config));
+      if (typeof validated === "string") throw new PiMcpRequestError(validated);
+      const added = await this.writeDraft(kind, target.path, name, validated, entry);
+      return { ...this.describe(await this.config.read(scopeContext.projectPath, scopeContext.projectTrusted), scopeContext), action: "save", name, added, requiresReload: true };
+    });
+  }
+
+  /**
+   * Writes one draft to one file, and says whether the file gained an entry.
+   *
+   * A definition write replaces the entry, which is why a draft that leaves a secret out keeps the
+   * stored one: the merged config the validator checked is what lands. An override write is pi's own
+   * patch, not a config: only the override keys go into the project's file, and the transport the
+   * server runs on stays in the file that defines it.
+   */
+  private async writeDraft(kind: PiMcpWriteKind, configPath: string, name: string, config: McpServerConfig, entry: McpServerEntry | undefined): Promise<boolean> {
+    if (kind === "override") {
+      await this.config.patch(configPath, name, mcpOverrideDraft(config), { override: true });
+      return entry?.override === undefined;
+    }
+    return !(await this.config.add(configPath, name, config));
   }
 
   async test(request: PiMcpTestRequest): Promise<PiMcpMutationResponse> {
@@ -228,6 +276,75 @@ function writeTarget(read: McpConfigRead, entry: McpServerEntry, kind: PiMcpWrit
 function requireLegacyScope(requested: PiMcpScope | undefined, resolved: PiMcpScope): void {
   if (requested === undefined || requested === resolved) return;
   throw new PiMcpRequestError(`The entry this write resolved to is a ${resolved} one, not the ${requested} scope the request named`);
+}
+
+/**
+ * The file a save is aimed at.
+ *
+ * An existing entry resolves exactly as an enable or a remove does, so a press in a project cannot
+ * write the global file and another project's server cannot be edited here. A name the scope does not
+ * have yet has no entry to resolve, so its target decides: a definition goes to the file that owns the
+ * scope the request named, and an override refuses, because pi's override is an override *of* a global
+ * server, and there is nothing to override before one exists.
+ */
+function saveTarget(read: McpConfigRead, entry: McpServerEntry | undefined, kind: PiMcpWriteKind, scopeContext: McpScopeContext): { path: string; scope: PiMcpScope } {
+  if (entry !== undefined) return writeTarget(read, entry, kind, scopeContext);
+  if (kind === "override") throw new PiMcpRequestError("A project's override needs a global MCP server of that name to override, so write its definition first");
+  if (scopeContext.projectPath === undefined) return { path: read.globalConfigPath, scope: "global" };
+  return { path: projectMcpConfigPath(scopeContext.projectPath), scope: "project" };
+}
+
+/**
+ * The config a save writes: the draft over the entry that exists.
+ *
+ * Keys the draft does not speak for keep what the file had. `env` and `headers` follow that rule too,
+ * which is what makes it useful: a form that shows an environment variable's name but never its value
+ * sends no `env` at all when the person editing did not touch them, and the values survive. Sent whole
+ * (pi reads a plain object), they replace the set.
+ *
+ * A transport switch is not a merge. A draft that names a command speaks for a stdio server, so the URL
+ * and header keys the previous HTTP entry had are dropped - pi reads `url` ahead of `command`, and a
+ * saved form that switched transport must not leave a stale URL that pi would connect to.
+ */
+const STDIO_CONFIG_KEYS = ["command", "args", "cwd", "env"];
+const HTTP_CONFIG_KEYS = ["url", "headers", "oauth", "auth"];
+
+function mergeMcpDraft(draft: PiMcpServerDraft, existing: McpServerConfig | undefined): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...(existing ?? {}) };
+  for (const [key, value] of Object.entries(draft)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  if (Object.hasOwn(draft, "command")) return withoutKeys(merged, HTTP_CONFIG_KEYS);
+  if (Object.hasOwn(draft, "url")) return withoutKeys(merged, STDIO_CONFIG_KEYS);
+  return merged;
+}
+
+/** A transport switch drops the other transport's fields; pi reads `url` ahead of `command`, and a leftover URL would be connected to. */
+function withoutKeys(config: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(config).filter(([key]) => !keys.includes(key)));
+}
+
+/**
+ * What a project's override of a global server is allowed to say, and nothing else.
+ *
+ * pi reads `enabled`, `exposure` and `toolExposure` from a project's `mcp.json` entry and refuses the
+ * entry when it names anything more (its loader reports "an override can only set ..."). Merging the
+ * whole definition over the global entry - which is what makes editing a server whose secrets the panel
+ * cannot read work - would therefore write a file pi rejects, and leak the definition's command, URL and
+ * secret keys into a project file that gets committed. The merge is validated whole (it is the config pi
+ * will effectively run, global definition plus this override) and narrowed to these keys for the write.
+ */
+/**
+ * What a project may say about a server it does not define: pi's own patch, whose keys are exactly
+ * the ones an override entry is allowed to carry. The transport fields are not copied - a project
+ * that could change the command of a global server would run any program on this machine.
+ */
+function mcpOverrideDraft(config: McpServerConfig): McpServerConfigPatch {
+  const patch: McpServerConfigPatch = {};
+  if (typeof config.enabled === "boolean") patch.enabled = config.enabled;
+  const exposure = config.exposure;
+  if (exposure === "codemode" || exposure === "deferred" || exposure === "direct" || exposure === "hidden") patch.exposure = exposure;
+  return patch;
 }
 
 function requireEntry(read: McpConfigRead, name: string): McpServerEntry {
@@ -345,6 +462,7 @@ export function fileMcpConfigPort(agentDir: string): McpConfigPort {
       return Promise.resolve();
     },
     remove: (configPath, name) => Promise.resolve(removeMcpServerConfig(configPath, name)),
+    add: (configPath, name, config) => Promise.resolve(addMcpServerConfig(configPath, name, config)),
   };
 }
 
@@ -405,6 +523,10 @@ export class ActiveProfilePiMcpService implements PiMcpService {
 
   async test(request: PiMcpTestRequest): Promise<PiMcpMutationResponse> {
     return await (await this.service()).test(request);
+  }
+
+  async save(request: PiMcpSaveRequest): Promise<PiMcpMutationResponse> {
+    return await (await this.service()).save(request);
   }
 
   private async service(): Promise<PiMcpService> {

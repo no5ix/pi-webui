@@ -11,7 +11,7 @@ Open an issue before working on anything larger than a small fix. User-visible b
 - Node.js 22.19.0 or newer (`engines` in `package.json`)
 - pnpm 12.8.1 (`packageManager` in `package.json`)
 - git
-- Pi Coding Agent 1.5.0 or newer, configured for your user, to run sessions
+- Pi Coding Agent 1.5.2 or newer, configured for your user, to run sessions
 - A C/C++ toolchain and Python 3 for the node-pty build during `pnpm install` (`nix develop` provides them)
 
 ## Setup
@@ -31,6 +31,8 @@ pnpm run dev
 ```
 
 This starts the session daemon, the web/API process and the Vite UI. The UI listens on loopback (`127.0.0.1:8505`): Tailscale Serve takes the served port on the tailnet interface, so a listener on every interface is refused with `EADDRINUSE`. The UI has no authentication, so treat anything that can reach this machine's loopback as trusted. Open `http://localhost:8505`; the UI proxies `/api` to the web/API port from your PI WEB config (8504 by default). To run the pieces separately, use `pnpm run dev:sessiond`, `pnpm run dev:web` and `pnpm run dev:client`, and `pnpm run dev:client --host 0.0.0.0` when you want the UI on every interface of a network you trust.
+
+To run the React workspace, use `pnpm run dev:react`. It starts the same session daemon and web/API dependencies before the React UI, which listens on `127.0.0.1:8506` by default. Set `PI_WEB_DEV_SKIP_TAILSCALE=1` when no tailnet mapping is needed; set `PI_WEB_DEV_REACT_PORT` to move the React UI to another port.
 
 On a Mac in the tailnet, `pnpm run dev` also answers the questions a phone asks: it starts the Tailscale app if it is not running, waits for the interface, publishes `https://<machine>.<tailnet>.ts.net:8505` through `tailscale serve`, and lets the dev server answer host names ending in `.ts.net`. That is what makes a phone on cellular reach the dev UI over HTTPS, which is what browser notifications need. `Ctrl+C` removes the serve mapping it created - first, before the processes are stopped, and confirmed against `tailscale serve status`, with a watcher that clears the mapping if the command is killed before it can - and stops the whole tree it started. It never takes Tailscale down and never disconnects the machine; if the app was already running it leaves it running. On a machine that is not in a tailnet, or with no Tailscale, the command runs the plain development stack and says so. `PI_WEB_DEV_SKIP_TAILSCALE=1` skips it; `PI_WEB_DEV_TAILSCALE_PORT` moves the HTTPS port off 8505 for a machine that already serves there.
 

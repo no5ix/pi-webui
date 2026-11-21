@@ -1,5 +1,5 @@
 import { isRecord } from "../../../shared/unknownValues";
-import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageScope, PiPackageSetEnabledRequest, PiPackageUpdateRequest, PiMcpRemoveRequest, PiMcpSetEnabledRequest, PiMcpTestRequest, PiSkillSetEnabledRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
+import type { ExtensionCompletionItem, ExtensionTerminalKey, SessionInfo, DeleteWorkspaceFileResponse, ExtensionDialogAnswer, FileSuggestion, MoveWorkspaceFileOptions, NtfyConfig, PiPackageInstallRequest, PiPackageRemoveRequest, PiPackageSetEnabledRequest, PiPackageUpdateRequest, PiMcpRemoveRequest, PiMcpSaveRequest, PiMcpSetEnabledRequest, PiMcpTestRequest, PiSkillSetEnabledRequest, PiWebConfigValues, PiWebSharedThemeConfig, PromptAttachment, RunTerminalCommandInput, SessionBulkMutationRef, SessionCleanupRequest, SessionNotificationDismissThrough, SessionRef, SessionTreeForkRequest, SessionTreeForkResult, SessionTreeNavigateRequest, SessionUnreadAcknowledgeRequest, TerminalCommandRun, TerminalCommandRunFilter, WorkspaceRemovalRequest, WriteWorkspaceFileOptions, SessionsRevisionResponse, MachineConnection, ProjectFolderListingRequest } from "../../../shared/apiTypes";
 import { parseProjectFolderListing } from "./projectFolderParser";
 import { resolveAppUrl } from "../appUrl";
 import { describeError } from "../notice";
@@ -129,7 +129,7 @@ function piWebStatusPath(machineId: string): string {
 
 export const piWebApi = {
   piWebStatus: (machineId = "local") => machineRead(piWebStatusPath(machineId), parsePiWebStatusResponse),
-  checkForUpdates: (machineId = "local") => request(`${piWebStatusPath(machineId)}?refresh=1`, parsePiWebStatusResponse, { cache: "no-store" }),
+  refreshStatus: (machineId = "local") => request(`${piWebStatusPath(machineId)}?refresh=1`, parsePiWebStatusResponse, { cache: "no-store" }),
   piWebRuntime: () => request("api/pi-web/runtime", parsePiWebRuntimeResponse),
   webServerVersion: () => request("api/pi-web/version", parseWebServerVersion, { cache: "no-store" }),
 };
@@ -244,19 +244,20 @@ function projectIdQuery(projectId: string | undefined): string {
 }
 
 export const piPackagesApi = {
-  packages: (machineId?: string) => request(piPackagePath("", machineId), parsePiPackagesResponse),
-  install: (source: string, machineId?: string) => {
-    const body: PiPackageInstallRequest = { source };
-    return request(piPackagePath("install", machineId), parsePiPackageMutationResponse, { method: "POST", body: JSON.stringify(body) });
-  },
-  remove: (source: string, scope?: PiPackageScope, machineId?: string, init?: Pick<RequestInit, "keepalive">) => {
-    const body: PiPackageRemoveRequest = scope === undefined ? { source } : { source, scope };
-    return request(piPackagePath("remove", machineId), parsePiPackageMutationResponse, { ...init, method: "POST", body: JSON.stringify(body) });
-  },
-  update: (source?: string, machineId?: string) => {
-    const body: PiPackageUpdateRequest | undefined = source === undefined ? undefined : { source };
-    return request(piPackagePath("update", machineId), parsePiPackageMutationResponse, { method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  },
+  /**
+   * Pi's configured packages for one machine, and for one project on it.
+   *
+   * The project is named by id and resolved by the machine: a project's `packages` list is that
+   * machine's file, and a list read without a project carries no project rows at all.
+   */
+  packages: (scope?: { machineId?: string; projectId?: string }) =>
+    request(`${piPackagePath("", scope?.machineId)}${projectIdQuery(scope?.projectId)}`, parsePiPackagesResponse),
+  install: (install: PiPackageInstallRequest, machineId?: string) =>
+    request(piPackagePath("install", machineId), parsePiPackageMutationResponse, { method: "POST", body: JSON.stringify(install) }),
+  remove: (remove: PiPackageRemoveRequest, machineId?: string, init?: Pick<RequestInit, "keepalive">) =>
+    request(piPackagePath("remove", machineId), parsePiPackageMutationResponse, { ...init, method: "POST", body: JSON.stringify(remove) }),
+  update: (update: PiPackageUpdateRequest, machineId?: string) =>
+    request(piPackagePath("update", machineId), parsePiPackageMutationResponse, { method: "POST", body: JSON.stringify(update) }),
   /**
    * Keeps a configured package installed while pi's filter stops it contributing anything. The
    * answer carries the whole list again, because the filter of one package is what decides whether
@@ -289,6 +290,11 @@ export const piMcpApi = {
   setEnabled: (setEnabled: PiMcpSetEnabledRequest, machineId?: string) => request(piMcpPath("set-enabled", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(setEnabled) }),
   remove: (remove: PiMcpRemoveRequest, machineId?: string) => request(piMcpPath("remove", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(remove) }),
   test: (test: PiMcpTestRequest, machineId?: string) => request(piMcpPath("test", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(test) }),
+  /**
+   * Writes one server's config. The draft is what the form owns; a key it leaves out keeps the value
+   * the file had, which is why a header or environment value a panel cannot show survives an edit.
+   */
+  save: (save: PiMcpSaveRequest, machineId?: string) => request(piMcpPath("save", machineId), parsePiMcpMutationResponse, { method: "POST", body: JSON.stringify(save) }),
 };
 
 /**

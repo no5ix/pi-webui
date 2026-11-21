@@ -23,6 +23,8 @@ import {
   cloneBoundedPluginBackendJson,
   PLUGIN_BACKEND_DISPATCH_TIMEOUT_MS,
   PLUGIN_BACKEND_REQUEST_TIMEOUT_MS,
+  PLUGIN_BACKEND_REMOTE_DISPATCH_TIMEOUT_MS,
+  PLUGIN_BACKEND_REMOTE_OPERATION_TIMEOUT_MS,
   PLUGIN_BACKEND_RESPONSE_JSON_MAX_BYTES,
   requirePluginBackendOperation,
   requirePluginBackendRevision,
@@ -260,10 +262,11 @@ export class WorkspaceProviderRegistry {
    */
   async request(request: WorkspaceProviderRequest): Promise<JsonValue> {
     try {
+      const timeoutMs = hasRemoteGitMutationTimeout(request) ? PLUGIN_BACKEND_REMOTE_DISPATCH_TIMEOUT_MS : this.requestTimeoutMs;
       return await runBoundedProviderOperation(
         request.pluginId,
         "request",
-        this.requestTimeoutMs,
+        timeoutMs,
         (signal) => this.dispatchRequest(request, signal),
       );
     } catch (error) {
@@ -478,7 +481,7 @@ export class WorkspaceProviderRegistry {
         result = await runBoundedProviderOperation(
           pluginId,
           "request",
-          this.providerTimeoutMs,
+          hasRemoteGitMutationTimeout(request) ? PLUGIN_BACKEND_REMOTE_OPERATION_TIMEOUT_MS : this.providerTimeoutMs,
           (signal) => callback(Object.freeze({
             project,
             workspace: target.providerWorkspace,
@@ -977,6 +980,12 @@ function abortError(signal: AbortSignal): Error {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted === true) throw abortError(signal);
+}
+
+function hasRemoteGitMutationTimeout(request: WorkspaceProviderRequest): boolean {
+  if (request.pluginId !== "git" || request.operation !== "mutate" || !isRecord(request.input)) return false;
+  const action = request.input["action"];
+  return action === "fetch" || action === "pull" || action === "push";
 }
 
 function positiveInteger(value: number | undefined, fallback: number, key: string): number {

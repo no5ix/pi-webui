@@ -6,13 +6,29 @@ import type { SettingsSection } from "../settingsRoute";
 import type { FileSuggestion, PluginFleet, PluginListModel, PluginMachineFacts, PluginReadFailure, PluginSessionFacts, StagedFileRequest, WorkspaceUploadBatchProgress, WorkspaceUploadCancelHandle } from "../../../shared/pluginApiTypes";
 import type { LocalContributionId, PluginId, QualifiedContributionId } from "./ids";
 import type { PluginButton, PluginExpandableRow, PluginMessageField, PluginOutputView, PluginPanelComposer, PluginPanelSession, PluginToggle } from "../../../shared/pluginApiTypes";
-import type { StagedFile, CodeFenceRendererContribution, ComposerRuntimeContext, ComposerSlot, ComposerStatusLine, ContributionPresentation, GlobalPanelScope, HtmlTemplateTag, ListActionContribution, ListLabelContribution, ListSectionContribution, MessageRendererViewModel, NavProjectSnapshot, NavProjectsLoad, NavSectionDisplay, NavStatusSnapshot, NavProjectTrustActions, NavWorkspaceTrustActions, PluginBreakpoints, PluginDialog, PluginDialogHandle, PluginLifecycleEventKind, PluginLifecycleListener, PluginProjectCreateInput, PluginProjectFolders, PluginProjectTrustRead, PluginSettings, SessionSectionContribution, SvgTemplateTag, ThemeColorScheme, ThemePairContribution, ThemeTokens, ToolRendererContribution, WorkspaceBackend, WorkspaceLabelItem, WorkspacePanelIcon } from "../../../plugin-api";
+import type { StagedFile, CodeFenceRendererContribution, PluginReactNode, ComposerRuntimeContext, ComposerSlot, ComposerStatusLine, ContributionPresentation, GlobalPanelScope, HtmlTemplateTag, ListActionContribution, ListLabelContribution, ListSectionContribution, MessageRendererViewModel, NavProjectSnapshot, NavProjectsLoad, NavSectionDisplay, NavStatusSnapshot, NavProjectTrustActions, NavWorkspaceTrustActions, PluginBreakpoints, PluginDialog, PluginDialogHandle, PluginLifecycleEventKind, PluginLifecycleListener, PluginProjectCreateInput, PluginProjectFolders, PluginProjectTrustRead, PluginSettings, SessionSectionContribution, SvgTemplateTag, ThemeColorScheme, ThemePairContribution, ThemeTokens, ToolRendererContribution, WorkspaceBackend, WorkspaceLabelItem, WorkspacePanelIcon } from "../../../plugin-api";
 
 export type { ComposerSendResult, ListContext, ListItem, ListItemAction, ListItemContext, ListKind, ListSection } from "../../../shared/pluginApiTypes";
 
 export type { LocalContributionId, PluginId, QualifiedContributionId } from "./ids";
 
 /** Shapes identical to the public plugin API are that API's own declarations, not a mirror of them. */
+export type {
+  PluginReactComponent,
+  PluginReactDialog,
+  PluginReactHostUi,
+  PluginReactNode,
+  PluginReactButtonProps,
+  PluginReactCardProps,
+  PluginReactEmptyProps,
+  PluginReactExpandableRowProps,
+  PluginReactFieldProps,
+  PluginReactMessageFieldProps,
+  PluginReactNoticeProps,
+  PluginReactOutputProps,
+  PluginReactSectionProps,
+  PluginReactToggleProps,
+} from "../../../plugin-api";
 export type { CodeFenceRendererContribution, ComposerRuntimeContext, ComposerSlot, ComposerStatusLine, ContributionPresentation, FollowingCustomRow, GlobalPanelScope, HtmlTemplateTag, ListActionContribution, ListLabelContribution, ListSectionContribution, MessageRendererViewModel, NavProjectSnapshot, NavProjectsLoad, NavSectionDisplay, NavStatusFlags, NavStatusSnapshot, NavProjectTrustActions, NavWorkspaceTrustActions, PluginBreakpoints, PluginDialog, PluginDialogHandle, PluginLifecycleEvent, PluginLifecycleEventKind, PluginLifecycleListener, PluginProjectCreateInput, PluginProjectFolderReply, PluginProjectFolders, PluginProjectTrustChoice, PluginProjectTrustRead, PluginSettings, SessionSectionContribution, SessionSectionSubject, SvgTemplateTag, ThemeColorScheme, ThemePairContribution, ThemeTokens, ToolRendererContribution, ToolRendererViewModel, WorkspaceBackend, WorkspaceLabelItem, WorkspaceLabelLinkItem, WorkspaceLabelRenderItem, WorkspaceLabelTextItem, WorkspacePanelIcon } from "../../../plugin-api";
 
 export interface PiWebPluginRegistration {
@@ -132,7 +148,7 @@ export interface PluginActivationContext {
   readonly callOperation?: (operation: string, input?: unknown) => Promise<unknown>;
   /**
    * The PI WEB status of the machine this registration belongs to (its components and their
-   * versions, the release check, the update commands), read once for the page and every plugin. Absent on hosts older than this contract; read
+   * versions and the service state), read once for the page and every plugin. Absent on hosts older than this contract; read
    * `api/pi-web/status` through `fetchJson` there, which answers for the machine serving the page.
    */
   readonly readPiWebStatus?: () => Promise<unknown>;
@@ -164,6 +180,8 @@ export interface PluginActivationResult {
  * keeps navigation and persistence; the plugin only renders its body.
  */
 export interface SettingsSectionContribution {
+  /** The section's body in React. The React Settings page renders this and ignores `render`. */
+  renderReact?: (context: PluginRuntimeContext) => PluginReactNode;
   id: LocalContributionId;
   title: string;
   order?: number;
@@ -245,6 +263,8 @@ export interface NavSectionContribution {
   /** Focus the section's first selectable row; false means nothing to focus. */
   focus?: () => Promise<boolean>;
   render: (context: NavSectionContext) => TemplateResult;
+  /** The section's rows in React. The React navigation renders this and ignores `render`. */
+  renderReact?: (context: NavSectionContext) => PluginReactNode;
 }
 
 export interface QualifiedNavSectionContribution extends NavSectionContribution {
@@ -319,6 +339,8 @@ export interface MessageActionContribution {
   id: LocalContributionId;
   title: string;
   icon: TemplateResult;
+  /** The button's mark in React, which the React transcript draws in place of `icon`. */
+  iconReact?: PluginReactNode;
   roles: readonly MessageActionRole[];
   order?: number;
   available?: (row: MessageActionRow) => boolean;
@@ -370,6 +392,8 @@ export interface MessageRendererContribution {
   /** The custom payload tag this renderer claims. */
   tag: string;
   render: (view: MessageRendererViewModel) => TemplateResult;
+  /** The message in React. The React transcript renders this and ignores `render`. */
+  renderReact?: (view: MessageRendererViewModel) => PluginReactNode;
 }
 
 export interface QualifiedCodeFenceRendererContribution extends CodeFenceRendererContribution {
@@ -551,8 +575,6 @@ export interface GlobalPanelContext {
   state: AppState;
   host: WorkspaceHost;
   terminal: GlobalPanelTerminal;
-  checkForPiWebUpdates: () => Promise<void>;
-  openUpdateCommandSetting: () => void;
   /** The page's own plugin's fleet; the registry hands each page its plugin's, so its subscriptions go with that plugin. */
   fleet?: PluginFleet;
 }
@@ -580,8 +602,12 @@ export interface GlobalPanelContribution {
    */
   fronts?: string;
   badge?: (context: GlobalPanelContext) => string | number | TemplateResult | undefined;
+  badgeReact?: (context: GlobalPanelContext) => PluginReactNode;
   toolbar?: (context: GlobalPanelContext) => TemplateResult;
+  toolbarReact?: (context: GlobalPanelContext) => PluginReactNode;
   render: (context: GlobalPanelContext) => TemplateResult;
+  /** The page body in React. The React workbench renders this and ignores `render`. */
+  renderReact?: (context: GlobalPanelContext) => PluginReactNode;
 }
 
 export interface QualifiedGlobalPanelContribution extends Omit<GlobalPanelContribution, "toolbar"> {
@@ -623,7 +649,8 @@ export interface PluginRuntimeContext {
   state: AppState;
   prompt: PluginPromptEditor;
   piWebUnstable?: PiWebUnstableRuntimeContext;
-  openActionPalette: () => void;
+  /** Absent on a host with no command palette; see `plugin-api`. */
+  openActionPalette?: () => void;
   focusPrompt: () => void;
   addProject: () => void | Promise<void>;
   /**
@@ -668,7 +695,6 @@ export interface PluginRuntimeContext {
   /** Invalidate plugin workspace-panel data for the selected workspace. */
   refreshWorkspacePanels: (panelId?: QualifiedContributionId) => void | Promise<void>;
   refreshAppData: () => void | Promise<void>;
-  checkForPiWebUpdates?: () => void | Promise<void>;
   reloadPage: () => void;
   deleteWorkspace: (workspace?: Workspace) => void | Promise<void>;
   startSession: () => void | Promise<void>;
@@ -736,11 +762,13 @@ export interface WorkspacePanelContribution {
    */
   fronts?: string;
   badge?: (context: WorkspacePanelContext) => string | number | TemplateResult | undefined;
+  badgeReact?: (context: WorkspacePanelContext) => PluginReactNode;
   onInvalidate?: (context: WorkspacePanelContext) => void | Promise<void>;
   /** No longer drawn: the host draws no title row under the app bar. */
   summary?: (context: WorkspacePanelContext) => string | undefined;
   /** The panel's controls, drawn at the top of its page and always visible. */
   toolbar?: (context: WorkspacePanelContext) => TemplateResult;
+  toolbarReact?: (context: WorkspacePanelContext) => PluginReactNode;
   /** The page can take the whole app canvas on a wide window, hiding the
    *  app's other columns. The host draws no control for it: the page draws
    *  its own enter control (while `host.workspacePanelFullscreenAvailable()`)
@@ -749,6 +777,8 @@ export interface WorkspacePanelContribution {
    *  declare it is never shown on the whole canvas, whatever a link says. */
   fullscreen?: boolean;
   render: (context: WorkspacePanelContext) => TemplateResult;
+  /** The page body in React. The React workbench renders this and ignores `render`. */
+  renderReact?: (context: WorkspacePanelContext) => PluginReactNode;
 }
 
 export interface QualifiedWorkspacePanelContribution extends Omit<WorkspacePanelContribution, "toolbar"> {

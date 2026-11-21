@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import gitPlugin from "../../../../pi-web-plugins/git/browser/pi-web-plugin.js";
 import { machineScopedPluginId } from "../../../shared/machinePluginIds";
-import { loadExternalPlugins, resolvePluginModuleUrl } from "./external";
+import { loadExternalPlugins, readPluginManifest, resolvePluginModuleUrl } from "./external";
 import { PluginRegistry } from "./registry";
 
 beforeEach(() => {
@@ -13,6 +13,19 @@ afterEach(() => {
 });
 
 describe("external plugin manifests", () => {
+  it("reads manifest metadata without importing plugin modules", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+      plugins: [{ id: "git", module: "./git/pi-web-plugin.js", backendRevision: "git-server-r1", machineSpecific: true }],
+    }))));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(readPluginManifest("api/machines/remote-1/pi-web-plugins/manifest.json")).resolves.toMatchObject({
+      plugins: [{ id: "git", backendRevision: "git-server-r1", machineSpecific: true }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("https://pi.example.test/api/machines/remote-1/pi-web-plugins/manifest.json", expect.objectContaining({ cache: "no-store" }));
+  });
+
   it("fetches the default manifest through the application base", async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 404 })));
     vi.stubGlobal("fetch", fetchMock);

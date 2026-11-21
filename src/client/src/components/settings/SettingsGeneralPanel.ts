@@ -16,7 +16,6 @@ import {
   machineLoggingDraftFromConfig,
   machineLoggingPatchFromDraft,
   type MachineLoggingDraft,
-  updateCommandPatchFromDraft,
 } from "./settingsConfigDraft";
 import type { SettingsReveal } from "../../settingsRoute";
 import { describeError } from "../../notice";
@@ -57,13 +56,9 @@ export class SettingsGeneralPanel extends LitElement {
   @property({ attribute: false }) onSaveMachineConfig?: (config: PiWebConfigValues) => void | Promise<void>;
   /** Saves the Logs card; rejects with the reason, which the card shows itself. */
   @property({ attribute: false }) onSaveMachineLogging?: (config: PiWebConfigValues) => Promise<void>;
-  /** Saves the Updates card; rejects with the reason, which the card shows itself. */
-  @property({ attribute: false }) onSaveMachineUpdateCommand?: (config: PiWebConfigValues) => Promise<void>;
   /** A field another page linked to, scrolled into view and focused once the machine's config is here. */
   @property({ attribute: false }) reveal: SettingsReveal | undefined;
   @property({ attribute: false }) onRevealed?: () => void;
-  @state() private updateCommandDraft = "";
-  @state() private updateCommandError = "";
   @state() private gatewayDraft: GatewayServerConfigDraft = emptyGatewayServerConfigDraft();
   @state() private machineDraft: MachineAccessConfigDraft = emptyMachineAccessConfigDraft();
   @state() private loggingDraft: MachineLoggingDraft = machineLoggingDraftFromConfig({});
@@ -83,8 +78,6 @@ export class SettingsGeneralPanel extends LitElement {
       this.loggingDraft = machineLoggingDraftFromConfig(this.machineConfigResponse.effectiveConfig);
       this.machineLocalError = "";
       this.loggingError = "";
-      this.updateCommandDraft = this.machineConfigResponse.config.updateCommand ?? "";
-      this.updateCommandError = "";
     }
   }
 
@@ -112,7 +105,6 @@ export class SettingsGeneralPanel extends LitElement {
           ${this.renderGatewayServerSettings()}
           ${this.renderSelectedMachineAccessSettings()}
           ${this.renderSelectedMachineLogging()}
-          ${this.renderSelectedMachineUpdates()}
         </div>
       </settings-panel-frame>
     `;
@@ -318,45 +310,6 @@ export class SettingsGeneralPanel extends LitElement {
     `;
   }
 
-  /**
-   * The command the Updates page's Update button runs (owner, 2026-10-07): a nix configuration
-   * cannot be updated by PI WEB on its own, so the reader saves its update here. Saved in the
-   * machine's config, where it wins over the services' PI_WEB_UPDATE_COMMAND.
-   */
-  private renderSelectedMachineUpdates(): TemplateResult {
-    const config = this.machineConfigResponse;
-    return html`
-      <section class="settings-card" aria-label="Selected machine updates">
-        <div class="card-heading">
-          <h3>Updates</h3>
-          <p>What the Updates page's Update button, and the fleet Update in Settings → Machines, run on ${this.targetLabel}. From the Updates page it runs in a new terminal on the Terminal page, so you can follow it.</p>
-        </div>
-        ${this.updateCommandError === "" ? null : html`<div class="message error-message">${this.updateCommandError}</div>`}
-        ${config === undefined ? html`<div class="loading-card">${this.machineLoading ? "Loading selected-machine update settings…" : "Selected-machine update settings are unavailable. Reload before saving."}</div>` : html`
-          <form class="config-form" @submit=${(event: Event) => { void this.saveMachineUpdateCommand(event); }}>
-            <label class="field">
-              <span class="field-heading"><span>Update command</span></span>
-              <input id="update-command" class="command-field" .value=${this.updateCommandDraft} placeholder="~/nix-config/scripts/pi-web-update.sh" autocomplete="off" autocapitalize="off" spellcheck="false" @input=${(event: Event) => { this.updateCommandDraft = inputValue(event); this.updateCommandError = ""; }}>
-              <small>It should update PI WEB and restart it. Leave it empty to use the services' <code>PI_WEB_UPDATE_COMMAND</code>, or the update PI WEB works out from how it was installed (npm, a Pi package, a git checkout, a nix profile). An install from a nix configuration (home-manager, nix-darwin, NixOS) needs one here or in the services.</small>
-            </label>
-            <footer class="form-actions">
-              <button class="primary" ?disabled=${this.machineLoading || this.saving}>${this.saving ? "Saving…" : "Save update command"}</button>
-            </footer>
-          </form>
-        `}
-      </section>
-    `;
-  }
-
-  private async saveMachineUpdateCommand(event: Event): Promise<void> {
-    event.preventDefault();
-    this.updateCommandError = "";
-    try {
-      await this.onSaveMachineUpdateCommand?.(updateCommandPatchFromDraft(this.updateCommandDraft));
-    } catch (error) {
-      this.updateCommandError = describeError(error);
-    }
-  }
 
   private async saveMachineLogging(event: Event): Promise<void> {
     event.preventDefault();
