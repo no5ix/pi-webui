@@ -200,6 +200,15 @@ export class SettingsDialog extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("machine")) {
+      /**
+       * A package response belongs to the machine it was read from. The rows carry install/remove/update
+       * actions, so the moment the reader picks another machine they act on a machine no longer on
+       * screen. Nothing is shown for the new machine until it answers.
+       */
+      this.packagesResponse = undefined;
+      this.packageError = "";
+    }
     if (changed.has("instantActions") || changed.has("machine")) {
       const target = this.packageTarget();
       this.packageRemovals.update(target.id, instantHiddenIds("remove-package", target.id, this.instantActions), () => this.loadPackagesForTarget(target, "keep"), () => { this.requestUpdate(); });

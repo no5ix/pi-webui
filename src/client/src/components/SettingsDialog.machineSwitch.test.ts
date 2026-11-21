@@ -50,7 +50,7 @@ function stubMcp(pendingForDesk: Promise<PiMcpListResponse>): void {
 
 function stubPackages(pendingForDesk: Promise<PiPackagesResponse>): void {
   const rows: PiPackagesResponse = { packages: [{ source: "npm:@acme/tools", scope: "user", filtered: false, installedPath: "/tmp/pi-tools", disabled: false, enabled: true }] };
-  vi.spyOn(piPackagesApi, "packages").mockImplementation((machineId) => (machineId === deskMac.id ? pendingForDesk : Promise.resolve(rows)));
+  vi.spyOn(piPackagesApi, "packages").mockImplementation((request) => (request.machineId === deskMac.id ? pendingForDesk : Promise.resolve(rows)));
 }
 
 /**
