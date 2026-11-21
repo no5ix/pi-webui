@@ -20,9 +20,9 @@ its own read instead of holding the page at "Loading settings…" forever (`8a42
 got a browser handle (`f0892930`). Phase 5 is largely evidenced, desktop and 393x850, with three named
 open items in **Phase 5 status** - the hung MCP test-connection locking its panel (product decision on
 the timeout), the pi-managed package removal, and a harness read-back that queries the wrong scope.
-Phase 4 (plugin React integration) is **not started**. The verify gate at `cdef1d97` exited 1 on four
-lint errors in the new palette test, fixed in `c367cd65`; a clean gate run is in flight at this HEAD and
-its number belongs here when it lands.
+Phase 4 (plugin React integration) is **not started**. The verify gate passes at this HEAD:
+**`pnpm run verify` exit 0 - 696 files, 6140 passed, 5 skipped, 0 failed** (typecheck, ESLint, Knip and
+the suite in one gate).
 
 ### Checkpoint 2026-11-21 04:40
 
