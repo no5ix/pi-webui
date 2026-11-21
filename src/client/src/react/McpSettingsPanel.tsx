@@ -272,8 +272,8 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
         <label className="rw-setting-check"><input type="checkbox" checked={form.enabled} onChange={event => setField("enabled", event.target.checked)}/>Enabled</label>
       </div>
       <div className="rw-mcp-form-actions">
-        <button type="submit" disabled={busy}>Save</button>
-        <button type="button" onClick={() => { setForm(undefined); setProblem(undefined); }} disabled={busy}>Cancel</button>
+        <button data-test-id="mcp-form-submit" disabled={busy} type="submit">{form.editing ? "Save changes" : "Add server"}</button>
+        <button data-test-id="mcp-form-cancel" disabled={busy} onClick={() => { setForm(undefined); setProblem(undefined); }} type="button">Cancel</button>
       </div>
       <p className="rw-mcp-form-wide">
         {form.existingHeaderNames.length + form.existingEnvNames.length === 0 ? "" : `Secret names already in the file: ${secretNamesLine([...form.existingHeaderNames, ...form.existingEnvNames])}.`}
