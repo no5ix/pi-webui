@@ -919,3 +919,70 @@ stack (`bash /tmp/piweb-br/stack.sh`, fixtures `bash /tmp/piweb-br/fixtures6.sh`
 3. Then the plugin host in React, per the milestone plan — it is the largest unstarted feature and it
    blocks the Lit removal. The contribution families are the ones named in `plugin-api-react.md` and
    `src/client/src/plugins/types.ts`, wired in that order.
+
+## Packages project scope, the React contract, and the theme surface — 2026-11-21
+
+Three units landed on top of `055cb73c`.
+
+**`53806383` Install Pi packages in the project's own settings.** The package surface had spoken only
+to Pi's global settings. It now carries a scope on every call: a request naming a project goes through
+the same `SettingsProjectResolver` the MCP and Skills surfaces use, an untrusted project is not read,
+installed into, or changed, and the list response names the scope it read (`globalConfigPath`,
+`projectConfigPath`, `projectTrusted`, `projectScopeRead`) so the panel says when a project's packages
+were never read instead of showing global rows under a project heading. Install and remove pass Pi's
+`{ local: true }` for the project scope, `setPackagesEnabledFilter` is written per scope, and update
+availability is decided by the package's source kind (Pi's own npm / pinned / git / local grammar),
+not by the scope it came from. Verified: `pnpm run verify` exit 0 — 697 files, 6155 passed, 5 skipped.
+
+**`88cb46d3` Let plugins contribute React user interface.** Every family that draws something carries a
+React spelling beside its template (`renderReact`, `iconReact`, `badgeReact`, `toolbarReact`,
+`contentReact`), and `PluginActivationContext` hands plugins `reactUi`: the host's React components,
+the dialog surface, markdown, breakpoints, clipboard and error wording, each named by a prop interface
+in the contract. The React node types are declared structurally in `src/shared/pluginReactTypes.ts`
+with no React import, because `typecheck:plugin-api` checks the contract against a world where React
+does not exist. Members are additive and optional, so existing plugins keep the Lit path while a React
+host renders React.
+
+**`5f5aaf86` Paint the saved theme in the React workspace.** `useAppliedTheme` owns theme painting: the
+stored preference is applied when the workspace opens (the React app used to apply a theme only when
+Settings changed it, so a reload came back in the default palette), the Appearance page lists PI WEB's
+four looks and the machine's contributed themes in one selector, an automatic preference resolves
+against the theme pairs and keeps following the media query, and a stored id no plugin contributes is
+reported with the current look kept. Tests: 21 across `reactThemeChoices`, the React Settings dialog and
+the settings data hook.
+
+## What the bundled plugins actually contribute
+
+Measured from `pi-web-plugins/*/` (non-test sources), this is the list of React hosts the React app has
+to grow before first-party Lit can go away:
+
+| Family | Plugins |
+| --- | --- |
+| `workspacePanels` | files, git, goal, info, terminal |
+| `globalPanels` | goal, terminal |
+| `composer` | files |
+| `toolRenderers` | goal |
+| `listLabels` | goal |
+| `workspaceLabels` | info |
+| `codeFenceRenderers` | mermaid |
+| `navSections` | workspaces |
+| `actions` | files, git, info, machines, workspaces |
+| `themes` | none bundled (hosted in React by `5f5aaf86`) |
+
+The React workspace today draws hard-coded tabs (Git, Files, Terminal, Goals, Subagents, Background
+Runs, Edited Files) with inline React panels; the same panels are contributed by bundled plugins in
+Lit. Landing the React panel host therefore has to move the accepted React panel implementations into
+the plugins that own them, not discard them — the accepted UI stays, the contribution becomes the
+producer. That is a product-visible decision about who renders a tab, and it is the next milestone.
+
+## Exact next action
+
+1. React contribution hosts, in dependency order: the node seam (`PluginReactSurface` + boundary),
+   `reactUi` components, `PluginRuntimeContext` built from React state with no stale closures, then
+   settings sections → plugin dialogs (`contentReact`) → workspace/global panels → transcript renderers
+   → composer → nav sections, list and workspace labels → actions.
+2. Migrate one plugin per commit, smallest surface first: mermaid (code fence), info (workspace labels
+   + panel), goal (tool renderer + list label + panels), machines (actions), workspaces (nav + actions),
+   files, git, terminal (panels + composer).
+3. Browser pass on the 8505 stack for the touched surfaces, desktop 1440px and 393x850, recording the
+   commit, viewport, workflow, expectation and result.
