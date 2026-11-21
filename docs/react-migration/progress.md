@@ -1064,3 +1064,81 @@ Build `createReactPluginRuntimeContext` (member-by-member from React app state, 
 group), land the contract change that makes `openActionPalette` optional, then the settings-sections host
 in `ReactSettingsDialog`, then the panel host with the tab strip. One plugin per commit after that, and
 the browser pass before any Lit file is deleted.
+
+## Addendum — the React plugin runtime lands, and two reds it exposed
+
+Commits: `01bf2b92` (publish React), `d990a2ba` (React contribution surfaces),
+`a3e38f32` (JSX compile source), `833223d5` (MCP form label), `3c0bcfd8` (packages across a
+machine switch), `867b1364` (React subpaths and declarations).
+
+### One React, published by the app
+
+`src/client/src/react-main.tsx` publishes the app's React to `globalThis.__piWebReactRuntime`
+before the first render, under a protocol (`src/client/src/react/pluginReactRuntime.ts`) that
+refuses a second publisher and names the version it found. The published entry points are
+`@gang-of-beads/pi-web/plugin-react` (host UI contract), `/plugin-react-hooks` (every stateful
+hook, bound to that one runtime) and `/jsx-runtime` (the automatic JSX source). A plugin that
+imports a bare `react` is refused by `scripts/build-plugins.mjs`, which compiles plugin JSX with
+`jsxImportSource: "@gang-of-beads/pi-web"`, the same source `tsconfig.plugins.json` declares.
+A probe plugin — hooks, a code-fence renderer, a settings section, a workspace panel with a
+React toolbar and badge — compiled under the plugin config, bundled to 3.7 KB, imported no
+external React, carried no `react-dom` and no React internals, and read the global the host
+publishes. The probe was deleted and the shipped plugin output restored to the 8 entries.
+
+### The React host layer
+
+`PluginReactSurface` draws one contribution inside an error boundary, and takes the contribution
+as `unknown`: the surface is the validation boundary, so a caller must not have to assert what
+the host exists to check. A Lit `TemplateResult` handed to it is reported by kind, as are a
+constructor, an array and a primitive. `pluginReactNode.tsx` is the only audited cast from the
+structural `PluginReactNode` to React's `ReactNode`. `pluginReactKit.tsx` gives plugins the host's
+own React components (button, toggle, section, card, empty, notice, field, output, message field,
+expandable row, disclosure and close marks) — focus, labels, press feedback, screen-reader
+notices and breakpoints stay the app's, not each plugin's. `pluginReactHostUi.tsx` assembles them
+into `PluginActivationContext.reactUi`, with breakpoints, clipboard, markdown (the app's
+sanitization), the authenticated query, error words, and `confirm`/`showDialog`. Plugin dialogs are
+a discriminated queue: a React dialog is drawn by React, a Lit dialog by the compatibility
+surface, and both share stacking and dismissal accounting. `confirm` resolves through the app's
+`ConfirmDialog`; dismissal settles `false`, so a destructive plugin action runs only on the
+confirming key.
+
+### Two reds these commits exposed, and what they mean
+
+**The registry's mirror had no React members.** `src/client/src/plugins/types.ts` mirrors the
+public plugin API for the shapes the registry owns, and its copies of the contribution
+interfaces had no `renderReact`, so a contribution registered through the registry had no React
+spelling while a plugin compiling against the published declarations saw one. The React members
+are now on both sides (`867b1364`). The mirror itself — the file's own comment says identical
+shapes should be the public declarations, not a copy of them — should collapse into re-exports;
+recorded as follow-up, because a mirrored contract drifts silently and this is the evidence.
+
+**A package response was kept across a machine switch.** `3c0bcfd8` clears it: the rows carry
+install, remove and update actions, and after a switch they acted on a machine no longer on
+screen. The machine-switch test guarded that promise; it had gone red when the Pi-package API
+moved to a request object, along with two stubs pinned to the old positional calls.
+
+### Verification for this pass
+
+Targeted: React plugin host 17 tests; React plugin runtime 6; `src/buildContents.test.ts` 6;
+the Lit packages sections across a machine switch 11. `tsc --noEmit` clean. A full
+`pnpm run verify` runs against this HEAD; its counts are recorded on the next entry.
+
+### Browser evidence for this pass
+
+Not run. The theme surface, the Pi-package scope selector, the React contribution surfaces, the
+plugin dialogs and the plugin `confirm` queue have not been driven in a browser. The next commit
+in this plan is the settings-section host, and the browser pass is scheduled with the plugin
+migrations that make those surfaces visible; until it is run, these claims are unit-level only.
+
+### Open follow-ups, in order
+
+1. Build the React `PluginRuntimeContext` provider (the settings-section host, the panel hosts and
+   the list hosts all need it), then mount each family: settings sections, workspace/global panel
+   content, tool, message and code-fence renderers, composer, nav, list labels/actions/sections,
+   workspace labels, message actions, activity notes, actions.
+2. Migrate bundled plugins one per commit, smallest surface first: mermaid, info, goal, machines,
+   workspaces, files, git, terminal.
+3. Collapse the client registry's mirrored contribution interfaces into re-exports of the public
+   plugin API.
+4. Run the desktop 1440 / mobile 393x850 browser pass on the 8505 stack and record the matrix.
+5. Record the full-suite counts for this HEAD.
