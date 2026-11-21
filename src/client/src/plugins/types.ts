@@ -13,6 +13,22 @@ export type { ComposerSendResult, ListContext, ListItem, ListItemAction, ListIte
 export type { LocalContributionId, PluginId, QualifiedContributionId } from "./ids";
 
 /** Shapes identical to the public plugin API are that API's own declarations, not a mirror of them. */
+export type {
+  PluginReactComponent,
+  PluginReactDialog,
+  PluginReactHostUi,
+  PluginReactNode,
+  PluginReactButtonProps,
+  PluginReactCardProps,
+  PluginReactEmptyProps,
+  PluginReactExpandableRowProps,
+  PluginReactFieldProps,
+  PluginReactMessageFieldProps,
+  PluginReactNoticeProps,
+  PluginReactOutputProps,
+  PluginReactSectionProps,
+  PluginReactToggleProps,
+} from "../../../plugin-api";
 export type { CodeFenceRendererContribution, ComposerRuntimeContext, ComposerSlot, ComposerStatusLine, ContributionPresentation, FollowingCustomRow, GlobalPanelScope, HtmlTemplateTag, ListActionContribution, ListLabelContribution, ListSectionContribution, MessageRendererViewModel, NavProjectSnapshot, NavProjectsLoad, NavSectionDisplay, NavStatusFlags, NavStatusSnapshot, NavProjectTrustActions, NavWorkspaceTrustActions, PluginBreakpoints, PluginDialog, PluginDialogHandle, PluginLifecycleEvent, PluginLifecycleEventKind, PluginLifecycleListener, PluginProjectCreateInput, PluginProjectFolderReply, PluginProjectFolders, PluginProjectTrustChoice, PluginProjectTrustRead, PluginSettings, SessionSectionContribution, SessionSectionSubject, SvgTemplateTag, ThemeColorScheme, ThemePairContribution, ThemeTokens, ToolRendererContribution, ToolRendererViewModel, WorkspaceBackend, WorkspaceLabelItem, WorkspaceLabelLinkItem, WorkspaceLabelRenderItem, WorkspaceLabelTextItem, WorkspacePanelIcon } from "../../../plugin-api";
 
 export interface PiWebPluginRegistration {

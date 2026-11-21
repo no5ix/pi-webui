@@ -23,6 +23,7 @@ import { WorkspaceUnsavedDialog } from "./WorkspaceFileDialogs";
 import { ReactSettingsDialog } from "./ReactSettingsDialog";
 import { useAppliedTheme } from "./useAppliedTheme";
 import { ReactPluginDialogLayer } from "./ReactPluginDialogLayer";
+import { PluginReactConfirmLayer } from "./plugins/pluginReactConfirm";
 import { usePluginRegistry } from "./usePluginRegistry";
 import { SessionActionsMenu } from "./SessionActionsMenu";
 import { AddProjectDialog } from "./AddProjectDialog";
@@ -744,6 +745,11 @@ export function ReactWorkspaceApp() {
       onDiscard={discardThenScopeChange}
       onCancel={() => { if (!scopeChangeBusy) { setPendingScopeChange(undefined); setScopeChangeError(undefined); } }}
     />
+    {/* A plugin's dialog and its confirmation are the app's surfaces, stacked over what is open. The
+        Lit host registered them; drawing them is the host's job, and a plugin that opened one and got
+        an invisible dialog has no way to say so. */}
+    <ReactPluginDialogLayer entries={pluginRuntime.dialogs}/>
+    <PluginReactConfirmLayer queue={pluginRuntime.confirm}/>
     <ReactSettingsDialog data={data} open={settingsOpen} onClose={() => setSettingsOpen(false)} pluginFailures={pluginRuntime.failures} theme={appliedTheme}/>
     <AddProjectDialog open={addProjectTarget !== undefined} machineId={addProjectTarget?.machineId ?? selectedMachineId} machineName={addProjectTarget?.machineName ?? "Local machine"} {...(addProjectTarget?.initialPath === undefined ? {} : { initialPath: addProjectTarget.initialPath })} {...(addProjectTarget?.pickerNotice === undefined ? {} : { pickerNotice: addProjectTarget.pickerNotice })} onClose={() => setAddProjectTarget(undefined)} onSubmit={data.addProject}/>
     <ConfirmDialog open={gitDiscardTarget !== undefined && gitDiscardTarget.scopeKey === selectedScopeKey} title="Discard working-tree changes?" description={`Discard tracked working-tree changes to ${gitDiscardTarget?.path ?? "this file"}? This cannot be undone.`} confirmLabel="Discard changes" danger onCancel={() => setGitDiscardTarget(undefined)} onConfirm={() => { const target = gitDiscardTarget; setGitDiscardTarget(undefined); if (target !== undefined && target.scopeKey === selectedScopeKey) void performGitOperation({ action: "discard", paths: [target.path] }); }}/>

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { PluginSurface } from "./PluginSurface";
+import { PluginReactSurface } from "./plugins/PluginReactSurface";
 import type { ReactPluginDialogEntry } from "./usePluginRegistry";
 
 export function ReactPluginDialogLayer({ entries }: { readonly entries: readonly ReactPluginDialogEntry[] }) {
@@ -73,7 +74,9 @@ function PluginDialogSurface({ entry, isTop }: { readonly entry: ReactPluginDial
   }}>
     <section ref={surfaceRef} className={className} role="dialog" aria-modal={isTop ? "true" : undefined} aria-label={entry.dialog.label} tabIndex={-1}>
       <button className="rw-plugin-dialog-close" type="button" aria-label="Close plugin dialog" onClick={entry.close}>×</button>
-      <PluginSurface contribution={entry.dialog.content} pluginLabel={entry.dialog.label} />
+      {entry.kind === "react"
+        ? <PluginReactSurface contributionId={`dialog:${String(entry.id)}`} pluginLabel={entry.dialog.label} node={entry.dialog.content} />
+        : <PluginSurface contribution={entry.dialog.content} pluginLabel={entry.dialog.label} />}
     </section>
   </div>;
 }

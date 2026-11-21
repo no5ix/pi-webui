@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../api/http";
 import { piWebApi } from "../api";
 import { corePlugin } from "../plugins/core";
 import { loadExternalPlugins } from "../plugins/external";
 import { PluginRegistry, type PluginFleetSource } from "../plugins/registry";
 import { createPluginHostUi, type PluginDialogHost } from "../plugins/pluginHostUi";
-import type { PluginDialog, PluginDialogHandle, QualifiedContributionId } from "../plugins/types";
+import { createPluginReactHostUi } from "./plugins/pluginReactHostUi";
+import { usePluginReactConfirm } from "./plugins/pluginReactConfirm";
+import type { PluginDialog, PluginDialogHandle, PluginReactDialog, QualifiedContributionId } from "../plugins/types";
 
-export interface ReactPluginDialogEntry {
-  readonly id: number;
-  readonly dialog: PluginDialog;
-  readonly close: () => void;
-}
+/**
+ * A dialog a plugin opened.
+ *
+ * The kind is the host that draws it: a React contribution is rendered by the page's React, a Lit
+ * template by the compatibility surface. One queue holds both, so a plugin that opens a dialog from
+ * each gets the same stacking, focus and back-gesture accounting.
+ */
+export type ReactPluginDialogEntry =
+  | { readonly kind: "lit"; readonly id: number; readonly dialog: PluginDialog; readonly close: () => void }
+  | { readonly kind: "react"; readonly id: number; readonly dialog: PluginReactDialog; readonly close: () => void };
 
 export interface ReactPluginRegistryState {
   readonly machineId: string;
@@ -50,10 +57,26 @@ export function usePluginRegistry({ machineId, openPage, fleet }: UsePluginRegis
   const showDialog = useCallback<PluginDialogHost["showDialog"]>(dialog => {
     const id = ++dialogSequence.current;
     const close = () => { closeDialog(id); };
-    dialogsRef.current = [...dialogsRef.current, { id, dialog, close }];
+    dialogsRef.current = [...dialogsRef.current, { kind: "lit", id, dialog, close }];
     setDialogs(dialogsRef.current);
     return { close } satisfies PluginDialogHandle;
   }, [closeDialog]);
+
+  const showReactDialog = useCallback((dialog: PluginReactDialog) => {
+    const id = ++dialogSequence.current;
+    const close = () => { closeDialog(id); };
+    dialogsRef.current = [...dialogsRef.current, { kind: "react", id, dialog, close }];
+    setDialogs(dialogsRef.current);
+    return { close } satisfies PluginDialogHandle;
+  }, [closeDialog]);
+
+  const confirm = usePluginReactConfirm();
+  const reactUi = useMemo(
+    () => createPluginReactHostUi({ showDialog: showReactDialog, confirm: confirm.ask }),
+    [showReactDialog, confirm.ask],
+  );
+  const reactUiRef = useRef(reactUi);
+  reactUiRef.current = reactUi;
 
   const refresh = useCallback(() => {
     setSnapshot(current => current?.machineId === machineId ? { ...current, revision: current.revision + 1 } : current);
@@ -64,6 +87,7 @@ export function usePluginRegistry({ machineId, openPage, fleet }: UsePluginRegis
     const registered = new Set<string>();
     const registry = new PluginRegistry({
       ui: createPluginHostUi({ showDialog }),
+      reactUi: reactUiRef.current,
       readPiWebStatus: (targetMachineId) => piWebApi.piWebStatus(targetMachineId),
       openPage: pageId => openPageRef.current?.(pageId),
       ...(fleet === undefined ? {} : { fleet }),
@@ -108,6 +132,7 @@ export function usePluginRegistry({ machineId, openPage, fleet }: UsePluginRegis
     failures: current?.failures ?? [],
     revision: current?.revision ?? 0,
     dialogs,
+    confirm,
     refresh,
   };
 }

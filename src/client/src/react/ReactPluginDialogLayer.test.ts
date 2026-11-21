@@ -12,6 +12,7 @@ let invoker: HTMLButtonElement;
 
 function entry(presentation: "overlay" | "fullscreen" = "overlay", close = vi.fn(), id = 1): ReactPluginDialogEntry {
   return {
+    kind: "lit",
     id,
     dialog: { label: "Plugin details", presentation, content: html`<button>Plugin action</button>` },
     close,
