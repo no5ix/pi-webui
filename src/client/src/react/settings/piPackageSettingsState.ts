@@ -177,9 +177,23 @@ export function piPackageUpdateMessage(response: PiPackageMutationResponse): str
   return `${piPackageMutationLead(response, "Update completed for")}.${piPackageReloadNote(response)}`;
 }
 
-/** The message a removal leaves. */
+/**
+ * The message a removal leaves.
+ *
+ * pi answers a removal with the fact of whether its settings carried the entry, and the page states
+ * that fact: a removal that found nothing at the scope it was given is reported as nothing removed,
+ * not as a removal. The list below the message is the machine's current answer either way, so a page
+ * that claimed a removal the file does not show would be describing a change the reader cannot see.
+ */
 export function piPackageRemoveMessage(response: PiPackageMutationResponse): string {
+  if (response.removed === false) return piPackageRemoveRefusedMessage(response);
   return `${piPackageMutationLead(response, "Removed")}.${piPackageReloadNote(response)}`;
+}
+
+function piPackageRemoveRefusedMessage(response: PiPackageMutationResponse): string {
+  const source = response.source ?? "package";
+  const scope = response.scope === undefined ? "the settings pi read" : `${piPackageScopeLabel(response.scope)} settings`;
+  return `Nothing was removed: ${source} is not configured in ${scope}. The list below is what the machine reports now.`;
 }
 
 /** The message an enable or disable leaves. */
