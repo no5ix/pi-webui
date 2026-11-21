@@ -1142,3 +1142,61 @@ migrations that make those surfaces visible; until it is run, these claims are u
    plugin API.
 4. Run the desktop 1440 / mobile 393x850 browser pass on the 8505 stack and record the matrix.
 5. Record the full-suite counts for this HEAD.
+
+## Addendum — the React transcript draws a plugin's fence, and two gaps this exposes
+
+Commits: `65472aab` (fence host) and the docs around it.
+
+### What landed
+
+The React conversation split a message's text at its fences (`formatting/codeFenceSegments.ts`),
+kept every unclaimed word inside the same sanitizer, and handed a claimed language to the plugin
+that owns it (`react/ReactMarkdown.tsx` inside `ConversationMessage`, with the registry lookup from
+`react/plugins/usePluginContributions.ts`). A claimed fence whose plugin draws asynchronously keeps
+the plain code block standing while it draws and after it refuses, so a diagram that fails is still
+the text the reader typed. `PluginReactElement.type` is open (`unknown`) because React spells an
+element's type as `JSXElementConstructor`, which has no spelling in a contract compiled where React
+does not exist; `isPluginReactNode` is the check that keeps that openness honest.
+
+The host is ready and no shipped plugin draws through it: **mermaid still contributes Lit only**.
+The next commit in this plan is mermaid's own `renderReact`, which is the smallest end-to-end
+React plugin migration the contract makes possible.
+
+### Gap: the lint step has never seen a React component
+
+`package.json`'s `lint` is `eslint "src/**/*.ts" …` and `eslint.config.js` lists
+`files: ["src/**/*.ts", …]`. There is no `**/*.tsx` entry, so ESLint ignores every React component
+in the repository and says so only when a `.tsx` path is passed directly
+(`File ignored because no matching configuration was supplied`). Every React commit in this
+migration — the whole app surface — has been "lint clean" against a rule set that did not read it,
+including the react-hooks rules that would catch a stale closure in the plugin hosts. Fixing this is
+the highest-value verification change available: add `**/*.tsx` to the config and the lint script,
+expect a first run with findings, and clear them. It is not a migration detail; it is the reason the
+suite can be green while the components are unchecked.
+
+### Gap: every Lit plugin carries its own Lit
+
+Browser plugin entries are bundled with `bundle: true` and **no externals**
+(`scripts/build-plugins.mjs`), and a plugin's `lit` import is a runtime import, so each plugin
+bundle contains its own Lit: `dist/pi-web-plugins/goal/pi-web-plugin.js` is 37 KB and
+`files` 1.24 MB, with no external imports in either. The React contract is deliberately the
+opposite — one published React, externalized specifiers, and a build that refuses a plugin
+importing `react` — which means the React path needs a resolution the Lit path never needed:
+the browser must resolve `@gang-of-beads/pi-web/jsx-runtime` (and the two other published
+subpaths) for a plugin module loaded by URL. The planned answer is an import map in
+`src/client/index.html` built from `%BASE_URL%`, plus the externals in the plugin build; the host
+modules are already emitted to `dist/`. Until that lands, a plugin's JSX cannot reach the host's
+React at runtime, and the React contribution families stay unusable by external plugins — the
+compile-side contract in `tsconfig.plugins.json` is not enough.
+
+### Verification for this pass
+
+`codeFenceSegments.test.ts` — 11 tests. React + formatting suites — 36 files, 295 tests.
+`tsc --noEmit` clean. A full `pnpm run verify` runs against this HEAD; its counts land in the
+next entry.
+
+### Browser evidence for this pass
+
+Not run. The fence host has no unit-to-browser bridge yet: no shipped plugin claims a fence in
+React, so the visible check belongs with the mermaid migration and its entry in the matrix
+(desktop 1440 and mobile 393x850, on the 8505 stack).
