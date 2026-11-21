@@ -38,7 +38,13 @@ The declarations ship in the PI WEB npm package. Depend on it as a development d
 | `@gang-of-beads/pi-web/plugin-api` | browser entries | `CORE_STATUS_FLAGS` (the status-flag ids PI WEB publishes: `core:working`, `core:terminal`, `core:unread`), `workspaceFileRefusalOf(error)`, `SERVICE_RESTART_NOTES` (for each `serviceRestart` state of a PI WEB status component, the sentence PI WEB shows beside that service on a machine's row, or `undefined` where it shows none; it words a withheld restart and does not say whether one is offered: `no-service-installed` has no sentence and no restart either) |
 | `@gang-of-beads/pi-web/server-plugin-api` | server entries | `parsePiWebRuntimeResponse`, `SESSION_TRANSCRIPTS_NOT_READY`, `DEFAULT_REMOTE_REQUEST_TIMEOUT_MS`, `DEFAULT_REMOTE_HEALTH_TIMEOUT_MS`, `RemoteMachineRequestError` |
 
-Import types with `import type`. If you import one of the runtime values, your bundler inlines it; the page has no import map. Deep imports (`@gang-of-beads/pi-web/dist/...`, `.../src/...`) and any other subpath are not part of the contract.
+Import types with `import type`. If you import one of the runtime values, your bundler inlines it. The React runtime is the exception: the page publishes one React and names the three React subpaths to the browser with an import map, so a plugin's JSX and hooks resolve to the host's React and a plugin bundle carries none (the plugin build refuses a bundle whose inputs include `react` or `react-dom`). Deep imports (`@gang-of-beads/pi-web/dist/...`, `.../src/...`) and any other subpath are not part of the contract.
+
+| Entrypoint | For | Runtime values it exports |
+|---|---|---|
+| `@gang-of-beads/pi-web/plugin-react` | browser entries that contribute React | the host UI components a React contribution draws with (`reactUi` on activation), and the runtime handle |
+| `@gang-of-beads/pi-web/plugin-react-hooks` | browser entries that contribute React | `useState`, `useReducer`, `useEffect`, `useLayoutEffect`, `useMemo`, `useCallback`, `useRef`, `useImperativeHandle`, `useDebugValue`, `useTransition`, `useDeferredValue`, `useId`, `useSyncExternalStore`, `useContext`, `createContext`, `createElement`, `cloneElement`, `isValidElement`, `memo`, `forwardRef`, `lazy`, `startTransition`, `Fragment`, `Suspense` |
+| `@gang-of-beads/pi-web/jsx-runtime` | the JSX a plugin's source compiles to | `jsx`, `jsxs`, `Fragment`; set `jsxImportSource: "@gang-of-beads/pi-web"` (the plugin tsconfig and the plugin build both do) |
 
 ## Versions and compatibility
 

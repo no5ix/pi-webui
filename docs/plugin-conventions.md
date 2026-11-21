@@ -15,7 +15,7 @@ The contract itself is in the [plugin API reference](plugin-api.md); the walkthr
 
 PI WEB checks its bundled plugins for these in `pi-web-plugins/pluginPublicApi.test.ts`. A published plugin:
 
-- MUST import PI WEB only from `@gang-of-beads/pi-web/plugin-api` and `@gang-of-beads/pi-web/server-plugin-api`, with `import type` for types. It MUST NOT import `@gang-of-beads/pi-web/dist/…`, `…/src/…` or any other subpath.
+- MUST import PI WEB only from `@gang-of-beads/pi-web/plugin-api` and `@gang-of-beads/pi-web/server-plugin-api`, with `import type` for types, plus — for a browser entry that contributes React — the published React runtime (`@gang-of-beads/pi-web/jsx-runtime`, `…/plugin-react-hooks`, `…/plugin-react`), which the page resolves by import map. It MUST NOT import `@gang-of-beads/pi-web/dist/…`, `…/src/…` or any other subpath.
 - MUST NOT call PI WEB with `fetch`, `XMLHttpRequest` or `WebSocket`, and MUST NOT contain PI WEB application paths (`api/…`, `pi-web-plugins/…`). Use the context helpers.
 - MUST NOT import `fastify` or reach into PI WEB's server.
 - SHOULD run programs through `context.execFile` rather than `node:child_process`; the host bounds and attributes those runs. A process a plugin starts itself MUST be stopped in `stop`.

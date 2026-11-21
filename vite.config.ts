@@ -114,8 +114,35 @@ function devDocsPlugin(): Plugin {
 const parsedPackage: unknown = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const packageVersion = typeof parsedPackage === "object" && parsedPackage !== null && "version" in parsedPackage && typeof parsedPackage.version === "string" ? parsedPackage.version : "";
 
+/**
+ * The React runtime a plugin compiles against, published by the page.
+ *
+ * A plugin's JSX is compiled with `@gang-of-beads/pi-web` as its JSX import source, and its hooks come
+ * from `@gang-of-beads/pi-web/plugin-react-hooks`, so a plugin module loaded by URL needs those
+ * specifiers to resolve — the page has no bundler between the module and the browser. They are
+ * emitted as stable, unhashed entries in the client build and named to the browser by an import map,
+ * with URLs relative to the document the way `base: "./"` makes every other client asset resolve. One
+ * React per page is the point: a plugin that brought its own would mount a second reconciler over the
+ * same DOM.
+ */
+const pluginReactModules = ["plugin-react", "plugin-react-hooks", "jsx-runtime"] as const;
+
+function pluginReactRuntimePlugin(): Plugin {
+  return {
+    name: "pi-web-plugin-react-runtime",
+    transformIndexHtml(html) {
+      const imports: Record<string, string> = {};
+      for (const name of pluginReactModules) imports[`@gang-of-beads/pi-web/${name}`] = `./${name}.js`;
+      return {
+        html,
+        tags: [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify({ imports }), injectTo: "head-prepend" }],
+      };
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [devDocsPlugin()],
+  plugins: [devDocsPlugin(), pluginReactRuntimePlugin()],
   appType: process.env["PI_WEB_REACT_UI"] === "1" ? "spa" : "mpa",
   define: {
     __PI_WEB_CLIENT_VERSION__: JSON.stringify(packageVersion),
@@ -126,7 +153,15 @@ export default defineConfig({
     outDir: "../../dist/client",
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        main: resolve("src/client/index.html"),
+        ...Object.fromEntries(pluginReactModules.map((name) => [name, resolve(`src/${name}.ts`)])),
+      },
       output: {
+        entryFileNames(chunk) {
+          const name = typeof chunk.name === "string" ? chunk.name : "";
+          return pluginReactModules.some((candidate) => name.startsWith(candidate)) ? "[name].js" : "assets/[name]-[hash].js";
+        },
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           if (id.includes("@codemirror/legacy-modes")) return "vendor-editor-legacy";

@@ -5,6 +5,12 @@ import { dirname, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import * as esbuild from "esbuild";
 
+const HOST_REACT_SPECIFIERS = [
+  "@gang-of-beads/pi-web/plugin-react",
+  "@gang-of-beads/pi-web/plugin-react-hooks",
+  "@gang-of-beads/pi-web/jsx-runtime",
+];
+
 const rootDir = resolve("pi-web-plugins");
 const outFlag = process.argv.indexOf("--out");
 const outValue = outFlag < 0 ? "dist/pi-web-plugins" : process.argv[outFlag + 1];
@@ -47,7 +53,7 @@ async function bundleBrowserEntries() {
   const manifests = await browserEntryManifests();
   let bundled = 0;
   for (const entry of manifests) {
-    await esbuild.build({
+    const result = await esbuild.build({
       entryPoints: [entry],
       outfile: entry,
       bundle: true,
@@ -57,13 +63,31 @@ async function bundleBrowserEntries() {
       // its own and the page keeps one reconciler. See src/jsx-runtime.ts.
       jsx: "automatic",
       jsxImportSource: "@gang-of-beads/pi-web",
+      external: HOST_REACT_SPECIFIERS,
+      metafile: true,
       allowOverwrite: true,
       target: "es2022",
       logLevel: "silent",
     });
+    refuseBundledReact(entry, result.metafile);
     bundled += 1;
   }
   return bundled;
+}
+
+/**
+ * One React per page, enforced at build time.
+ *
+ * The host publishes its React to the page and a plugin's JSX compiles against the published modules,
+ * which the import map in the client build resolves. A plugin that reaches a React of its own — a bare
+ * `react`, `react-dom`, a library that carries React — mounts a second reconciler over DOM the host
+ * owns, and the damage shows up as vanished state in another plugin's panel, far from the import that
+ * caused it. The check is on the bundle's own inputs, so it names the file the plugin pulled in.
+ */
+function refuseBundledReact(entry, metafile) {
+  const offenders = Object.keys(metafile?.inputs ?? {}).filter((input) => /(^|\/)node_modules\/(react|react-dom|react\d*)\//u.test(input));
+  if (offenders.length === 0) return;
+  throw new Error(`${entry} bundled a React of its own (${offenders.slice(0, 3).join(", ")}). The page publishes one React: import JSX and hooks from @gang-of-beads/pi-web/jsx-runtime and @gang-of-beads/pi-web/plugin-react-hooks.`);
 }
 
 /**
