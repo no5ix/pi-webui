@@ -1249,3 +1249,15 @@ gated on that product decision. The units that are not gated, and are the ordere
 the import map plus plugin-build externals (so a plugin's JSX reaches the host's React at
 runtime), mermaid's `renderReact` through the fence host that already landed, and the
 `.tsx` lint gap.
+
+## Full gate at `d5c94be1`
+
+`pnpm run verify` — exit 0. Typecheck (`tsc --noEmit` + `typecheck:plugin-api`), lint, Knip and
+the Vitest suite: **702 test files, 6205 passed, 5 skipped** (was 697 / 6155 at the package-scope
+milestone). This is the first full green that includes the React plugin runtime, the React host
+layer, the theme surface, the Pi-package project scope, and the React fence host.
+
+Read it with the two gaps above: lint reads `.ts` only, so the React components in that green are
+typechecked and tested, not linted. And the plugin runtime's published subpaths are not resolvable
+by a plugin module in the browser yet, so the React contribution contract is host-side complete
+and not yet usable end to end by an external plugin.
