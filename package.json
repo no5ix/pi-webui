@@ -38,6 +38,15 @@
       ],
       "server-plugin-api": [
         "dist/server-plugin-api.d.ts"
+      ],
+      "plugin-react": [
+        "dist/plugin-react.d.ts"
+      ],
+      "plugin-react-hooks": [
+        "dist/plugin-react-hooks.d.ts"
+      ],
+      "jsx-runtime": [
+        "dist/jsx-runtime.d.ts"
       ]
     }
   },

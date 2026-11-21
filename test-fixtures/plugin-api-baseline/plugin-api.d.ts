@@ -1,6 +1,8 @@
 import type { CSSResultGroup, TemplateResult } from "lit";
+import type { PluginReactComponent, PluginReactNode } from "./shared/pluginReactTypes.js";
 import type { FileSuggestion, ProjectFolderListing, ProjectFolderListingRequest, ForegroundToken, InteractionToken, MessageRoleToken, PluginListModel, PluginReadFailure, LegacyThemeToken, SemanticSurfaceToken, ShapeTypographyToken, TerminalCommandRun, TerminalInfo, DeleteWorkspaceFileResponse, FileContentResponse, FileTreeResponse, JsonValue, MachineKind, MoveWorkspaceFileOptions, MoveWorkspaceFileResponse, PiWebStatusResponse, TerminalCommandRunHandle, WorkspaceProviderMetadata, WorkspaceRemovalPresentation, WorkspaceUploadBatchProgress, WorkspaceUploadCancelHandle, StagedFileRequest, StagedFileState, WriteWorkspaceFileOptions, WriteWorkspaceFileResponse, MachineConnection, PluginFleet, PluginMachineFacts, PluginSessionFacts, ListContext, ListItemAction, ListItemContext, ListKind, ListSection } from "./shared/pluginApiTypes.js";
 export type { ThemeToken } from "./shared/pluginApiTypes.js";
+export type { PluginReactComponent, PluginReactComponentType, PluginReactElement, PluginReactNode, PluginReactNodeList, } from "./shared/pluginReactTypes.js";
 import type { ComposerSendResult, PluginButton, PluginExpandableRow, PluginMessageField, PluginOutputView, PluginPanelComposer, PluginPanelSession, PluginToggle } from "./shared/pluginApiTypes.js";
 export type { ComposerSendResult, FileSuggestion, ProjectFolderContents, ProjectFolderCrumb, ProjectFolderEntry, ProjectFolderListing, ProjectFolderListingRequest, ProjectFolderUnreadableCause, LegacyThemeToken, SemanticSurfaceToken, InteractionToken, TerminalInfo, FileContentMediaType, FileContentResponse, FileTreeEntry, FileTreeResponse, FleetCoverage, FleetMachine, FleetMachineActionResult, FleetMachinesSnapshot, FleetOpenResult, FleetReachability, FleetSession, FleetSessionsSnapshot, JsonObject, JsonPrimitive, JsonValue, ListContext, ListItem, ListItemAction, ListItemContext, ListKind, ListSection, MachineAddedFact, MachineConnection, MachineKind, MachineReachabilityChangedFact, MachineRemovedFact, PiWebComponentStatus, PiWebDockerMode, PluginButton, PluginCommandRefusal, PluginExpandableRow, PluginFleet, PluginListAction, PluginListGroup, PluginListModel, PluginListRead, PluginListRow, PluginListRowToggle, PluginListStatus, PluginListTone, PluginListWords, PluginMachineFacts, PluginMessageField, PluginOutputView, PluginPanelComposer, PluginPanelDraftWrite, PluginPanelSendResult, PluginPanelSession, PluginReadFailure, PluginRowExpansion, PluginSessionCommandNotice, PluginSessionCommandOutcome, PluginSessionCommandRequest, PluginSessionFacts, PluginToggle, PiWebInstallationInfo, PiWebInstallationKind, PiWebPackageManager, PiWebServiceComponent, PiWebServiceRestartState, PiWebStatusMessage, PiWebStatusResponse, PiWebStatusSeverity, PiWebVersionResponse, SessionCreatedFact, SessionFactScope, SessionRenamedFact, SessionReplacedFact, SessionRunAskedBy, SessionRunEndedFact, SessionRunOutcome, SessionRunStartedFact, TerminalCommandRun, TerminalCommandRunHandle, TerminalCommandRunStatus, WorkspaceProviderCapabilities, WorkspaceProviderMetadata, WorkspaceRemovalPresentation, WorkspaceFileUploadProgress, WorkspaceUploadBatchFileProgress, WorkspaceUploadBatchProgress, WorkspaceUploadCancelHandle, StagedFileInfo, StagedFileRequest, StagedFileStage, StagedFileStageKind, StagedFileState, WriteWorkspaceFileOptions, WriteWorkspaceFileResponse, DeleteWorkspaceFileResponse, MoveWorkspaceFileOptions, MoveWorkspaceFileResponse, } from "./shared/pluginApiTypes.js";
 export { CORE_STATUS_FLAGS } from "./shared/machineStatus.js";
@@ -26,6 +28,13 @@ export interface PluginActivationContext {
     readonly runtimePluginId: PluginId;
     readonly html: HtmlTemplateTag;
     readonly svg: SvgTemplateTag;
+    /**
+     * The host's React components and dialog surface. A React plugin builds its UI from these and from
+     * the `react` the host provides; it never imports the application. Absent on a host older than the
+     * React contract, which draws only the Lit contributions — so a React plugin names what it needs
+     * and fails loudly on a host that has no React surface.
+     */
+    readonly reactUi?: PluginReactHostUi;
     /** Subscribe to a host fact; the returned function unsubscribes. Absent on hosts older than this contract. */
     readonly on?: <K extends PluginLifecycleEventKind>(kind: K, listener: PluginLifecycleListener<K>) => () => void;
     /** Session facts (`sessions.onDidCreate`, ...); see PluginSessionFacts. Absent on older hosts. */
@@ -213,6 +222,125 @@ export interface PluginHostUi {
         }): void;
     };
 }
+/**
+ * The host's React components, handed to a plugin at activation.
+ *
+ * Each one is a decision this project already paid for: focus, labels, the press feedback that keeps
+ * a tapped surface from flashing, the phone sizes, the notice that reads to a screen reader. A plugin
+ * that redraws them drifts from the built-in surfaces, so the host owns them and a plugin composes
+ * them. They are plain React components: a plugin writes JSX against them, and the host renders them
+ * with the rest of the application.
+ */
+export interface PluginReactHostUi {
+    readonly Button: PluginReactComponent<PluginReactButtonProps>;
+    readonly Toggle: PluginReactComponent<PluginReactToggleProps>;
+    readonly Section: PluginReactComponent<PluginReactSectionProps>;
+    readonly Card: PluginReactComponent<PluginReactCardProps>;
+    readonly Empty: PluginReactComponent<PluginReactEmptyProps>;
+    readonly Notice: PluginReactComponent<PluginReactNoticeProps>;
+    readonly Field: PluginReactComponent<PluginReactFieldProps>;
+    readonly Output: PluginReactComponent<PluginReactOutputProps>;
+    readonly MessageField: PluginReactComponent<PluginReactMessageFieldProps>;
+    readonly ExpandableRow: PluginReactComponent<PluginReactExpandableRowProps>;
+    readonly DisclosureIcon: PluginReactComponent<{
+        readonly collapsed: boolean;
+    }>;
+    readonly CloseIcon: PluginReactComponent<Record<string, never>>;
+    /** Present a React dialog over the app's modal layer; the host owns focus, Escape and the backdrop. */
+    readonly showDialog: (dialog: PluginReactDialog) => PluginDialogHandle;
+    /** Ask the reader to confirm on the app's own dialog. Resolves true only for the confirming key. */
+    readonly confirm: (request: PluginConfirmRequest) => Promise<boolean>;
+    /** Sanitized markdown HTML, the same rendering the built-in surfaces trust. */
+    readonly markdownHtml: (markdown: string) => string;
+    readonly breakpoints: PluginBreakpoints;
+    readonly copyText: (text: string) => Promise<boolean>;
+    readonly describeError: (error: unknown) => string;
+    /** True on a coarse-pointer device, so a plugin's control can meet the same floor the built-ins do. */
+    readonly coarsePointer: boolean;
+    readonly query: {
+        read(namespace: string, key: string): string | undefined;
+        write(namespace: string, key: string, value: string | undefined, options?: {
+            replace?: boolean;
+        }): void;
+    };
+}
+/** A dialog a plugin asks the React host to present. */
+export interface PluginReactDialog {
+    readonly label: string;
+    readonly content: PluginReactNode;
+    readonly presentation?: "overlay" | "fullscreen" | "alert";
+    readonly onClose?: () => void;
+}
+export interface PluginReactButtonProps {
+    readonly label: string;
+    readonly onClick: () => void;
+    readonly disabled?: boolean;
+    readonly pending?: boolean;
+    readonly tone?: "primary" | "secondary" | "danger";
+    readonly title?: string;
+    readonly type?: "button" | "submit";
+    readonly testId?: string;
+}
+export interface PluginReactToggleProps {
+    readonly label: string;
+    readonly checked: boolean;
+    readonly onChange: (checked: boolean) => void;
+    readonly disabled?: boolean;
+    readonly pending?: boolean;
+    readonly title?: string;
+}
+export interface PluginReactSectionProps {
+    readonly title: string;
+    readonly note?: string;
+    readonly count?: number;
+    readonly actions?: PluginReactNode;
+    readonly children?: PluginReactNode;
+}
+export interface PluginReactCardProps {
+    readonly title: string;
+    readonly meta?: readonly string[];
+    readonly diagnostics?: readonly string[];
+    readonly status?: string;
+    readonly statusTone?: "on" | "off" | "warning";
+    readonly off?: boolean;
+    readonly actions?: PluginReactNode;
+    readonly children?: PluginReactNode;
+    readonly testId?: string;
+}
+export interface PluginReactEmptyProps {
+    readonly children?: PluginReactNode;
+}
+export interface PluginReactNoticeProps {
+    readonly tone?: "info" | "success" | "warning" | "danger" | "security";
+    readonly children?: PluginReactNode;
+}
+export interface PluginReactFieldProps {
+    readonly label: string;
+    readonly note?: string;
+    readonly wide?: boolean;
+    readonly children?: PluginReactNode;
+}
+export interface PluginReactOutputProps {
+    /** The text to show, monospace, in its own scrolling view. */
+    readonly text: string;
+    readonly title?: string;
+    readonly empty?: string;
+}
+export interface PluginReactMessageFieldProps {
+    readonly value: string;
+    readonly onChange: (value: string) => void;
+    readonly onSend: (value: string) => void | Promise<void>;
+    readonly placeholder?: string;
+    readonly disabled?: boolean;
+    readonly title?: string;
+}
+export interface PluginReactExpandableRowProps {
+    readonly title: string;
+    readonly expanded: boolean;
+    readonly onToggle: () => void;
+    readonly meta?: readonly string[];
+    readonly children?: PluginReactNode;
+}
 /** What a plugin asks the reader to confirm. */
 export interface PluginConfirmRequest {
     /** What is about to happen, naming the thing. */
@@ -229,6 +357,11 @@ export interface PluginDialog {
     readonly label: string;
     /** The dialog body, rendered as the shared surface's light children. */
     readonly content: TemplateResult;
+    /**
+     * The dialog body as a React node. The React host renders this and ignores `content`; a React host
+     * that is given neither shows the failure, and does not reach into Lit for it.
+     */
+    readonly contentReact?: PluginReactNode;
     /** How the host presents the dialog. `overlay` (default) is the shared
      *  centered surface; `fullscreen` presents the content edge-to-edge like a
      *  page, so a surface authored against a large canvas survives direct load
@@ -269,6 +402,8 @@ export interface SettingsSectionContribution {
     title: string;
     order?: number;
     render: (context: PluginRuntimeContext) => TemplateResult;
+    /** The section's body in React. The React Settings page renders this and ignores `render`. */
+    renderReact?: (context: PluginRuntimeContext) => PluginReactNode;
 }
 /** One project as the navigation sections render it. */
 export interface NavProjectSnapshot {
@@ -386,6 +521,8 @@ export interface NavSectionContribution {
     /** Focus the section's first selectable row; false means nothing to focus. */
     focus?: () => Promise<boolean>;
     render: (context: NavSectionContext) => TemplateResult;
+    /** The section's rows in React. The React navigation renders this and ignores `render`. */
+    renderReact?: (context: NavSectionContext) => PluginReactNode;
 }
 export interface PluginContributions {
     actions?: PluginAction[];
@@ -426,6 +563,8 @@ export interface ListLabelContribution {
     list: ListKind;
     order?: number;
     render: (context: ListItemContext) => TemplateResult | undefined;
+    /** The label line in React. The React lists render this and ignore `render`. */
+    renderReact?: (context: ListItemContext) => PluginReactNode | undefined;
 }
 /**
  * Entries in every item's menu of a Navigate list, after the host's own entries and before its
@@ -492,6 +631,8 @@ export interface MessageActionContribution {
     /** The accessible name and the tooltip. */
     title: string;
     icon: TemplateResult;
+    /** The button's mark in React, which the React transcript draws in place of `icon`. */
+    iconReact?: PluginReactNode;
     roles: readonly ("assistant" | "user")[];
     order?: number;
     available?: (row: MessageActionRow) => boolean;
@@ -606,6 +747,8 @@ export interface MessageRendererContribution {
     id: LocalContributionId;
     tag: string;
     render: (view: MessageRendererViewModel) => TemplateResult;
+    /** The message in React. The React transcript renders this and ignores `render`. */
+    renderReact?: (view: MessageRendererViewModel) => PluginReactNode;
 }
 /**
  * What a tool renderer is handed for one tool call: the tool's name, where the call stands, its
@@ -632,6 +775,8 @@ export interface ToolRendererContribution {
     /** The tool name this renderer claims, as the agent calls it (a pi extension's `registerTool` name). */
     toolName: string;
     render: (view: ToolRendererViewModel) => TemplateResult | undefined;
+    /** The tool call in React. The React transcript renders this and ignores `render`. */
+    renderReact?: (view: ToolRendererViewModel) => PluginReactNode | undefined;
 }
 /**
  * Claims one fenced code language in the transcript. The host parses and
@@ -648,6 +793,12 @@ export interface CodeFenceRendererContribution {
     /** The info-string language this renderer claims, lowercase (a fence's language, such as "dot"). */
     language: string;
     render: (source: string) => Node | Promise<Node>;
+    /**
+     * The drawn fence in React. The React transcript renders this and ignores `render`, and keeps the
+     * plain code block standing when this throws or rejects: a diagram that fails to draw is still
+     * readable text.
+     */
+    renderReact?: (source: string) => PluginReactNode | Promise<PluginReactNode>;
 }
 export type ComposerSlot = "leading" | "trailing";
 /**
@@ -717,6 +868,8 @@ export interface ComposerContribution {
     slot: ComposerSlot;
     title: string;
     icon?: TemplateResult;
+    /** The control's mark in React, which the React composer draws in place of `icon`. */
+    iconReact?: PluginReactNode;
     order?: number;
     /**
      * Whether this control belongs in the composer at all. A capability the
@@ -859,7 +1012,12 @@ export interface PluginPromptEditor {
 export interface PluginRuntimeContext {
     state: PluginRuntimeState;
     prompt: PluginPromptEditor;
-    openActionPalette: () => void;
+    /**
+     * Open the host's command palette. Absent on a host with no palette: PI WEB's React workspace has
+     * none by product decision, and a plugin that offers a palette action reports it unavailable with the
+     * reason rather than opening a surface the product removed.
+     */
+    openActionPalette?: () => void;
     focusPrompt: () => void;
     addProject: () => void | Promise<void>;
     /**
@@ -1125,6 +1283,8 @@ export interface GlobalPanelContribution {
      */
     scope?: GlobalPanelScope;
     visible?: (context: GlobalPanelContext) => boolean;
+    /** The page's mark in React, which the React tab strip draws in place of `icon`. */
+    iconReact?: PluginReactNode;
     /**
      * The agent-side surface this page fronts, by the name its server plugin declares in
      * `agentFacts.surfaces`. Go to leaves the page out while the session on screen reports that
@@ -1133,9 +1293,13 @@ export interface GlobalPanelContribution {
      */
     fronts?: string;
     badge?: (context: GlobalPanelContext) => string | number | TemplateResult | undefined;
+    badgeReact?: (context: GlobalPanelContext) => PluginReactNode;
     /** The page's controls, drawn at the top of its page and always visible. */
     toolbar?: (context: GlobalPanelContext) => TemplateResult;
+    toolbarReact?: (context: GlobalPanelContext) => PluginReactNode;
     render: (context: GlobalPanelContext) => TemplateResult;
+    /** The page body in React. The React workbench renders this and ignores `render`. */
+    renderReact?: (context: GlobalPanelContext) => PluginReactNode;
 }
 export type GlobalPanelScope = "machine" | "fleet";
 export interface WorkspacePanelContribution {
@@ -1146,6 +1310,8 @@ export interface WorkspacePanelContribution {
     /** Former URL tool/view values that should resolve to this panel. */
     routeAliases?: string[];
     visible?: (context: WorkspacePanelContext) => boolean;
+    /** The panel's mark in React, which the React tab strip draws in place of `icon`. */
+    iconReact?: PluginReactNode;
     /**
      * The agent-side surface this page fronts, by the name its server plugin declares in
      * `agentFacts.surfaces`. Go to leaves the page out while the session on screen reports that
@@ -1154,6 +1320,7 @@ export interface WorkspacePanelContribution {
      */
     fronts?: string;
     badge?: (context: WorkspacePanelContext) => string | number | TemplateResult | undefined;
+    badgeReact?: (context: WorkspacePanelContext) => PluginReactNode;
     /** Called when the host invalidates workspace-panel data. */
     onInvalidate?: (context: WorkspacePanelContext) => void | Promise<void>;
     /** No longer drawn: the host draws no title row under the app bar
@@ -1164,6 +1331,7 @@ export interface WorkspacePanelContribution {
      *  the host draws no title row above them. Contents that belong to the
      *  page (lists, viewers) stay in `render`. */
     toolbar?: (context: WorkspacePanelContext) => TemplateResult;
+    toolbarReact?: (context: WorkspacePanelContext) => PluginReactNode;
     /** The page can take the whole app canvas on a wide window, hiding the
      *  app's other columns. The host draws no control for it: the page draws
      *  its own enter control (while `host.workspacePanelFullscreenAvailable()`)
@@ -1172,6 +1340,8 @@ export interface WorkspacePanelContribution {
      *  declare it is never shown on the whole canvas, whatever a link says. */
     fullscreen?: boolean;
     render: (context: WorkspacePanelContext) => TemplateResult;
+    /** The page body in React. The React workbench renders this and ignores `render`. */
+    renderReact?: (context: WorkspacePanelContext) => PluginReactNode;
 }
 export interface WorkspaceLabelContext extends WorkspaceContext {
     machine: PluginMachine;
@@ -1196,6 +1366,8 @@ export interface WorkspaceLabelLinkItem {
 export interface WorkspaceLabelRenderItem {
     type: "render";
     render: () => TemplateResult;
+    /** The label in React, which the React workspace list draws in place of `render`. */
+    renderReact?: () => PluginReactNode;
 }
 /**
  * Label items beside each workspace in the workspace list. They are asked with the workspace's
