@@ -986,3 +986,81 @@ producer. That is a product-visible decision about who renders a tab, and it is 
    files, git, terminal (panels + composer).
 3. Browser pass on the 8505 stack for the touched surfaces, desktop 1440px and 393x850, recording the
    commit, viewport, workflow, expectation and result.
+
+## The React plugin runtime and host layer — 2026-11-21 (checkpoint)
+
+Six units landed on top of `fad6b2ce`. All of them are on `feat/react-workspace-ui-from-main` and pushed
+as a branch tip only if the push was run; `git log --oneline -8` is the authority.
+
+| Commit | Unit |
+| --- | --- |
+| `937e4ac2` | Drop what the package scope pass left behind (the four unused imports that failed lint) |
+| `01bf2b92` | Publish the workspace's React to plugins (`src/plugin-react.ts`, `src/plugin-react-hooks.ts`, `src/jsx-runtime.ts`) |
+| `d990a2ba` | Render React plugin contributions in the workspace (`PluginReactSurface`, `pluginReactKit`, `pluginReactHostUi`, `pluginReactConfirm`) |
+
+**Why the runtime module came first.** A plugin that imports React gets its own copy, and two copies in
+one page fail quietly: a component from the second copy, rendered by the first, reaches for a dispatcher
+that is not its own, and React answers "Invalid hook call" — reported against the plugin, diagnosed for
+hours as a plugin bug. The workspace now publishes its React as it boots (`publishReactRuntimeForPlugins`
+in `react-main.tsx`, before the first render), hands plugins a member table with React's own types, and
+refuses a second publisher with the version it refused, which is the report that names the bundle that
+brought its own React. Plugin builds compile JSX against `@gang-of-beads/pi-web/jsx-runtime`
+(`tsconfig.plugins.json` and `scripts/build-plugins.mjs` both name it), so a plugin's source never names
+`react` and its JSX is created by the reconciler that renders it.
+
+**What the host layer draws today.** One contribution inside `PluginReactSurface` is bounded: a plugin
+whose component throws, or that returns a Lit template, is named in place and the rest of the page keeps
+working. The node is produced inside the boundary, because a contribution that returns something React
+cannot draw is a throw, and a throw raised in the parent's render unmounts the page. `reactUi` is handed
+to every plugin on the activation context: the host's React components (the buttons, cards, notices,
+fields, output view, message field, expandable row the built-in panels use) plus the clipboard chain, the
+failure wording, the breakpoint strings, sanitized markdown, and the app's confirm dialog. Plugin dialogs
+are now a discriminated queue — a React dialog is drawn by the page's React, a Lit one by the
+compatibility surface, in one stack with the same focus, Escape and back-gesture accounting — and a
+plugin's `confirm` resolves through the app's own `ConfirmDialog`, settling false on any dismissal, so a
+destructive action runs only on the key that confirms. Both layers were previously not mounted at all:
+the React app registered plugin dialogs and never rendered them.
+
+### Verification actually run
+
+- `pnpm run verify` at the package-scope milestone (`53806383`): exit 0, 697 files, 6155 passed, 5 skipped.
+- `pnpm run build:plugins` after the runtime commit: exit 0 — 8 browser entries bundled, 1 vendored
+  library, 101 plugin TypeScript files built.
+- Suites: `src/client/src/react` + `src/client/src/plugins` + `src/plugin-react.test.ts` — 47 files, 379
+  tests passed. The new host layer adds 13 (surface draw, Lit-template report, thrown component, the
+  activation context carrying `reactUi` and its absence on a Lit host, confirmation asks/waits/true-only-on-confirm/
+  false-on-dismiss) and the runtime adds 6.
+- `tsc --noEmit`, `eslint` on the changed `.ts` files and `pnpm run knip`: clean at `d990a2ba`.
+- **Not run this session: the browser pass.** No desktop 1440px or 393x850 run was made against a real
+  session daemon for the theme surface, the package scopes, the plugin dialogs, or the confirm dialog. The
+  React plugin surfaces have unit evidence only. A full `pnpm run verify` and `pnpm run build` on the
+  current HEAD were started as background tasks; record their numbers here when they land.
+
+### What is still not hosted in React
+
+`PluginReactSurface` can draw a React contribution, and the runtime makes it possible for a plugin to
+write one. Nothing in the React app asks the registry for a contribution yet, so every family below is
+still invisible in the React workspace, and the bundled plugins stay Lit for it:
+
+1. **The runtime context.** `PluginRuntimeContext` has ~35 members (`state`, `prompt`, project/machine
+   management, refresh, navigation). React needs a builder that reads live state at call time, not a
+   snapshot, and the contract needs one honest change first: `openActionPalette` is required, and the
+   React app has no palette by product decision. The fix is to make it optional and migrate the caller —
+   resurrecting the palette is not.
+2. **Settings sections** (`renderReact`) in the React Settings nav.
+3. **Workspace and global panels.** The React workbench draws hard-coded tabs with inline React panels
+   today; the accepted panel implementations have to move into the plugins that own them, so the tab strip
+   becomes contribution-driven without a redesign.
+4. **Transcript renderers** (`messageRenderers`, `toolRenderers`, `codeFenceRenderers`), **composer**
+   contributions, **nav sections**, **list labels**, **workspace labels**, **message actions**,
+   **activity notes**, and **actions**.
+5. **The eight bundled plugins** migrate one per commit, smallest surface first: mermaid, info, goal,
+   machines, workspaces, files, git, terminal.
+6. **First-party Lit removal** after 1–5, then the browser pass on the 8505 stack at 1440px and 393x850.
+
+### Exact next action
+
+Build `createReactPluginRuntimeContext` (member-by-member from React app state, with a test per member
+group), land the contract change that makes `openActionPalette` optional, then the settings-sections host
+in `ReactSettingsDialog`, then the panel host with the tab strip. One plugin per commit after that, and
+the browser pass before any Lit file is deleted.
