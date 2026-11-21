@@ -1,4 +1,4 @@
-import { isPluginReactNode, type PluginReactNode } from "../../../../shared/pluginReactTypes";
+import { isPluginReactNode } from "../../../../shared/pluginReactTypes";
 import type { ReactNode } from "react";
 
 /** A plugin returned something React cannot draw: a Lit template, a DOM node, a function. */
@@ -17,12 +17,12 @@ export class PluginReactContributionError extends Error {
  * element is that pair beside `$$typeof` and `key`. Each side satisfies the other, and this module is
  * the one place the equivalence is spent, as a single cast.
  *
- * The cast is checked, not trusted: `isPluginReactNode` says whether the value has the shape React
- * renders. A plugin that returns a Lit template, a DOM node, or an object of its own is reported by
- * name. Handed to React, those draw nothing and say nothing, and a page whose panel is silently empty
- * cannot be told apart from one that is still loading.
+ * The value arrives as `unknown`, on purpose: the host boundary is the validator, and narrowing an
+ * `unknown` is a check, while casting a typed value is a claim. A plugin that returns a Lit template, a
+ * DOM node, or an object of its own is reported by name, because handed to React those draw nothing and
+ * say nothing, and a surface that is silently empty cannot be told from one that is still loading.
  */
-export function asReactNode(node: PluginReactNode, contributionId: string): ReactNode {
+export function asReactNode(node: unknown, contributionId: string): ReactNode {
   if (!isPluginReactNode(node)) {
     throw new PluginReactContributionError(contributionId, describeNode(node));
   }

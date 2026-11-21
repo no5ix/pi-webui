@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   SettingsButton,
   SettingsCard,
@@ -159,7 +159,7 @@ export function PluginReactCloseIcon() {
 }
 
 /** A contributed node, at the point a host component hands it to React. */
-function node(value: PluginReactNode | undefined, contributionId: string) {
+function node(value: PluginReactNode | undefined, contributionId: string): ReactNode {
   return asReactNode(value, contributionId);
 }
 

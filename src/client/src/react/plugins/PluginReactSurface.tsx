@@ -1,5 +1,4 @@
 import { Component, type ReactNode } from "react";
-import type { PluginReactNode } from "../../../../shared/pluginReactTypes";
 import { asReactNode, PluginReactContributionError } from "./pluginReactNode";
 
 export interface PluginReactSurfaceProps {
@@ -7,7 +6,8 @@ export interface PluginReactSurfaceProps {
   readonly contributionId: string;
   /** The plugin's own label, shown to the reader. */
   readonly pluginLabel: string;
-  readonly node: PluginReactNode;
+  /** A contribution's node. Anything may arrive; the surface checks it. */
+  readonly node: unknown;
   readonly className?: string;
 }
 
@@ -32,7 +32,7 @@ export function PluginReactSurface({ contributionId, pluginLabel, node, classNam
   );
 }
 
-function PluginReactContent({ contributionId, node }: { readonly contributionId: string; readonly node: PluginReactNode }) {
+function PluginReactContent({ contributionId, node }: { readonly contributionId: string; readonly node: unknown }) {
   return <>{asReactNode(node, contributionId)}</>;
 }
 
