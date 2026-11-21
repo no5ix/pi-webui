@@ -18,16 +18,33 @@
  * that treats the two as one, and it checks the shape before it spends the cast (`pluginReactNode.tsx`).
  */
 export interface PluginReactElement {
-  readonly type: PluginReactComponentType;
+  /**
+   * What to render. React's own element types spell this as `string | JSXElementConstructor`, and
+   * `JSXElementConstructor` — components returning React's wider `ReactNode`, class components, the
+   * built-ins — has no spelling in a contract that must compile where React does not exist. So the
+   * member stays open here and the check stays real: `isPluginReactNode` rejects a `type` that is not
+   * a tag, a function, or a component object before React is asked to draw it.
+   */
+  readonly type: unknown;
   readonly props: unknown;
   readonly key?: string | null;
   readonly children?: PluginReactNode;
 }
 
-/** A component a plugin contributes: a function of props returning a node. */
+/**
+ * A component a plugin contributes, spelled so React's own element types assign to it.
+ *
+ * The wide members are deliberate: a real `ReactElement`'s `type` is React's `JSXElementConstructor`,
+ * which covers function components, class components and the built-ins, and its return is React's own
+ * `ReactNode`, a wider union than the one spelled here without React. The host does not trust the
+ * shape to type-check a plugin's work — `isPluginReactNode` inspects what arrives at render time — so
+ * the declaration stays open and the check stays real.
+ */
 export type PluginReactComponentType =
   | string
   | ((props: never) => PluginReactNode)
+  | ((props: never) => unknown)
+  | (new (props: never) => unknown)
   | { readonly render?: (props: never) => PluginReactNode };
 
 /** A list of nodes, as React accepts them. */
@@ -66,5 +83,9 @@ export function isPluginReactNode(value: unknown): value is PluginReactNode {
 
 function isElementShaped(value: unknown): value is PluginReactElement {
   if (typeof value !== "object" || value === null) return false;
-  return "type" in value && "props" in value;
+  const element: Partial<PluginReactElement> = value;
+  const type = element.type;
+  const renderableType = typeof type === "string" || typeof type === "function" || (typeof type === "object" && type !== null);
+  if (!renderableType) return false;
+  return typeof element.props === "object" && element.props !== null;
 }

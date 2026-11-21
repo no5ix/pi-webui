@@ -13,6 +13,7 @@ import { groupChatMessages, summarizeReactActivity } from "../chatGroups";
 import { GIT_BRANCHES_OPERATION, GIT_DIFF_OPERATION, GIT_MUTATE_OPERATION, GIT_STATUS_OPERATION, parseGitBranchesResponse, parseGitDiffResponse, parseGitStatusResponse, type GitBranchesResponse, type GitDiffResponse, type GitStatusResponse, type GitMutation } from "../../../../pi-web-plugins/git/browser/git-contract";
 import { Icon } from "./icons";
 import { ConversationMessage, editedFilesFromMessages } from "./ConversationMessage";
+import { usePluginContributions } from "./plugins/usePluginContributions";
 import { ActivityRecordsPanel, collectEditedFileDiffs, collectToolRecords } from "./ActivityWorkbenchPanels";
 import { ProjectTree } from "./ProjectTree";
 import { useReactWorkspaceData } from "./useReactWorkspaceData";
@@ -57,6 +58,7 @@ export function ReactWorkspaceApp() {
   const selectedMachineId = data.state.selectedMachine?.id ?? "local";
   const pluginRuntime = usePluginRegistry({ machineId: selectedMachineId });
   const appliedTheme = useAppliedTheme(pluginRuntime.registry, selectedMachineId, pluginRuntime.revision);
+  const contributions = usePluginContributions(pluginRuntime.registry, selectedMachineId, pluginRuntime.revision);
   const selectedSessionActionPending = data.selectedSession !== undefined && sessionActionIsPending(data.instantActions, selectedMachineId, data.selectedSession.id);
   const selectedMachineHealth = data.state.machineStatuses[selectedMachineId];
   const machineConnectionMessage = data.machineReadIssue ?? (data.state.machinesLoad !== "loaded" ? data.state.error : "");
@@ -640,7 +642,7 @@ export function ReactWorkspaceApp() {
             if (transcript !== null) olderPageAnchorRef.current = { scopeKey: transcriptScopeKey, scrollTop: transcript.scrollTop, scrollHeight: transcript.scrollHeight };
             void data.loadEarlierMessages();
           }}>{data.state.pageReadEnd === "earlier" ? "Loading earlier messages…" : "Load earlier messages"}</button>}
-          {activityGroups.map((group, index) => group.kind === "group" ? <details className="rw-activity-group" key={"activity-" + group.startIndex}><summary><Icon name="layers"/><strong>{summarizeReactActivity(group.messages)}</strong><small>{group.messages.length} events · Click to expand</small></summary><div className="rw-activity-group-content">{group.messages.map((message, messageIndex) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? (group.startIndex + "-" + messageIndex)} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}</div></details> : <ConversationMessage key={group.message.meta?.entryId ?? group.message.meta?.clientMessageId ?? group.index ?? index} message={group.message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"}/>)}
+          {activityGroups.map((group, index) => group.kind === "group" ? <details className="rw-activity-group" key={"activity-" + group.startIndex}><summary><Icon name="layers"/><strong>{summarizeReactActivity(group.messages)}</strong><small>{group.messages.length} events · Click to expand</small></summary><div className="rw-activity-group-content">{group.messages.map((message, messageIndex) => <ConversationMessage key={message.meta?.entryId ?? message.meta?.clientMessageId ?? (group.startIndex + "-" + messageIndex)} message={message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"} findFenceRenderer={contributions.findCodeFenceRenderer}/>)}</div></details> : <ConversationMessage key={group.message.meta?.entryId ?? group.message.meta?.clientMessageId ?? group.index ?? index} message={group.message} streaming={data.sessionStatus?.isStreaming === true} session={data.selectedSession} machineId={data.state.selectedMachine?.id ?? "local"} findFenceRenderer={contributions.findCodeFenceRenderer}/>)}
           {showTranscriptJump && <button className="rw-jump-bottom" type="button" onClick={() => { const transcript = transcriptRef.current; if (transcript !== null) transcript.scrollTo({ top: transcript.scrollHeight, behavior: "smooth" }); followTranscriptRef.current = true; setShowTranscriptJump(false); }}>Jump to latest</button>}
         </div>
         <div className="rw-chat-dock">
