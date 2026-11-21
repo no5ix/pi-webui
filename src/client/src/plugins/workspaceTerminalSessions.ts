@@ -1,5 +1,15 @@
-import { terminalSocket, terminalsApi, type TerminalInfo, type Workspace } from "../api";
+import { terminalSocket, terminalsApi, type TerminalInfo } from "../api";
 import type { WorkspaceTerminalSessions } from "./types";
+
+/**
+ * The scope a terminal lives in: this project, this workspace. A caller holding
+ * a whole `Workspace` satisfies it, and a React host that memoizes the
+ * terminal surface names exactly the fields it is keyed on.
+ */
+export interface TerminalWorkspaceScope {
+  readonly id: string;
+  readonly projectId: string;
+}
 
 /**
  * The host's side of the terminal capability handed to workspace panels.
@@ -9,7 +19,7 @@ import type { WorkspaceTerminalSessions } from "./types";
  * belongs to - this machine, this project, this workspace - is bound here
  * once rather than passed around and eventually passed wrong.
  */
-export function workspaceTerminalSessions(workspace: Workspace, machineId: string): WorkspaceTerminalSessions {
+export function workspaceTerminalSessions(workspace: TerminalWorkspaceScope, machineId: string): WorkspaceTerminalSessions {
   const { projectId, id } = workspace;
   return {
     list: (): Promise<TerminalInfo[]> => terminalsApi.terminals(projectId, id, machineId),

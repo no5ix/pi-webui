@@ -13,7 +13,7 @@ interface Props {
   readonly deleteArchived: (session: SessionInfo, machineId: string) => Promise<void>;
 }
 
-type Confirmation = { readonly kind: "archive" | "delete"; readonly session: SessionInfo; readonly machineId: string };
+interface Confirmation { readonly kind: "archive" | "delete"; readonly session: SessionInfo; readonly machineId: string }
 
 export function SessionActionsMenu({ session, machineId, pending, rename, archive, restore, deleteArchived }: Props) {
   const disclosureRef = useRef<HTMLDetailsElement>(null);
@@ -58,7 +58,7 @@ export function SessionActionsMenu({ session, machineId, pending, rename, archiv
         : <button type="button" disabled={session === undefined || busy || pending} onClick={() => { if (session !== undefined) setConfirmation({ kind: "archive", session, machineId }); }}>Archive session</button>}
       {busy && <span role="status">Updating session…</span>}
       {pending && <span role="status">A session change is still in progress.</span>}
-      {error && <span role="alert">{error}</span>}
+      {error !== undefined && error !== "" && <span role="alert">{error}</span>}
       {confirmation !== undefined && <ConfirmDialog
         open
         title={confirmation.kind === "delete" ? "Delete archived session?" : "Archive session?"}

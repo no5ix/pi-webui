@@ -29,7 +29,7 @@ function ToolExecution({ part, streaming }: { part: ToolExecutionPart; streaming
   const status = executionStatus(part, streaming);
   const details = part.args === undefined ? undefined : JSON.stringify(part.args, null, 2);
   return <details className={`rw-tool-execution ${status}`}>
-    <summary><Icon name={status === "success" ? "check-circle" : status === "error" ? "x" : "activity"}/><strong>{part.toolName}</strong><span>{part.summary}</span><small>{status}{part.durationMs === undefined ? "" : ` · ${part.durationMs}ms`}</small></summary>
+    <summary><Icon name={status === "success" ? "check-circle" : status === "error" ? "x" : "activity"}/><strong>{part.toolName}</strong><span>{part.summary}</span><small>{status}{part.durationMs === undefined ? "" : ` · ${String(part.durationMs)}ms`}</small></summary>
     {(details !== undefined || part.resultText !== undefined || part.preview?.diff !== undefined) && <div className="rw-tool-details">
       {details !== undefined && <pre>{details}</pre>}
       {part.preview?.diff !== undefined && <pre className="rw-tool-diff">{part.preview.diff}</pre>}
@@ -88,10 +88,13 @@ export function ConversationMessage({ message, streaming, session, machineId, fi
     if (viewer === undefined && dialog.open) dialog.close();
   }, [viewer]);
   const copyText = messageCopyText(message);
+  const copyToClipboard = async (): Promise<void> => {
+    setCopied(await writeClipboardText(copyText));
+  };
   return <>
     <article className={`rw-message ${message.role}`}>
-      <div className="rw-message-meta"><span>{message.role}</span><time>{timestamp(message.meta?.timestamp)}</time>{copyText !== "" && (message.role === "user" || message.role === "assistant") && <button type="button" aria-label={copied ? "Copied message" : `Copy ${message.role} message`} onClick={async event => { event.stopPropagation(); setCopied(await writeClipboardText(copyText)); }}>{copied ? "Copied" : "Copy"}</button>}</div>
-      <div className="rw-message-body">{message.parts.map((part, index) => <MessagePart key={`${part.type}-${index}`} part={part} message={message} streaming={streaming} session={session} machineId={machineId} {...findFenceRenderer === undefined ? {} : { findFenceRenderer }} onImageOpen={(src, alt) => setViewer({ src, alt })}/>)}</div>
+      <div className="rw-message-meta"><span>{message.role}</span><time>{timestamp(message.meta?.timestamp)}</time>{copyText !== "" && (message.role === "user" || message.role === "assistant") && <button type="button" aria-label={copied ? "Copied message" : `Copy ${message.role} message`} onClick={event => { event.stopPropagation(); void copyToClipboard(); }}>{copied ? "Copied" : "Copy"}</button>}</div>
+      <div className="rw-message-body">{message.parts.map((part, index) => <MessagePart key={`${part.type}-${String(index)}`} part={part} message={message} streaming={streaming} session={session} machineId={machineId} {...findFenceRenderer === undefined ? {} : { findFenceRenderer }} onImageOpen={(src, alt) => setViewer({ src, alt })}/>)}</div>
       {message.meta?.failureDetail !== undefined && <details className="rw-failure-detail"><summary>Error details</summary><pre>{message.meta.failureDetail}</pre></details>}
     </article>
     <dialog ref={viewerRef} className="rw-image-viewer" aria-label="Image preview" onClose={() => setViewer(undefined)}>

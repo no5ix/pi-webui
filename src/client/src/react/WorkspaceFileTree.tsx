@@ -1,4 +1,5 @@
 import type { FileTreeEntry } from "../api";
+import { cssVariables } from "./cssVariables";
 import { Icon } from "./icons";
 import { formatFileSize, sortFileEntries, workspaceBreadcrumbs, workspaceEntryKind, type WorkspaceEntryKind } from "./workspaceFiles";
 
@@ -64,6 +65,7 @@ export function WorkspaceFileTree({ entriesByDirectory, expandedPaths, loadingPa
     const expanded = expandedPaths.includes(entry.path);
     const selected = selectedPath === entry.path;
     const current = directory && currentDirectory === entry.path;
+    const depthStyle = cssVariables({ "--depth": depth });
     return <div className="rw-file-node" key={entry.path} role="none">
       <button
         type="button"
@@ -72,7 +74,7 @@ export function WorkspaceFileTree({ entriesByDirectory, expandedPaths, loadingPa
         aria-expanded={directory ? expanded : undefined}
         aria-selected={directory ? current : selected}
         className={"rw-file-row" + (selected ? " selected" : "") + (current ? " current-directory" : "")}
-        style={{ "--depth": depth } as React.CSSProperties}
+        style={depthStyle}
         title={entry.path}
         onClick={() => directory ? onToggleDirectory(entry) : onSelectFile(entry)}
       >

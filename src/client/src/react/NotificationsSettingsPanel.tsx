@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { NTFY_EVENT_FIELDS, type NtfyStatus } from "../../../shared/ntfy";
 import { isInstalledApp, isIOS } from "../browserProfile";
 import { configApi, notificationsApi } from "../api";
@@ -114,10 +114,10 @@ export function NotificationsSettingsPanel({ busy, run }: NotificationsSettingsP
       <label className="rw-setting-check"><input type="checkbox" checked={wanted} disabled={disabled} onChange={toggleBrowserChannel} aria-label="Tell me when a task finishes" /></label>
     </div>
     <div className="rw-settings-actions">
-      {availability !== "granted" && <button type="button" onClick={enableBrowserChannel} disabled={disabled}>Ask the browser for permission</button>}
-      <button type="button" onClick={testBrowserChannel} disabled={disabled || availability !== "granted"}>Send a test notice in this browser</button>
+      {availability !== "granted" && <button type="button" onClick={() => { void enableBrowserChannel(); }} disabled={disabled}>Ask the browser for permission</button>}
+      <button type="button" onClick={() => { void testBrowserChannel(); }} disabled={disabled || availability !== "granted"}>Send a test notice in this browser</button>
     </div>
-    {browserAnswer && <p className="rw-setting-note">{browserAnswer}</p>}
+    {browserAnswer !== undefined && browserAnswer !== "" && <p className="rw-setting-note">{browserAnswer}</p>}
     {isIOS() && !isInstalledApp() && <p className="rw-setting-note">On iPhone and iPad, Safari only shows these notices to the installed web app: use Add to Home Screen, then turn this on there.</p>}
     <p className="rw-setting-note">The notice arrives while this browser is open, including in a background tab. Use ntfy below to be told on a phone.</p>
 
@@ -148,13 +148,13 @@ export function NotificationsSettingsPanel({ busy, run }: NotificationsSettingsP
         </label>)}
       </div>
       <div className="rw-settings-actions">
-        <button type="button" onClick={() => saveNtfy()} disabled={disabled}>Save ntfy settings</button>
-        <button type="button" onClick={testNtfy} disabled={disabled}>Send a test notice through ntfy</button>
-        {status.topicConfigured && <button type="button" onClick={() => saveNtfy({ clearTopic: true })} disabled={disabled}>Stop using this topic</button>}
+        <button type="button" onClick={() => { void saveNtfy(); }} disabled={disabled}>Save ntfy settings</button>
+        <button type="button" onClick={() => { void testNtfy(); }} disabled={disabled}>Send a test notice through ntfy</button>
+        {status.topicConfigured && <button type="button" onClick={() => { void saveNtfy({ clearTopic: true }); }} disabled={disabled}>Stop using this topic</button>}
       </div>
     </>}
-    {ntfyAnswer && <p className="rw-setting-note">{ntfyAnswer}</p>}
-    {ntfyError && <p className="rw-setting-error">{ntfyError}</p>}
+    {ntfyAnswer !== undefined && ntfyAnswer !== "" && <p className="rw-setting-note">{ntfyAnswer}</p>}
+    {ntfyError !== undefined && ntfyError !== "" && <p className="rw-setting-error">{ntfyError}</p>}
     <p className="rw-setting-note">Notices are posted by the session daemon, so they arrive with no browser open. Each channel is switched on apart from the other, and one channel failing never stops the other.</p>
   </div>;
 }

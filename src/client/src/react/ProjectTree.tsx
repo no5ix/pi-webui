@@ -1,8 +1,8 @@
 import { Icon } from "./icons";
 import type { SessionInfo } from "../api";
-type ProjectSession = { id: string; name: string; session: SessionInfo };
-type Project = { id: string; name: string; sessions: ProjectSession[]; unknown: boolean; pending: boolean };
-type Props = { projects: Project[]; query: string; expanded: string[]; onExpanded: (ids: string[]) => void; selectedProject: string; selectedSession: string; onSelectProject: (id: string) => void; onSelectSession: (projectId: string, sessionId: string) => void; onCloseProject: (projectId: string) => void; showMoreByProject: Record<string, boolean>; onShowMore: (id: string) => void };
+interface ProjectSession { id: string; name: string; session: SessionInfo }
+interface Project { id: string; name: string; sessions: ProjectSession[]; unknown: boolean; pending: boolean }
+interface Props { projects: Project[]; query: string; expanded: string[]; onExpanded: (ids: string[]) => void; selectedProject: string; selectedSession: string; onSelectProject: (id: string) => void; onSelectSession: (projectId: string, sessionId: string) => void; onCloseProject: (projectId: string) => void; showMoreByProject: Record<string, boolean>; onShowMore: (id: string) => void }
 export function ProjectTree({ projects, query, expanded, onExpanded, selectedProject, selectedSession, onSelectProject, onSelectSession, onCloseProject, showMoreByProject, onShowMore }: Props) {
   const toggle = (id: string) => onExpanded(expanded.includes(id) ? expanded.filter(v => v !== id) : [...expanded, id]);
   const visible = projects.filter(p => p.name.toLowerCase().includes(query.toLowerCase()) || p.sessions.some(s => s.name.toLowerCase().includes(query.toLowerCase())));
@@ -38,14 +38,14 @@ function formatSessionAge(value: string | number): string {
   const elapsed = Math.max(0, Date.now() - timestamp);
   const minutes = Math.floor(elapsed / 60_000);
   if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return `${String(minutes)}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return `${String(hours)}h`;
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
+  if (days < 7) return `${String(days)}d`;
   const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `${weeks}w`;
+  if (weeks < 5) return `${String(weeks)}w`;
   const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo`;
-  return `${Math.floor(days / 365)}y`;
+  if (months < 12) return `${String(months)}mo`;
+  return `${String(Math.floor(days / 365))}y`;
 }

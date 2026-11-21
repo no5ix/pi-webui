@@ -20,7 +20,6 @@ import {
   piSkillRowBlockedByPackage,
   piSkillRowTestId,
   piSkillScopeNote,
-  piSkillSetEnabledRequest,
   piSkillShadowedNote,
   piSkillStatus,
   piSkillUnreadableLines,
@@ -86,10 +85,11 @@ export function SkillsSettingsPanel(props: SkillsSettingsPanelProps) {
   const card = (skill: PiSkillInfo) => {
     const status = piSkillStatus(skill);
     const writeBlocked = piSkillRowBlockedByPackage(skill);
+    const source: unknown = skill.source;
     const meta = [
       skill.description,
       `source: ${piSkillOriginLabel(skill.origin)}`,
-      skill.source === undefined ? undefined : `pi source: ${skill.source}`,
+      typeof source === "string" ? `pi source: ${source}` : undefined,
       `scope: ${skill.scope}`,
       `file: ${skill.filePath}`,
       `directory: ${skill.baseDir}`,

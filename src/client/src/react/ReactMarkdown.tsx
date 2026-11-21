@@ -49,7 +49,7 @@ function PluginCodeFence({ renderer, source, plain }: {
   readonly source: string;
   readonly plain: ReactNode;
 }) {
-  const [drawn, setDrawn] = useState<unknown | undefined>(undefined);
+  const [drawn, setDrawn] = useState<unknown>(undefined);
 
   useEffect(() => {
     let current = true;

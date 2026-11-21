@@ -34,7 +34,8 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  const sessions = useMemo(() => workspaceTerminalSessions(workspace, machineId), [workspace.id, workspace.projectId, machineId]);
+  const scope = useMemo(() => ({ id: workspace.id, projectId: workspace.projectId }), [workspace.id, workspace.projectId]);
+  const sessions = useMemo(() => workspaceTerminalSessions(scope, machineId), [machineId, scope]);
 
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
@@ -45,9 +46,9 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
       const result = await sessions.list();
       setTerminals(result);
       const currentId = selectedIdRef.current;
-      const nextId = preferId && result.some(item => item.id === preferId)
+      const nextId = preferId !== undefined && result.some(item => item.id === preferId)
         ? preferId
-        : currentId && result.some(item => item.id === currentId)
+        : currentId !== undefined && result.some(item => item.id === currentId)
           ? currentId
           : result.find(item => !item.exited)?.id ?? result[0]?.id;
       selectedIdRef.current = nextId;
@@ -135,12 +136,12 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
       try {
         const frame: unknown = JSON.parse(await terminalFrameText(data));
         if (typeof frame !== "object" || frame === null) return;
-        const type = Reflect.get(frame, "type");
+        const type: unknown = Reflect.get(frame, "type");
         if (type === "output" && typeof Reflect.get(frame, "data") === "string") {
           output.write(String(Reflect.get(frame, "data")));
         } else if (type === "exit") {
-          const code = Reflect.get(frame, "exitCode");
-          output.writeln("\r\n\x1b[90mProcess exited" + (typeof code === "number" ? " (" + code + ")" : "") + ".\x1b[0m");
+          const code: unknown = Reflect.get(frame, "exitCode");
+          output.writeln("\r\n\x1b[90mProcess exited" + (typeof code === "number" ? " (" + String(code) + ")" : "") + ".\x1b[0m");
           void refreshList(terminal.id);
         } else if (type === "error" && typeof Reflect.get(frame, "message") === "string") {
           output.writeln("\r\n\x1b[31m" + String(Reflect.get(frame, "message")) + "\x1b[0m");
@@ -215,10 +216,10 @@ export function ReactTerminalPanel({ workspace, machineId }: Props) {
       </div>
       <button onClick={() => void refresh(selectedId)} title="Refresh terminal list" disabled={busy || loading}>Refresh</button>
       <button onClick={() => void createTerminal()} disabled={busy || loading}>New terminal</button>
-      {terminals.find(item => item.id === selectedId)?.exited && <button onClick={() => void continueTerminal()} disabled={busy}>Continue</button>}
+      {terminals.find(item => item.id === selectedId)?.exited === true && <button onClick={() => void continueTerminal()} disabled={busy}>Continue</button>}
       <button onClick={() => void closeTerminal()} disabled={busy || selectedId === undefined}>Close</button>
     </div>
-    {error && <div className="rw-data-error">{error}</div>}
+    {error !== undefined && error !== "" && <div className="rw-data-error">{error}</div>}
     <div className="rw-terminal-screen" ref={hostRef}/>
   </div>;
 }

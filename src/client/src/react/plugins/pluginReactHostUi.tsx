@@ -79,6 +79,7 @@ export function createPluginReactHostUi(deps: PluginReactHostUiDeps): PluginReac
  * free of React while the components a plugin composes stay React's own.
  */
 function asHostComponent<P>(component: (props: P) => ReactNode): PluginReactComponent<P> {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the one place the plugin contract's structural component becomes React's own.
   return component as PluginReactComponent<P>;
 }
 

@@ -50,7 +50,7 @@ export function findTextMatches(text: string, query: string, options?: SearchOpt
     const end = index + needle.length;
     const before = index === 0 ? "" : text[index - 1] ?? "";
     const after = text[end] ?? "";
-    const isolated = !options?.wholeWord || (isWordBoundary(before) && isWordBoundary(after));
+    const isolated = options?.wholeWord !== true || (isWordBoundary(before) && isWordBoundary(after));
     if (isolated) matches.push({ from: index, to: end });
     index = haystack.indexOf(needle, Math.max(end, index + 1));
   }
@@ -133,6 +133,7 @@ export function WorkspaceCodeEditor({ path, value, readOnly, onChange, onSave, o
   const onSaveAllRef = useRef(onSaveAll);
   onSaveAllRef.current = onSaveAll;
   const memories = useRef(new Map<string, EditorMemory>());
+  const initialDocument = useRef(value);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showReplace, setShowReplace] = useState(false);
   const [query, setQuery] = useState("");
@@ -142,6 +143,8 @@ export function WorkspaceCodeEditor({ path, value, readOnly, onChange, onSave, o
   const [matchIndex, setMatchIndex] = useState(0);
   const searchInput = useRef<HTMLInputElement>(null);
   const matches = useMemo(() => findTextMatches(value, query, { caseSensitive, wholeWord }), [value, query, caseSensitive, wholeWord]);
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   const openSearch = (replace: boolean) => {
     setSearchOpen(true);
@@ -157,11 +160,12 @@ export function WorkspaceCodeEditor({ path, value, readOnly, onChange, onSave, o
   useEffect(() => {
     const parent = host.current;
     if (parent === null) return;
-    const memory = memories.current.get(path);
+    const memoryMap = memories.current;
+    const memory = memoryMap.get(path);
     const editor = new EditorView({
       parent,
       state: EditorState.create({
-        doc: value,
+        doc: initialDocument.current,
         ...(memory === undefined ? {} : { selection: { anchor: memory.anchor, head: memory.head } }),
         extensions: [
           lineNumbers(),
@@ -200,13 +204,14 @@ export function WorkspaceCodeEditor({ path, value, readOnly, onChange, onSave, o
       const current = view.current;
       if (current !== undefined) {
         const selection = current.state.selection.main;
-        memories.current.set(pathRef.current, { anchor: selection.anchor, head: selection.head, scrollTop: current.scrollDOM.scrollTop });
+        memoryMap.set(pathRef.current, { anchor: selection.anchor, head: selection.head, scrollTop: current.scrollDOM.scrollTop });
       }
       editor.destroy();
       view.current = undefined;
     };
-    // The editor is rebuilt only when the open path changes; value and flow
-    // through the effects below so a rebuild never loses history on every key.
+    // The editor is built from the document it was handed at mount and rebuilt only when the open
+    // path changes; a later value flows through the effect below, so a keystroke never tears down
+    // the editor and its history.
   }, [path]);
 
   useEffect(() => {
@@ -235,14 +240,15 @@ export function WorkspaceCodeEditor({ path, value, readOnly, onChange, onSave, o
 
   useEffect(() => {
     setMatchIndex(0);
-    if (matches.length === 0) return;
-    const first = matches[0];
+    const hits = matchesRef.current;
+    if (hits.length === 0) return;
+    const first = hits[0];
     if (first === undefined) return;
     const editor = view.current;
     if (editor === undefined || !searchOpen) return;
     editor.dispatch({ selection: { anchor: first.from, head: first.to }, effects: EditorView.scrollIntoView(first.from, { y: "center" }) });
     // Selecting the first hit belongs to opening or changing the search, not to
-    // every keystroke in the document.
+    // every keystroke in the document, so the hits are read as they are then.
   }, [query, caseSensitive, wholeWord, searchOpen]);
 
   const goToMatch = (direction: 1 | -1) => {

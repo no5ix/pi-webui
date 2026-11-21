@@ -28,7 +28,7 @@ export function collectEditedFileDiffs(messages: readonly ChatLine[]): { path: s
   const files = new Map<string, string>();
   for (const message of messages) for (const part of message.parts) {
     if (part.type !== "toolExecution" || part.preview?.diff === undefined || typeof part.args !== "object" || part.args === null) continue;
-    const path = Reflect.get(part.args, "path");
+    const path: unknown = Reflect.get(part.args, "path");
     if (typeof path === "string") files.set(path, part.preview.diff);
   }
   return [...files].map(([path, diff]) => ({ path, diff }));
@@ -42,10 +42,10 @@ export function summarizeActivityGroup(messages: readonly ChatLine[]): string {
     else if (part.type === "toolResult") results++;
   }
   const labels: string[] = [];
-  if (thinking) labels.push(thinking + " " + (thinking === 1 ? "thinking" : "thinkings"));
-  if (calls) labels.push(calls + " " + (calls === 1 ? "tool call" : "tool calls"));
-  if (results) labels.push(results + " " + (results === 1 ? "tool result" : "tool results"));
-  return labels.length ? labels.join(", ") : messages.length + " activity messages";
+  if (thinking) labels.push(String(thinking) + " " + (thinking === 1 ? "thinking" : "thinkings"));
+  if (calls) labels.push(String(calls) + " " + (calls === 1 ? "tool call" : "tool calls"));
+  if (results) labels.push(String(results) + " " + (results === 1 ? "tool result" : "tool results"));
+  return labels.length ? labels.join(", ") : String(messages.length) + " activity messages";
 }
 
 export function ActivityRecordsPanel({ records, empty }: { records: readonly ActivityRecord[]; empty: string }) {

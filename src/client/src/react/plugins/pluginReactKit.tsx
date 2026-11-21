@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from "react";
 import {
   SettingsButton,
   SettingsCard,
@@ -106,7 +106,7 @@ export function PluginReactMessageField({ value, onChange, onSend, placeholder =
     void Promise.resolve(onSend(text)).finally(() => setBusy(false));
   };
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     send();
   };

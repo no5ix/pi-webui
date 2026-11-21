@@ -91,7 +91,7 @@
     "typecheck:plugin-api": "tsc -p tsconfig.plugin-api.browser.json && tsc -p tsconfig.plugin-api.server.json",
     "typecheck:cached": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/pi-web/typecheck.tsbuildinfo",
     "knip": "knip",
-    "lint": "eslint \"src/**/*.ts\" \"extensions/**/*.ts\" \"pi-web-plugins/**/*.ts\" vite.config.ts vitest.config.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"extensions/**/*.ts\" \"pi-web-plugins/**/*.{ts,tsx}\" vite.config.ts vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "verify:static": "pnpm run typecheck && pnpm run lint && pnpm run knip",
     "verify": "pnpm run verify:static && pnpm test",
@@ -129,10 +129,10 @@
     "@codemirror/legacy-modes": "^6.5.3",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
-    "@lezer/highlight": "^1.2.3",
     "@fastify/compress": "^9.0.0",
     "@fastify/static": "^10.1.2",
     "@fastify/websocket": "^11.3.0",
+    "@lezer/highlight": "^1.2.3",
     "@types/ws": "^8.18.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
@@ -142,10 +142,10 @@
     "marked": "^18.0.6",
     "mermaid": "^12.2.0",
     "morphdom": "^2.7.8",
-    "undici": "^8.12.3",
-    "ws": "^8.21.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "undici": "^8.12.3",
+    "ws": "^8.21.0"
   },
   "optionalDependencies": {
     "node-pty": "^1.1.0"
@@ -158,8 +158,11 @@
     "@earendil-works/pi-tui": "^1.5.2",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.13.3",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^17.7.0",
     "happy-dom": "^21.0.4",
     "knip": "^6.25.0",
@@ -167,9 +170,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",
     "vite": "^8.3.5",
-    "vitest": "^4.1.12",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0"
+    "vitest": "^4.1.12"
   },
   "publishConfig": {
     "access": "public"

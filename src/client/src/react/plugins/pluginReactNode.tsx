@@ -26,6 +26,7 @@ export function asReactNode(node: unknown, contributionId: string): ReactNode {
   if (!isPluginReactNode(node)) {
     throw new PluginReactContributionError(contributionId, describeNode(node));
   }
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the one place the plugin contract's structural node becomes React's own.
   return node as ReactNode;
 }
 

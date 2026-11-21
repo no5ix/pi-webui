@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { Machine } from "../api";
-import type { QualifiedContributionId } from "../plugins/types";
 import type { AppliedTheme } from "./useAppliedTheme";
 import { McpSettingsPanel } from "./McpSettingsPanel";
 import { isMutationDeadline, mutationDeadlineNotice, runWithinDeadline } from "./settings/settingsMutation";
@@ -45,6 +44,7 @@ export interface ReactSettingsDialogProps {
 }
 
 export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [], theme }: ReactSettingsDialogProps) {
+  const { loadSettings } = data;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [page, setPage] = useState<Page>("General");
   const [query, setQuery] = useState("");
@@ -67,8 +67,8 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [], 
     // Opening Settings reads the scope the data hook is on. A machine or settings-project switch is the
     // hook's own read, so the dialog never reads a scope the hook has already moved past.
     if (!open) return;
-    void data.loadSettings();
-  }, [open, data.loadSettings]);
+    void loadSettings();
+  }, [loadSettings, open]);
 
   useEffect(() => setRenameDraft(data.state.selectedMachine?.name ?? ""), [data.state.selectedMachine?.id, data.state.selectedMachine?.name]);
 
@@ -126,7 +126,7 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [], 
         <div className="rw-settings-content">
           <header className="rw-settings-page-heading"><h3>{page}</h3><button type="button" onClick={() => void data.loadSettings()} disabled={settings.loading}>Reload</button></header>
           {settings.loading && <p role="status">Loading settings…</p>}
-          {statusMessage && <p className="rw-settings-notice" role="status">{statusMessage}</p>}
+          {statusMessage !== undefined && statusMessage !== "" && <p className="rw-settings-notice" role="status">{statusMessage}</p>}
           {page === "General" && <section>
             {settings.config ? <>
               <label>Host<input defaultValue={settings.config.config.host ?? ""} key={`${settings.config.path}-host`} onBlur={event => saveConfig({ host: event.target.value })}/></label>
@@ -138,7 +138,7 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [], 
           {page === "Appearance" && <section>
             <label>Theme<select
               value={theme.preference.themeId}
-              onChange={(event) => theme.select(event.target.value as QualifiedContributionId)}
+              onChange={(event) => theme.select(event.target.value)}
             >{theme.choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select></label>
             <label className="settings-check"><input
               type="checkbox"
@@ -173,9 +173,9 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [], 
             error={settings.error}
           />}
           {page === "Pi Web Plugins" && <section>
-            {pluginFailures.map((failure, index) => <p key={`${failure}-${index}`} className="rw-setting-error" role="status">Plugin failed to load: {failure}</p>)}
-            {settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired ? " · restart required" : ""}</small></span></label>)}
-            {!settings.plugins?.plugins.length && !settings.loading && <p>No plugins were returned for this machine.</p>}
+            {pluginFailures.map((failure, index) => <p key={`${failure}-${String(index)}`} className="rw-setting-error" role="status">Plugin failed to load: {failure}</p>)}
+            {settings.plugins?.plugins.map(plugin => <label className="rw-setting-check" key={plugin.id}><input type="checkbox" checked={plugin.enabled} disabled={!plugin.discovered || busy} onChange={event => void run(() => data.setPluginEnabled(plugin.id, event.target.checked))}/><span><b>{plugin.id}</b><small>{plugin.source} · {plugin.scope} · {plugin.server?.state ?? "unknown"}{plugin.server?.restartRequired === true ? " · restart required" : ""}</small></span></label>)}
+            {(settings.plugins?.plugins.length ?? 0) === 0 && !settings.loading && <p>No plugins were returned for this machine.</p>}
           </section>}
           {page === "Machines" && <section>
             <label>Selected machine<select value={machineId} onChange={event => { const machine = machines.find(candidate => candidate.id === event.target.value); if (machine) void data.selectMachine(machine); }}>

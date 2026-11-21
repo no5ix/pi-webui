@@ -187,7 +187,7 @@ export function PackagesSettingsPanel(props: PackagesSettingsPanelProps) {
         />
         <SettingsButton disabled={locked} label="Reload" onClick={props.onReload} />
       </>}
-      note={`${props.machineLabel} · ${counts.global} global · ${counts.project} project`}
+      note={`${props.machineLabel} · ${String(counts.global)} global · ${String(counts.project)} project`}
       title="Pi Packages"
     >
       <SettingsNotice tone="security">Packages are code pi loads: extensions, skills, prompts and themes from npm, git or a path on disk. Installing a package, or enabling one that is installed, gives that code the ability to run on the machine pi runs on and to change what a session can do. Install only packages you trust.</SettingsNotice>

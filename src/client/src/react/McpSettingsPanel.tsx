@@ -10,7 +10,6 @@ import {
   piMcpNotLoadedNote,
   piMcpGlobalRows,
   piMcpMetaLines,
-  piMcpGlobalSectionTitle,
   piMcpProjectSectionTitle,
   piMcpProjectSectionNote,
   piMcpProjectSectionState,
@@ -78,6 +77,13 @@ interface WriteOption {
   readonly projectScope: boolean;
 }
 
+const exposureChoices: readonly McpFormState["exposure"][] = ["", "codemode", "deferred", "direct", "hidden"];
+
+/** The exposure select answers a plain string; only the options this page renders are exposure values. */
+function exposureChoice(value: string): McpFormState["exposure"] {
+  return exposureChoices.find((choice) => choice === value) ?? "";
+}
+
 export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, notice, error }: McpSettingsPanelProps) {
   const [form, setForm] = useState<McpFormState>();
   const [problem, setProblem] = useState<string>();
@@ -141,11 +147,16 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
     });
   };
 
-  const writeOptions = (editing: boolean): readonly WriteOption[] => [
-    { label: "Global config (this machine's mcp.json)", target: "definition", projectScope: false },
-    ...(scopeProjectId === undefined ? [] : [{ label: "This project's mcp.json", target: "definition" as PiMcpWriteKind, projectScope: true }]),
-    ...(editing && scopeProjectId !== undefined ? [{ label: "This project's override of the global server", target: "override" as PiMcpWriteKind, projectScope: true }] : []),
-  ];
+  const writeOptions = (editing: boolean): readonly WriteOption[] => {
+    const globalOption: WriteOption = { label: "Global config (this machine's mcp.json)", target: "definition", projectScope: false };
+    const projectOption: WriteOption = { label: "This project's mcp.json", target: "definition", projectScope: true };
+    const overrideOption: WriteOption = { label: "This project's override of the global server", target: "override", projectScope: true };
+    return [
+      globalOption,
+      ...(scopeProjectId === undefined ? [] : [projectOption]),
+      ...(editing && scopeProjectId !== undefined ? [overrideOption] : []),
+    ];
+  };
 
   const setField = <K extends keyof McpFormState>(key: K, value: McpFormState[K]) => {
     setForm(current => (current === undefined ? current : { ...current, [key]: value }));
@@ -193,7 +204,7 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
   />;
 
   return <section className="rw-mcp-panel">
-    {mcp?.errors.map((entry, index) => <p className="rw-settings-notice" key={`error-${index}`}>{entry}</p>)}
+    {mcp?.errors.map((entry, index) => <p className="rw-settings-notice" key={`error-${String(index)}`}>{entry}</p>)}
     <NoticeList busy={busyLabel} notice={notice === undefined ? [] : [notice]} error={gaveUpNotice === undefined ? (error === undefined ? [] : [error]) : [gaveUpNotice, error]}/>
     {projectScope === undefined ? null
       : <SettingsProjectSelect scope={projectScope} disabled={locked} note={piMcpScopeWriteNote(projectScope.projectId, machineLabel)}/>}
@@ -238,11 +249,11 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
               <option value="stdio">stdio (a command pi runs)</option>
               <option value="http">streamable HTTP (a URL)</option>
             </select></SettingsField>
-            <SettingsField label="Write to"><select value={`${form.target}:${form.projectScope}`} onChange={event => {
-              const option = writeOptions(form.editing).find(candidate => `${candidate.target}:${candidate.projectScope}` === event.target.value);
+            <SettingsField label="Write to"><select value={`${form.target}:${String(form.projectScope)}`} onChange={event => {
+              const option = writeOptions(form.editing).find(candidate => `${candidate.target}:${String(candidate.projectScope)}` === event.target.value);
               if (option !== undefined) setForm(current => (current === undefined ? current : { ...current, target: option.target, projectScope: option.projectScope }));
             }}>
-              {writeOptions(form.editing).map(option => <option key={`${option.target}:${option.projectScope}`} value={`${option.target}:${option.projectScope}`}>{option.label}</option>)}
+              {writeOptions(form.editing).map(option => <option key={`${option.target}:${String(option.projectScope)}`} value={`${option.target}:${String(option.projectScope)}`}>{option.label}</option>)}
             </select></SettingsField>
             <SettingsField wide label="Description" note="pi's note about the server. It is written into the config file beside the rest of the definition."><input value={form.description} placeholder="What this server is for" onChange={event => setField("description", event.target.value)}/></SettingsField>
             {form.transport === "stdio"
@@ -262,7 +273,7 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
               </>}
             <SettingsField label="Timeout (seconds)"><input value={form.timeout} inputMode="numeric" placeholder="pi's default" onChange={event => setField("timeout", event.target.value)}/></SettingsField>
         </>}
-        <SettingsField label="Exposure"><select value={form.exposure} onChange={event => setField("exposure", event.target.value === "" ? "" : event.target.value as McpFormState["exposure"])}>
+        <SettingsField label="Exposure"><select value={form.exposure} onChange={event => setField("exposure", exposureChoice(event.target.value))}>
           <option value="">pi's default (codemode)</option>
           <option value="codemode">codemode</option>
           <option value="deferred">deferred</option>

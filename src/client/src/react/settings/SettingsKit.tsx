@@ -206,8 +206,8 @@ export function NoticeList({ busy, notice, error }: NoticeListProps) {
   const successes = (notice ?? []).filter((entry): entry is string => entry !== undefined && entry.trim().length > 0);
   if (failures.length === 0 && busy === undefined && successes.length === 0) return null;
   return <div className="rw-settings-notices">
-    {failures.map((entry, index) => <p className="rw-settings-notice is-danger" key={`error-${index}`} role="alert">{entry}</p>)}
+    {failures.map((entry, index) => <p className="rw-settings-notice is-danger" key={`error-${String(index)}`} role="alert">{entry}</p>)}
     {busy === undefined ? null : <p className="rw-settings-notice is-info" role="status">{busy}…</p>}
-    {successes.map((entry, index) => <p className="rw-settings-notice is-success" key={`notice-${index}`} role="status">{entry}</p>)}
+    {successes.map((entry, index) => <p className="rw-settings-notice is-success" key={`notice-${String(index)}`} role="status">{entry}</p>)}
   </div>;
 }
