@@ -1261,3 +1261,33 @@ Read it with the two gaps above: lint reads `.ts` only, so the React components 
 typechecked and tested, not linted. And the plugin runtime's published subpaths are not resolvable
 by a plugin module in the browser yet, so the React contribution contract is host-side complete
 and not yet usable end to end by an external plugin.
+
+## Addendum — the page resolves a plugin's React, and one guard caught a regression
+
+Commits: `dcb15296` (import map, plugin-build externals, React-bundling guard) and `533ef951`
+(document entry name).
+
+The client build emits `plugin-react.js`, `plugin-react-hooks.js` and `jsx-runtime.js` as stable
+unhashed entries, and `index.html` names those three specifiers in an import map, document-relative
+like every other client asset under `base: "./"`. The plugin build treats them as external and
+refuses a bundle whose own inputs reach `react` or `react-dom` in `node_modules`. The published
+entries carry no React of their own — `plugin-react.js` is the `globalThis` registry,
+`plugin-react-hooks.js` binds each member to what the app published — which is why no bare `react`
+specifier needs a map entry, and why one React per page holds: `__SECRET_INTERNALS` appears in none
+of the client chunks.
+
+Two failures this pass produced, both real and both fixed at the cause. The first build died on
+`Cannot access 'HOST_REACT_SPECIFIERS' before initialization`: the plugin script runs at top level,
+and the constant was declared beside the function that uses it. The first green build then broke
+`clientBuildContents.test.ts`, because keying the HTML input `main` renamed the document's entry
+chunk from `assets/index-<hash>.js` to `assets/main-<hash>.js`; that test guards a deployment
+convention, so the convention was restored rather than the guard loosened, and the React entries
+keep their own keys through the prefix rule in `entryFileNames`.
+
+Verification: `pnpm run verify` exits 0 — 702 test files, 6205 passed, 5 skipped. `pnpm run build`
+exits 0, the document entry is `assets/index-CI_1cBpv.js`, the three stable entries exist, and
+`dist/client/index.html` carries the import map with the three specifiers.
+
+Browser evidence: not run. No page has loaded a React-contributing plugin through the map. That is
+the mermaid migration (`renderReact` through the fence host that already landed), and the runtime
+claim stays build-level until it is driven on the 8505 stack at desktop 1440 and mobile 393x850.
