@@ -21,6 +21,15 @@ function declarations(css: string): Map<string, string> {
 
 const values = declarations(stylesheet);
 
+function tokensConsulted(css: string): string[] {
+  const found = new Set<string>();
+  for (const match of css.matchAll(/var\((--pi-[a-z0-9-]+)/g)) {
+    const token = match[1];
+    if (token !== undefined) found.add(token);
+  }
+  return [...found];
+}
+
 /**
  * The React surface is a projection of the theme, not a second palette.
  *
@@ -37,21 +46,20 @@ describe("React palette", () => {
   it("names every React colour after a theme token, so a theme change reaches the surface", () => {
     const names = [...values.keys()];
     expect(names.length).toBeGreaterThan(15);
-    const detached = names.filter((name) => !values.get(name)!.includes("var(--pi-"));
+    const detached = names.filter((name) => values.get(name)?.includes("var(--pi-") !== true);
     expect(detached).toEqual([]);
   });
 
   it("consults only tokens the theme applier paints", () => {
-    const consulted = new Set([...stylesheet.matchAll(/var\((--pi-[a-z0-9-]+)/g)].map((match) => match[1]!));
-    expect(consulted.size).toBeGreaterThan(10);
-    expect([...consulted].filter((token) => !themeTokens.has(token))).toEqual([]);
+    const consulted = tokensConsulted(stylesheet);
+    expect(consulted.length).toBeGreaterThan(10);
+    expect(consulted.filter((token) => !themeTokens.has(token))).toEqual([]);
   });
 
   it("is answered by every theme the Appearance page offers", () => {
-    const consulted = [...new Set([...stylesheet.matchAll(/var\((--pi-[a-z0-9-]+)/g)].map((match) => match[1]!))];
+    const consulted = tokensConsulted(stylesheet);
     for (const theme of NATIVE_THEME_CHOICES) {
-      const tokens = theme.tokens as Record<string, string | undefined>;
-      const missing = consulted.filter((token) => tokens[token] === undefined);
+      const missing = consulted.filter((token) => !Object.prototype.hasOwnProperty.call(theme.tokens, token));
       expect(missing, `${theme.id} paints every token the React surface reads`).toEqual([]);
     }
   });
