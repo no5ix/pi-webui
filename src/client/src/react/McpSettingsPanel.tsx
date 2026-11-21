@@ -23,7 +23,6 @@ import {
   piMcpStatusTone,
   piMcpTrustNote,
   piMcpSecurityLines,
-  MCP_MUTATION_DEADLINE_MS,
   idleMcpMutation,
   mcpMutationGaveUpNotice,
   mcpMutationDeadlinePassed,
@@ -32,6 +31,7 @@ import {
   type McpMutationAction,
   type McpMutationState,
 } from "./settings/piMcpSettingsState";
+import { MUTATION_DEADLINE_MS } from "./settings/settingsMutation";
 import { NoticeList,
   SettingsButton,
   SettingsCard,
@@ -98,7 +98,7 @@ export function McpSettingsPanel({ data, busy, run, machineLabel, projectScope, 
     if (mutation.kind !== "running") return;
     const timer = setTimeout(() => {
       if (!mcpMutationDeadlinePassed(mutation)) return;
-      const gaveUp = { kind: "gaveUp", action: mutation.action, label: mutation.label, waitedMs: MCP_MUTATION_DEADLINE_MS } as const;
+      const gaveUp = { kind: "gaveUp", action: mutation.action, label: mutation.label, waitedMs: MUTATION_DEADLINE_MS } as const;
       setMutation(gaveUp);
       setGaveUpNotice(mcpMutationGaveUpNotice(gaveUp));
     }, Math.max(0, mutation.deadlineAt - Date.now()));

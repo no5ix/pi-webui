@@ -1,3 +1,4 @@
+import { MUTATION_DEADLINE_MS } from "./settingsMutation";
 import type { PiMcpListResponse, PiMcpServerInfo } from "../../api";
 
 /**
@@ -232,7 +233,7 @@ export function piMcpMutationMessage(action: "save" | "test" | "remove" | "enabl
  * action could and could not have changed, and how to try again. The controls are unlocked on the
  * give-up, because a page that cannot be pressed again is a page that cannot recover.
  */
-export const MCP_MUTATION_DEADLINE_MS = 20_000;
+
 
 export type McpMutationAction = "save" | "test" | "remove" | "enable";
 
@@ -253,7 +254,7 @@ export interface McpMutationGaveUp {
 export type McpMutationState = { readonly kind: "idle" } | McpMutationRunning | McpMutationGaveUp;
 
 export function startMcpMutation(action: McpMutationAction, label: string, now: number = Date.now()): McpMutationRunning {
-  return { kind: "running", action, label, deadlineAt: now + MCP_MUTATION_DEADLINE_MS };
+  return { kind: "running", action, label, deadlineAt: now + MUTATION_DEADLINE_MS };
 }
 
 export function idleMcpMutation(): McpMutationState {

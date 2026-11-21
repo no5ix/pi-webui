@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { PiMcpListResponse, PiMcpServerInfo, PiMcpSaveRequest, Project } from "../api";
 import { McpSettingsPanel, type McpSettingsPanelProps } from "./McpSettingsPanel";
-import { MCP_MUTATION_DEADLINE_MS } from "./settings/piMcpSettingsState";
+import { MUTATION_DEADLINE_MS } from "./settings/settingsMutation";
 
 const globalFile = "/home/pi/.pi/agent/mcp.json";
 const projectFile = "/srv/repo/.pi/mcp.json";
@@ -409,7 +409,7 @@ describe("React MCP settings panel", () => {
     expect(button("Test connection").disabled).toBe(true);
 
     await act(async () => {
-      vi.advanceTimersByTime(MCP_MUTATION_DEADLINE_MS + 20);
+      vi.advanceTimersByTime(MUTATION_DEADLINE_MS + 20);
       await Promise.resolve();
     });
 
@@ -433,7 +433,7 @@ describe("React MCP settings panel", () => {
     expect(container.textContent).toContain("Updating “files”");
 
     await act(async () => {
-      vi.advanceTimersByTime(MCP_MUTATION_DEADLINE_MS + 20);
+      vi.advanceTimersByTime(MUTATION_DEADLINE_MS + 20);
       await Promise.resolve();
     });
 

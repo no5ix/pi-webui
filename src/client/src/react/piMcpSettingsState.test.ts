@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PiMcpListResponse, PiMcpServerInfo } from "../api";
+import { MUTATION_DEADLINE_MS } from "./settings/settingsMutation";
 import {
-  MCP_MUTATION_DEADLINE_MS,
   idleMcpMutation,
   mcpMutationDeadlinePassed,
   mcpMutationGaveUpNotice,
@@ -269,32 +269,32 @@ describe("MCP mutation bound", () => {
 
   it("runs a mutation against one named bound", () => {
     const running = startMcpMutation("test", "Testing “files”", now);
-    expect(running.deadlineAt).toBe(now + MCP_MUTATION_DEADLINE_MS);
+    expect(running.deadlineAt).toBe(now + MUTATION_DEADLINE_MS);
     expect(mcpMutationLocks(running)).toBe(true);
-    expect(mcpMutationDeadlinePassed(running, now + MCP_MUTATION_DEADLINE_MS - 1)).toBe(false);
-    expect(mcpMutationDeadlinePassed(running, now + MCP_MUTATION_DEADLINE_MS)).toBe(true);
+    expect(mcpMutationDeadlinePassed(running, now + MUTATION_DEADLINE_MS - 1)).toBe(false);
+    expect(mcpMutationDeadlinePassed(running, now + MUTATION_DEADLINE_MS)).toBe(true);
   });
 
   it("unlocks the page when the mutation is over", () => {
     expect(mcpMutationLocks(idleMcpMutation())).toBe(false);
-    expect(mcpMutationLocks({ kind: "gaveUp", action: "test", label: "Testing “files”", waitedMs: MCP_MUTATION_DEADLINE_MS })).toBe(false);
-    expect(mcpMutationDeadlinePassed(idleMcpMutation(), now + MCP_MUTATION_DEADLINE_MS * 2)).toBe(false);
+    expect(mcpMutationLocks({ kind: "gaveUp", action: "test", label: "Testing “files”", waitedMs: MUTATION_DEADLINE_MS })).toBe(false);
+    expect(mcpMutationDeadlinePassed(idleMcpMutation(), now + MUTATION_DEADLINE_MS * 2)).toBe(false);
   });
 
   it("says a connection test changed nothing and names the retry", () => {
-    const notice = mcpMutationGaveUpNotice({ kind: "gaveUp", action: "test", label: "Testing “files”", waitedMs: MCP_MUTATION_DEADLINE_MS });
+    const notice = mcpMutationGaveUpNotice({ kind: "gaveUp", action: "test", label: "Testing “files”", waitedMs: MUTATION_DEADLINE_MS });
     expect(notice).toContain("Testing “files” did not answer within 20 seconds");
     expect(notice).toContain("A connection test changes nothing");
     expect(notice).toContain("Press Test connection again");
   });
 
   it("says a write may have landed and points at the reload", () => {
-    const save = mcpMutationGaveUpNotice({ kind: "gaveUp", action: "save", label: "Saving “files”", waitedMs: MCP_MUTATION_DEADLINE_MS });
+    const save = mcpMutationGaveUpNotice({ kind: "gaveUp", action: "save", label: "Saving “files”", waitedMs: MUTATION_DEADLINE_MS });
     expect(save).toContain("Saving “files” did not answer within 20 seconds");
     expect(save).toContain("may have saved the entry");
     expect(save).toContain("Reload reads the config files again");
     expect(save).not.toContain("A connection test changes nothing");
-    expect(mcpMutationGaveUpNotice({ kind: "gaveUp", action: "remove", label: "Removing “files”", waitedMs: MCP_MUTATION_DEADLINE_MS })).toContain("may have removed the entry");
-    expect(mcpMutationGaveUpNotice({ kind: "gaveUp", action: "enable", label: "Updating “files”", waitedMs: MCP_MUTATION_DEADLINE_MS })).toContain("may have changed the entry");
+    expect(mcpMutationGaveUpNotice({ kind: "gaveUp", action: "remove", label: "Removing “files”", waitedMs: MUTATION_DEADLINE_MS })).toContain("may have removed the entry");
+    expect(mcpMutationGaveUpNotice({ kind: "gaveUp", action: "enable", label: "Updating “files”", waitedMs: MUTATION_DEADLINE_MS })).toContain("may have changed the entry");
   });
 });

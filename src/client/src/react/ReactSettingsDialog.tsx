@@ -5,6 +5,7 @@ import { CORE_BUILTIN_DARK_THEME_ID } from "../builtinDarkTheme";
 import type { QualifiedContributionId } from "../plugins/types";
 import type { PaintScope } from "../themePaint";
 import { McpSettingsPanel } from "./McpSettingsPanel";
+import { isMutationDeadline, mutationDeadlineNotice, runWithinDeadline } from "./settings/settingsMutation";
 import { NotificationsSettingsPanel } from "./NotificationsSettingsPanel";
 import { PackagesSettingsPanel } from "./settings/PiPackagesSettingsPanel";
 import { SkillsSettingsPanel } from "./settings/SkillsSettingsPanel";
@@ -76,9 +77,9 @@ export function ReactSettingsDialog({ data, open, onClose, pluginFailures = [] }
     setBusy(true);
     setNotice(undefined);
     try {
-      return await action();
+      return await runWithinDeadline(action());
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error));
+      setNotice(isMutationDeadline(error) ? mutationDeadlineNotice(error.deadlineMs) : (error instanceof Error ? error.message : String(error)));
       return undefined;
     } finally {
       setBusy(false);
