@@ -26,11 +26,16 @@ export const SETTINGS_RESOURCES = ["config", "plugins", "packages", "skills", "m
 /**
  * One read's answers, for one scope.
  *
- * A read is over when every resource has answered, successfully or not: a page stops loading on an
- * answer that named a failure and never on an answer that did not arrive. The ledger belongs to the
- * newest read for a scope, so answers from a superseded read are dropped. A resource whose request
+ * A read is over when every resource it expects has answered, successfully or not: a page stops loading
+ * on an answer that named a failure and never on an answer that did not arrive. The ledger belongs to
+ * the newest read for a scope, so answers from a superseded read are dropped. A resource whose request
  * could not even start is answered too — a barrier that waits for a request that was never made holds
  * the page at "loading" forever, which is how a whole Settings page goes blind.
+ *
+ * A read names what it expects. A page Reload and a write's refresh ask for one list, not for the five
+ * resources a whole scope read takes; counting a single-list refresh against the full set left the page
+ * at "loading" with one of five answered and never clearing, because the refresh is the newest read and
+ * the four answers it never asked for were dropped with the read they belonged to.
  */
 export interface SettingsReadLedger {
   readonly scopeKey: string;
@@ -38,8 +43,12 @@ export interface SettingsReadLedger {
   readonly pending: number;
 }
 
-export function beginSettingsRead(scopeKey: string, requestId: number): SettingsReadLedger {
-  return { scopeKey, requestId, pending: SETTINGS_RESOURCES.length };
+export function beginSettingsRead(
+  scopeKey: string,
+  requestId: number,
+  expected: readonly string[] = SETTINGS_RESOURCES,
+): SettingsReadLedger {
+  return { scopeKey, requestId, pending: expected.length };
 }
 
 /** Whether an answer belongs to the read the page is waiting for. */

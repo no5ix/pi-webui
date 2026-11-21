@@ -355,6 +355,8 @@ describe("React Settings data", () => {
     const rows = harness.data().settings.skills?.skills ?? [];
     expect(rows.some(row => row.scope === "project" && row.name === "release-notes")).toBe(true);
     expect(harness.text()).toContain("release-notes");
+    expect(harness.data().settings.loading, "a single-list refresh drains its own read").toBe(false);
+    expect(harness.text()).not.toContain("Loading settings");
     expect(harness.calls("pi-skills/set-enabled").length).toBe(1);
     expect(harness.calls(`pi-skills?projectId=${autoToc.id}`).length).toBe(2);
     expect(harness.text()).toContain("Skill saved");

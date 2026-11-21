@@ -291,7 +291,7 @@ export function useReactWorkspaceData(): ReactWorkspaceData {
     const project = settingsProjectIdRef.current;
     const scopeKey = settingsScopeKey({ machineId, projectId: project });
     const requestId = ++settingsRequestIdRef.current;
-    settingsAnswersRef.current = beginSettingsRead(scopeKey, requestId);
+    settingsAnswersRef.current = beginSettingsRead(scopeKey, requestId, [group]);
     setSettings(current => ({ ...current, scopeKey, loading: true }));
     if (group === "skills") {
       await readSettingsResource(scopeKey, requestId,

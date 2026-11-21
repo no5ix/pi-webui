@@ -51,6 +51,18 @@ describe("settings scope", () => {
     expect(settleSettingsResource(read, scopeKey, 9).pending).toBe(0);
   });
 
+  it("finishes a single-list refresh on its one answer, so a write's refresh cannot load forever", () => {
+    const scopeKey = settingsScopeKey(SCOPE);
+    const refresh = beginSettingsRead(scopeKey, 11, ["skills"]);
+    expect(refresh.pending).toBe(1);
+    const settled = settleSettingsResource(refresh, scopeKey, 11);
+    expect(settled.pending).toBe(0);
+
+    const whole = beginSettingsRead(scopeKey, 12);
+    expect(whole.pending).toBe(SETTINGS_RESOURCES.length);
+    expect(settleSettingsResource(whole, scopeKey, 12).pending).toBe(SETTINGS_RESOURCES.length - 1);
+  });
+
   it("reports every failed read of a scope, not only the last", () => {
     expect(appendSettingsFailure(undefined, undefined)).toBeUndefined();
     expect(appendSettingsFailure("config failed", undefined)).toBe("config failed");
