@@ -8,7 +8,10 @@
     "extensions/pi-web.ts",
     "pi-web-plugins/**/pi-web-plugin.ts",
     "pi-web-plugins/**/server-plugin.ts",
-    "scripts/*.mjs"
+    "scripts/*.mjs",
+    "src/plugin-react.ts",
+    "src/plugin-react-hooks.ts",
+    "src/jsx-runtime.ts"
   ],
   "project": [
     "src/**/*.ts",

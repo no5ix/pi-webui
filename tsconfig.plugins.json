@@ -1,8 +1,17 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@gang-of-beads/pi-web"
   },
-  "include": ["pi-web-plugins/**/*.ts"],
-  "exclude": ["pi-web-plugins/**/*.test.ts", "pi-web-plugins/**/testSupport/**/*.ts", "pi-web-plugins/**/*testSupport.ts"]
+  "include": [
+    "pi-web-plugins/**/*.ts",
+    "pi-web-plugins/**/*.tsx"
+  ],
+  "exclude": [
+    "pi-web-plugins/**/*.test.ts",
+    "pi-web-plugins/**/testSupport/**/*.ts",
+    "pi-web-plugins/**/*testSupport.ts"
+  ]
 }

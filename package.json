@@ -14,6 +14,21 @@
     "./server-plugin-api": {
       "types": "./dist/server-plugin-api.d.ts",
       "import": "./dist/server-plugin-api.js"
+    },
+    "./plugin-react": {
+      "types": "./dist/plugin-react.d.ts",
+      "import": "./dist/plugin-react.js",
+      "default": "./dist/plugin-react.js"
+    },
+    "./plugin-react-hooks": {
+      "types": "./dist/plugin-react-hooks.d.ts",
+      "import": "./dist/plugin-react-hooks.js",
+      "default": "./dist/plugin-react-hooks.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/jsx-runtime.d.ts",
+      "import": "./dist/jsx-runtime.js",
+      "default": "./dist/jsx-runtime.js"
     }
   },
   "typesVersions": {
@@ -46,7 +61,10 @@
     "CONTRIBUTING.md",
     "docs/assets",
     "plugin-api.d.ts",
-    "server-plugin-api.d.ts"
+    "server-plugin-api.d.ts",
+    "plugin-react.d.ts",
+    "plugin-react-hooks.d.ts",
+    "jsx-runtime.d.ts"
   ],
   "scripts": {
     "dev": "bash scripts/dev.sh",

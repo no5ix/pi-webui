@@ -53,6 +53,10 @@ async function bundleBrowserEntries() {
       bundle: true,
       format: "esm",
       platform: "browser",
+      // A plugin's JSX is compiled against the host's runtime, so a plugin bundle carries no React of
+      // its own and the page keeps one reconciler. See src/jsx-runtime.ts.
+      jsx: "automatic",
+      jsxImportSource: "@gang-of-beads/pi-web",
       allowOverwrite: true,
       target: "es2022",
       logLevel: "silent",
