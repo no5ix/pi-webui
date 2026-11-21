@@ -621,6 +621,25 @@ that lists the five bundled plugins; `pageApi` truncated bodies at 400 character
 which killed a run in preflight.
 
 
+### Pi Packages: the project scope is not carried by the API (measured gap, not fixed)
+
+The page lists rows the machine reports for **both** scopes (`scope: Global` and `scope: Project`, with
+the project's file named on the row), and it offers a project row's removal. Nothing in the contract can
+name the project the page is showing: `piPackagesApi` (`clients.ts:246-258`) sends `{source, scope}` and
+no project - `packages()`, `install`, `remove`, `update` and `setEnabled` all take only a machine - and
+`registerPiPackageRoutes` (`piPackageRoutes.ts:12-45`) reads `source`/`scope`/`enabled` from the body and
+`projectId` from nowhere. `DefaultPiPackageService.remove` turns `scope: "project"` into
+`manager.removeAndPersist(source, { local: true })` (`piPackageService.ts:110-118`), so the project the
+write lands in is whatever the machine's active profile points at, not the project the reader selected.
+The MCP and Skills routes solved this long ago: they take a `projectId` and resolve it through
+`settingsProjectResolver` on the machine that owns the project store.
+
+The design for the fix is the MCP shape, not a new one: add `projectId` to the packages requests, resolve
+it server-side to the project's settings file, refuse a project-scope write when no project is named, and
+have the page send its own `settingsProjectId` on every package operation. **Not implemented** - the
+browser pass this session verifies the global scope, which the contract can express.
+
+
 ## Phase 5 status: browser evidence and what is still open
 
 Runs: `/tmp/piweb-br/cdp24.mjs` (driver), stack `scripts/stack-8505.sh` on 8505, fixtures
