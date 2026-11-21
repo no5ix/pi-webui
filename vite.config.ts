@@ -154,7 +154,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: resolve("src/client/index.html"),
+        index: resolve("src/client/index.html"),
         ...Object.fromEntries(pluginReactModules.map((name) => [name, resolve(`src/${name}.ts`)])),
       },
       output: {
