@@ -11,6 +11,19 @@ Branch: `feat/react-workspace-ui-from-main`. The React app is the entry point:
 `src/client/index.html` loads `/src/react-main.tsx`, which renders `ReactWorkspaceApp`. The Lit
 application (`src/client/src/main.ts`) is no longer an entry point.
 
+### Checkpoint 2026-11-22 05:40
+
+Phase 1 of the current mission is complete: the five open findings are triaged with mechanisms, not
+guesses. Three real defects are fixed - the React palette now projects from the theme the applier paints
+(`f1f219ed`), a package removal that found nothing says so (`dd987bb9`), and a single-list refresh drains
+its own read instead of holding the page at "Loading settings…" forever (`8a423d92`); the close control
+got a browser handle (`f0892930`). Phase 5 is largely evidenced, desktop and 393x850, with three named
+open items in **Phase 5 status** - the hung MCP test-connection locking its panel (product decision on
+the timeout), the pi-managed package removal, and a harness read-back that queries the wrong scope.
+Phase 4 (plugin React integration) is **not started**. The verify gate at `cdef1d97` exited 1 on four
+lint errors in the new palette test, fixed in `c367cd65`; a clean gate run is in flight at this HEAD and
+its number belongs here when it lands.
+
 ### Checkpoint 2026-11-21 04:40
 
 Workbench merged, suite green at `4aeb71d4` (**6154 passed / 5 skipped / 0 failed**; typecheck, lint,
@@ -606,6 +619,56 @@ selects at 44px) instead of controls; the mobile install selector used a test id
 input is `[aria-label="Package source"]`); the Plugins needles demanded an empty-state string on a page
 that lists the five bundled plugins; `pageApi` truncated bodies at 400 characters and then parsed them,
 which killed a run in preflight.
+
+
+## Phase 5 status: browser evidence and what is still open
+
+Runs: `/tmp/piweb-br/cdp24.mjs` (driver), stack `scripts/stack-8505.sh` on 8505, fixtures
+`/tmp/piweb-br/fixtures6.sh`. Logs `/tmp/cdp24-mobile.log`, `/tmp/cdp26-desktop.log`;
+results `results20.json`; screenshots `/tmp/piweb-br/shots20/`.
+
+**Verified live, desktop 1440 and mobile 393x850:**
+- All eight Settings sections open, settle, render their own content; the titlebar names the machine.
+- Appearance: choosing Material Dark / Material Light changes the painted palette (`--rw-bg` `#141218`
+  vs `#fdf7ff`), the theme attribute, `color-scheme`, and the stored/painted keys; the theme survives a
+  section change and a reload paints it in the first frame.
+- Close: `[data-test-id="settings-close"]` closes the dialog (`dialog.open === false`) and reopening
+  shows a loaded page, not a loader.
+- Reload: the page's Reload picks up a server written behind its back within one second, loader clears.
+- Skills (global and project): the toggle flips in one second, the machine's `config.json` records
+  `skills.disabled: [{id,name}]` for a global write, the project's rows survive a global write, and the
+  page's own sentence names the scope.
+- MCP rows: transport/command, the secret's **name** with its value hidden (`secrets: FIXTURE_TOKEN —
+  values hidden`), the file the write goes to, the global/project scope split, the project file named in
+  the add form, and the two-press removal with its target file named.
+- Machines: list, add form, machine switch, the new machine's pages settle.
+- Mobile 393x850 (154 checks): no overflow, no horizontal scroll, nav visible, no control under 28px,
+  card action rows and fields at least 44px, the MCP add form fits and keeps its fields, the install
+  input is reachable, the skill card adapts.
+
+**Open, with the mechanism established (not verified, not fixed):**
+- **A test-connection request that does not settle leaves the MCP panel busy and locked.** In the sweep,
+  after the test-connection click the panel answered nothing, the add form never opened
+  (`timeout waiting for the add form`), and the list read answered empty. The panel's own busy contract is
+  "package/MCP controls are disabled while it runs"; the client has no timeout or cancel around the
+  mutation, so a server that hangs at handshake keeps the page locked with no stated deadline. The server
+  route answers correctly when the entry exists (`404 No MCP server named "fixture" is configured
+  globally` for a fixture the sweep had already removed). **Maintainers should decide** the timeout and
+  the wording; the fix is a bounded request plus an honest "still trying / gave up" state, not a quieter
+  busy label.
+- **Packages removal of a pi-managed entry.** The live page produced exactly the new refusal
+  ("Nothing was removed: ../pkg/pi-demo-extension is not configured in Global settings…") for a package
+  recorded in pi's plain string form, which is the correct answer. The leg's expectation that the file
+  drops the entry is only reachable with an entry pi's manager carries; the fixture preflight now removes
+  then installs through the API to get that form, and the accepted-removal path (file write, list update,
+  empty state) is **not yet browser-verified**.
+- **Harness artifact, still to correct:** the skills read-back queries the machine's global list for a
+  project-scope skill (`skill missing: 200 name=project-release-notes`); it must read the scope the row
+  belongs to. Until then, the project-skill read-back line is not evidence.
+
+**Not started: Phase 4, plugin React integration.** The theme projection is the mechanism a contributed
+theme needs (a plugin theme's own `--pi-*` ladder now drives the React surface), and the measured
+prerequisites for the other families are in **Plugin host in React: the measured prerequisites**.
 
 
 ## Browser pass of 2026-11-21 (first block): what was evidenced, and what was not
