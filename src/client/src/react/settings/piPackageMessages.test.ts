@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PiPackageMutationResponse } from "../../../shared/apiTypes";
+import type { PiPackageMutationResponse } from "../../../../shared/apiTypes";
 import { piPackageRemoveMessage, piPackageUpdateMessage } from "./piPackageSettingsState";
 
 function response(overrides: Partial<PiPackageMutationResponse>): PiPackageMutationResponse {
