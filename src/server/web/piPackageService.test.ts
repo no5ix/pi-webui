@@ -71,7 +71,7 @@ describe("ActiveProfilePiPackageService", () => {
     const serviceForContext = vi.fn((context: { agentDir: string; cwd: string; projectTrusted: boolean }): PiPackageService => context.agentDir === "/state/first" ? firstService : secondService);
     const service = new ActiveProfilePiPackageService({ getActiveAgentProfile }, serviceForContext, () => resolverFor({}, true));
 
-    await expect(service.list({})).resolves.toEqual({ packages: [enabledInfo({ source: "first", scope: "user", filtered: false })] });
+    await expect(service.list()).resolves.toEqual({ packages: [enabledInfo({ source: "first", scope: "user", filtered: false })] });
     await expect(service.install({ source: "npm:@acme/tools" })).resolves.toMatchObject({ action: "install", source: "npm:@acme/tools", packages: [{ source: "second" }] });
 
     expect(serviceForContext).toHaveBeenNthCalledWith(1, { agentDir: "/state/first", cwd: process.cwd(), projectTrusted: false });
@@ -106,7 +106,7 @@ describe("ActiveProfilePiPackageService", () => {
     const service = new ActiveProfilePiPackageService({ getActiveAgentProfile }, serviceForContext, () => resolverFor({ "p-1": "/state/a/project" }, true));
 
     await service.remove({ source: "../project-tools", scope: "project", projectId: "p-1" });
-    await service.list({});
+    await service.list();
 
     expect(serviceForContext).toHaveBeenNthCalledWith(1, { agentDir: "/state/a", cwd: "/state/a/project", projectId: "p-1", projectPath: "/state/a/project", projectTrusted: true });
     expect(serviceForContext).toHaveBeenNthCalledWith(2, { agentDir: "/state/a", cwd: process.cwd(), projectTrusted: false });
@@ -128,7 +128,7 @@ describe("ActiveProfilePiPackageService", () => {
     const serviceForContext = vi.fn<(context: { agentDir: string; cwd: string; projectTrusted: boolean }) => PiPackageService>();
     const service = new ActiveProfilePiPackageService(activeAgentProfile, serviceForContext, () => resolverFor({}, true));
 
-    await expect(service.list({})).rejects.toMatchObject({
+    await expect(service.list()).rejects.toMatchObject({
       profileStatus: status,
       message: `Active agent profile is ${status}: ${status} profile`,
     });
@@ -148,7 +148,7 @@ describe("DefaultPiPackageService list", () => {
     ]);
     const service = new DefaultPiPackageService(fake.manager, trustedProject);
 
-    await expect(service.list({})).resolves.toEqual({
+    await expect(service.list()).resolves.toEqual({
       packages: [
         enabledInfo({ source: "npm:@acme/user-tools", scope: "user", filtered: false, installedPath: "/home/test/.pi/packages/user-tools" }),
         enabledInfo({ source: "../project-tools", scope: "project", filtered: true }),
@@ -174,7 +174,7 @@ describe("DefaultPiPackageService list", () => {
     ]);
     const service = new DefaultPiPackageService(fake.manager, machineScope);
 
-    await expect(service.list({})).resolves.toEqual({
+    await expect(service.list()).resolves.toEqual({
       packages: [enabledInfo({ source: "npm:@acme/user-tools", scope: "user", filtered: false })],
       globalConfigPath: "/agent/settings.json",
       projectTrusted: false,
@@ -189,7 +189,7 @@ describe("DefaultPiPackageService list", () => {
     ]);
     const service = new DefaultPiPackageService(fake.manager, untrustedProject);
 
-    await expect(service.list({})).resolves.toEqual({
+    await expect(service.list()).resolves.toEqual({
       packages: [enabledInfo({ source: "npm:@acme/user-tools", scope: "user", filtered: false })],
       globalConfigPath: "/agent/settings.json",
       projectId: "p-1",
@@ -212,7 +212,7 @@ describe("DefaultPiPackageService list", () => {
     );
     const service = new DefaultPiPackageService(fake.manager, machineScope);
 
-    await expect(service.list({})).resolves.toEqual({
+    await expect(service.list()).resolves.toEqual({
       packages: [
         { source: "npm:@acme/tools", scope: "user", filtered: true, disabled: true, enabled: false },
         enabledInfo({ source: "npm:@acme/other", scope: "user", filtered: true }),
@@ -503,7 +503,7 @@ describe("DefaultPiPackageService setEnabled", () => {
     const installPromise = service.install({ source: "npm:@acme/new-tools" });
     await Promise.resolve();
 
-    await expect(service.list({})).resolves.toEqual({
+    await expect(service.list()).resolves.toEqual({
       packages: [enabledInfo({ source: "npm:@acme/old-tools", scope: "user", filtered: false })],
       globalConfigPath: "/agent/settings.json",
       projectTrusted: false,

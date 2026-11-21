@@ -108,7 +108,7 @@ export class ActiveProfilePiPackageService implements PiPackageService {
     private readonly settingsProjects: (agentDir: string) => SettingsProjectResolver,
   ) {}
 
-  list(request: PiPackagesListRequest): Promise<PiPackagesResponse> {
+  list(request: PiPackagesListRequest = {}): Promise<PiPackagesResponse> {
     return this.withService(request, (service) => service.list(request));
   }
 
@@ -159,7 +159,7 @@ export class DefaultPiPackageService implements PiPackageService {
     private readonly scope: PiPackageScopeContext = { projectTrusted: false },
   ) {}
 
-  list(_request: PiPackagesListRequest = {}): Promise<PiPackagesResponse> {
+  list(): Promise<PiPackagesResponse> {
     return Promise.resolve(this.listResponse());
   }
 
