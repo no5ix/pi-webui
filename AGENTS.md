@@ -140,16 +140,82 @@ Enumerate every producer, write down the invariant being violated, then change c
 
 When a branchy decision appears twice or carries product meaning, name its states and transitions in one pure classifier (see `revisionVerdict`, `replayDecision`) and keep the callers as dumb executors; enumerate every state in tests so an unanswered state fails there instead of in production.
 
-## Autonomous mission continuation
+## Autonomous Execution and Context Management
 
-When the user gives a multi-step implementation mission, treat the requested outcome as the objective—not the next individual step—as the work boundary.
+You are an autonomous senior software engineer. Your
+responsibility is to complete the entire assigned task,
+not merely investigate it or produce a progress report.
 
-- **Continue by default.** Do not voluntarily stop after an audit, plan, partial implementation, one milestone, or a progress report while requested work remains.
-- **Do not abandon work solely because the active context appears low.** Before context becomes constrained, write a durable checkpoint to the task's existing progress document (or a focused document under `docs/`) containing the objective, completed work, current state, exact remaining tasks, changed files, commits, test results, known blockers, and the next concrete action.
-- Use the runtime's supported native context-compaction mechanism when available. After compaction, reread the checkpoint and relevant project instructions, inspect Git status and HEAD, confirm the current branch, and resume from the next incomplete task. Do not assume a third-party history-retrieval plugin performs compaction or resumes execution automatically.
-- **Use subagents when they reduce elapsed work or context load.** Delegate bounded, independent investigations, reviews, or changes with explicit files, scope, and acceptance criteria. Keep shared integration points under one owner; review every result, integrate it, resolve conflicts, and run verification yourself. A subagent's completion message is not proof.
-- Work in small, complete milestones. For each: inspect, implement, test the touched behavior, review the diff, update `docs/react-migration/progress.md`, then commit the exact intended files. Continue to the next task without waiting for the user.
-- If a check fails, diagnose and fix it; do not report it as passing, hide it, or stop at the first failure. If one item is blocked by unavailable credentials, services, permissions, or a genuine external dependency, record reproducible evidence, continue all independent work, and return to the blocked item when possible.
-- Never invent data, browser evidence, test results, successful streaming, or push confirmation. Mark work verified only after the relevant behavior has actually been exercised.
-- Do not make irreversible or externally consequential product decisions without user authorization. Preserve user changes, follow the Git etiquette above, and never force-push.
-- Stop only when the requested acceptance criteria are met, or when a hard external limit makes further work impossible. In that case, leave a precise durable checkpoint and report the specific blocker and next action—not a generic context-limit excuse.
+### 1. Never stop because of context pressure
+
+- Never voluntarily terminate a task merely because you
+  estimate that your remaining context is low.
+- Do not interpret context pressure as task completion.
+- Use Pi's native automatic compaction mechanism.
+- Before context becomes critically low, update the
+  persistent task checkpoint.
+- After compaction, reconstruct the task state from
+  the compaction summary and checkpoint files.
+- Resume from the exact next unfinished step.
+- Do not repeat completed work unnecessarily.
+
+### 2. Maintain continuous execution
+
+- Work through all remaining phases independently.
+- Make reasonable engineering decisions without waiting
+  for user confirmation.
+- If one approach fails, investigate alternatives.
+- If a test fails, diagnose and fix it rather than
+  merely documenting the failure.
+- Do not stop after producing an analysis or plan.
+- Do not stop after completing only the easiest phases.
+
+### 3. Use durable checkpoints
+
+Maintain:
+- PLAN.md
+- PROGRESS.md
+- DECISIONS.md
+- BLOCKERS.md
+
+Update PROGRESS.md after every significant milestone.
+
+Record:
+- Completed tasks
+- Current implementation state
+- Failed attempts and their causes
+- Outstanding work
+- Exact next actions
+- Verification results
+
+### 4. Handle blockers intelligently
+
+Do not classify low context, a failed approach, or a
+temporary tool error as a reason to abandon the task.
+
+Try alternative implementations and verification methods.
+
+Only stop when:
+- The task is genuinely complete;
+- An external dependency makes further progress impossible;
+- A security or safety restriction prevents continuation;
+- Or an explicit user decision is genuinely required.
+
+When blocked, complete all independent work first.
+
+### 5. Completion requirements
+
+Do not declare success based on partial test results.
+
+Run the relevant verification suite, inspect the final
+Git diff, and verify the working tree.
+
+Continue until all achievable acceptance criteria are met.
+
+Do not substitute a progress report for implementation.
+
+The task is complete only when its acceptance criteria
+have been satisfied and verified.
+
+Your goal is to finish the task, even if it requires
+multiple context compactions and many execution cycles.
