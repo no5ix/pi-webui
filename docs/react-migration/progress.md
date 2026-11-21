@@ -582,7 +582,22 @@ Each was investigated against the implementation and against a live page, not ag
      decide** whether a path source offers Update at all. The leg now accepts pi's answer (success or
      that refusal) and records which it saw.
 
-**Harness artifacts, fixed in `/tmp/piweb-br/cdp22.mjs`** (each was a wrong expectation, not an app
+6. **The stuck "Loading settings…" flag. Real defect. Fixed `8a423d92`.** This is what made the Skills,
+   MCP and reload legs time out. A probe of the toggle flow showed the write path was right (the row
+   flipped within a second, the API answered `enabled=false`, `config.json` recorded
+   `skills.disabled: [{id,name}]`, the sentence named the scope) and the page sat at
+   **"Loading settings…"** for as long as the page was open. Root cause: `refreshSettingsList` opened a
+   ledger read with the **whole-scope expectation** (five resources), settled the one list it asked for,
+   and superseded the read that had answered the other four — so `pending` could never reach zero and
+   `loading: settled.pending > 0` stayed true, for that page and every page that inherits the flag. A
+   leg that clicked Reload after any earlier write inherited the stuck flag, which is why the reload
+   checks failed in the sweep and passed in a clean probe.
+   `beginSettingsRead` now takes what a read expects (default: the whole set) and a write's refresh asks
+   for its one resource. Proven by reverting the call: `loading` stays `true` on the same fixture, and
+   clears with the fix; `settingsScope.test.ts` covers a one-resource read draining on its answer while a
+   whole-scope read still needs five.
+
+ **Harness artifacts, fixed in `/tmp/piweb-br/cdp22.mjs`** (each was a wrong expectation, not an app
 bug): the theme probe read `data-theme` (the app writes `data-pi-web-theme`) and inline `--rw-bg` (the
 palette is on the stylesheet); the close check asserted a detached content node instead of
 `dialog.open`; the churn leg expected a `local` project while the machine was `lab` and sampled rows
